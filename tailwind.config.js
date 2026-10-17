@@ -1,0 +1,47 @@
+/** Stitch tasarımındaki token'lar (ScholarLink → Academix olarak yeniden adlandırıldı). */
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        primary: '#091426',
+        'primary-container': '#1e293b',
+        'on-primary-container': '#8590a6',
+        secondary: '#0051d5',
+        'secondary-container': '#316bf3',
+        'secondary-fixed': '#dbe1ff',
+        'secondary-fixed-dim': '#b4c5ff',
+        'on-secondary-fixed': '#00174b',
+        'tertiary-fixed': '#85f8c4',
+        'on-tertiary-container': '#24a375',
+        'on-tertiary-fixed-variant': '#005137',
+        surface: '#f8f9ff',
+        'surface-container-lowest': '#ffffff',
+        'surface-container-low': '#eff4ff',
+        'surface-container': '#e5eeff',
+        'surface-container-high': '#dce9ff',
+        'surface-container-highest': '#d3e4fe',
+        'on-surface': '#0b1c30',
+        'on-surface-variant': '#45474c',
+        outline: '#75777d',
+        'outline-variant': '#c5c6cd',
+        error: '#ba1a1a',
+        'error-container': '#ffdad6',
+        'on-error-container': '#93000a',
+        gold: '#b7791f',
+        'gold-container': '#fff4d6',
+        prospective: '#7c3aed',
+        'prospective-container': '#f1e8ff',
+        mint: '#ddf7ec',
+      },
+      fontFamily: {
+        headline: ['"Source Serif 4"', 'Georgia', 'serif'],
+        body: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+      },
+      maxWidth: { content: '80rem' },
+      boxShadow: { header: '0 1px 8px rgba(0,0,0,0.04)', float: '0 10px 30px rgba(9,20,38,0.18)' },
+    },
+  },
+  plugins: [],
+};
