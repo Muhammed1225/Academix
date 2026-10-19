@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
-import { BRAND, currentUser } from '../data/mock';
+import { BRAND, people } from '../data/mock';
 import { useApp, useUnreadCount } from '../store';
 import AdvisorDrawer from './AdvisorDrawer';
 import AuthModal from './AuthModal';
@@ -10,15 +10,15 @@ import { Avatar, BrandMark, Icon, cx } from './ui';
 const navItems = [
   { to: '/', label: 'Feed', icon: 'dynamic_feed', end: true },
   { to: '/colleges', label: 'Explore Colleges', icon: 'account_balance' },
-  { to: '/mentors/maya', label: 'Mentors', icon: 'diversity_3' },
-  { to: '/inbox', label: 'Q&A Inbox', icon: 'question_answer' },
+  { to: '/connections', label: 'Make Connections', icon: 'person_add' },
+  { to: '/inbox', label: 'Messages', icon: 'mail' },
 ];
 
 function Header() {
   const unread = useUnreadCount();
   const signedIn = useApp((s) => s.signedIn);
-  const setAuthOpen = useApp((s) => s.setAuthOpen);
   const setSignedIn = useApp((s) => s.setSignedIn);
+  const setAuthOpen = useApp((s) => s.setAuthOpen);
   const showToast = useApp((s) => s.showToast);
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
@@ -73,9 +73,13 @@ function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Link to="/compose" className="btn-primary hidden sm:inline-flex">
-            <Icon name="edit_note" />
-            Ask Community
+          <Link
+            to="/people/fuad-test"
+            aria-label="My profile"
+            title="My profile"
+            className="rounded-full ring-2 ring-transparent transition hover:ring-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
+          >
+            <Avatar src={people.fuadTest.avatar} name={people.fuadTest.name} size={44} rounded="rounded-full" />
           </Link>
           <button
             type="button"
@@ -86,16 +90,19 @@ function Header() {
             <Icon name="notifications" />
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-error" />
           </button>
-          {signedIn ? (
+          {signedIn && (
             <div className="relative">
-              <button type="button" onClick={() => setMenuOpen((v) => !v)} aria-label="Account menu" className="rounded-full">
-                <Avatar src={currentUser.avatar} name={currentUser.name} size={36} rounded="rounded-full" verified />
+              <button
+                type="button"
+                onClick={() => setMenuOpen((value) => !value)}
+                aria-label="Account options"
+                aria-expanded={menuOpen}
+                className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-low"
+              >
+                <Icon name="more_vert" />
               </button>
               {menuOpen && (
-                <div className="animate-slide-up absolute right-0 top-12 w-52 overflow-hidden rounded-xl border border-outline-variant/60 bg-white py-1 shadow-float" onMouseLeave={() => setMenuOpen(false)}>
-                  <Link to="/mentors/maya" onClick={() => setMenuOpen(false)} className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-surface-container-low">
-                    <Icon name="person" /> My profile
-                  </Link>
+                <div className="animate-slide-up absolute right-0 top-12 w-36 overflow-hidden rounded-xl border border-outline-variant/60 bg-white py-1 shadow-float">
                   <button
                     type="button"
                     onClick={() => {
@@ -111,7 +118,8 @@ function Header() {
                 </div>
               )}
             </div>
-          ) : (
+          )}
+          {!signedIn && (
             <button type="button" className="btn-primary" onClick={() => setAuthOpen(true)}>
               Sign In / Join
             </button>
@@ -128,8 +136,8 @@ function MobileNav() {
     { to: '/', label: 'Feed', icon: 'dynamic_feed', end: true },
     { to: '/colleges', label: 'Colleges', icon: 'account_balance' },
     { to: '/compose', label: 'Post', icon: 'add', primary: true },
-    { to: '/inbox', label: 'Inbox', icon: 'question_answer' },
-    { to: '/mentors/maya', label: 'Profile', icon: 'person' },
+    { to: '/inbox', label: 'Messages', icon: 'mail' },
+    { to: '/connections', label: 'Make Connections', icon: 'person_add' },
   ];
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-outline-variant/60 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden">
@@ -184,7 +192,7 @@ function Footer() {
             university applicants across global academia.
           </p>
           <span className="mt-4 inline-flex items-center gap-1 rounded bg-primary-container px-2 py-1 text-[11px] font-semibold text-tertiary-fixed">
-            <Icon name="verified_user" className="!text-[14px]" /> .edu Protocol Verified
+            <Icon name="verified_user" className="!text-[14px]" /> Identity Review Protocol
           </span>
         </div>
         {columns.map((col) => (
@@ -223,6 +231,21 @@ function ToastHost() {
   );
 }
 
+function CommunityLauncher() {
+  const { pathname } = useLocation();
+  if (pathname.startsWith('/compose')) return null;
+
+  return (
+    <Link
+      to="/compose"
+      className="fixed bottom-24 left-4 z-40 flex items-center gap-2 rounded-2xl bg-secondary px-4 py-3.5 font-semibold text-white shadow-float transition hover:bg-secondary/90 lg:bottom-8 lg:left-8"
+    >
+      <Icon name="edit_note" />
+      <span className="hidden sm:inline">Ask Community</span>
+    </Link>
+  );
+}
+
 function AdvisorLauncher() {
   const setAdvisorOpen = useApp((s) => s.setAdvisorOpen);
   const { pathname } = useLocation();
@@ -250,6 +273,7 @@ export default function Layout() {
       </main>
       <Footer />
       <MobileNav />
+      <CommunityLauncher />
       <AdvisorLauncher />
       <AdvisorDrawer />
       <AuthModal />

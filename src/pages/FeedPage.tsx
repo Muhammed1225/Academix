@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import PostCard from '../components/PostCard';
-import { Icon, MetricTile, PersonAvatar, Tag, cx } from '../components/ui';
-import { amas, channels, currentUser } from '../data/mock';
+import { Avatar, Icon, MetricTile, Tag, cx } from '../components/ui';
+import { amas, channels, people } from '../data/mock';
 import type { Ama, FeedTab } from '../data/types';
 import { useApp } from '../store';
 
@@ -15,36 +15,35 @@ const tabs: { id: FeedTab; label: string }[] = [
 
 const protocol = [
   ['bg-amber-500', 'Gold Verified', 'Faculty / Admissions Dean'],
-  ['bg-secondary', '.edu Verified', 'Active Matriculated Scholar'],
+  ['bg-secondary', 'Institution Verified', 'Active Matriculated Scholar'],
   ['bg-prospective', 'Prospective', 'Applicant / Candidate'],
-  ['bg-error', 'Unverified Claim', 'Flagged for Community Audit'],
+  ['bg-error', 'Unverified Account', 'Institutional identity not yet reviewed'],
 ];
 
 function ProfileSummary() {
+  const person = people.fuadTest;
+
   return (
-    <div className="card p-5">
-      <Link to="/mentors/maya" className="flex items-center gap-3">
-        <PersonAvatar person={currentUser} size={48} showVerified />
-        <div>
-          <div className="font-semibold">Maya Patel</div>
-          <div className="text-xs text-on-surface-variant">CMU '25 • SCS Honors</div>
-        </div>
-      </Link>
-      <div className="mt-4 flex justify-between rounded-lg bg-surface-container-low px-3 py-2.5 text-xs">
-        <div>
-          <div className="eyebrow !text-[10px]">Credential</div>
-          <div className="mt-0.5 flex items-center gap-1 font-semibold text-secondary">
-            <Icon name="school" className="!text-[15px]" /> .edu Verified
-          </div>
-        </div>
-        <div className="text-right">
-          <div className="eyebrow !text-[10px]">Reputation</div>
-          <div className="mt-0.5 font-semibold">1,480 pts</div>
+    <div className="card overflow-hidden p-0">
+      <div className="h-16 bg-gradient-to-r from-primary-container via-secondary-fixed to-primary/10" />
+      <div className="px-4 pb-4">
+        <Link
+          to="/people/fuad-test"
+          aria-label="View your profile"
+          className="-mt-8 flex w-fit rounded-full ring-4 ring-white transition hover:opacity-90"
+        >
+          <Avatar src={person.avatar} name={person.name} size={64} rounded="rounded-full" />
+        </Link>
+        <Link to="/people/fuad-test" className="mt-2 block font-semibold text-primary hover:text-secondary hover:underline">
+          {person.name}
+        </Link>
+        <p className="mt-0.5 text-xs leading-relaxed text-on-surface-variant">{person.subtitle}</p>
+        <div className="mt-3 border-t border-outline-variant/50 pt-3">
+          <Link to="/people/fuad-test" className="text-sm font-semibold text-secondary hover:underline">
+            View your profile
+          </Link>
         </div>
       </div>
-      <Link to="/compose" className="btn-primary mt-4 w-full">
-        <Icon name="add_circle" /> Post a Dispatch
-      </Link>
     </div>
   );
 }
@@ -116,8 +115,6 @@ export function InstitutionSpotlight() {
 
 export default function FeedPage() {
   const posts = useApp((s) => s.posts);
-  const signedIn = useApp((s) => s.signedIn);
-  const setAuthOpen = useApp((s) => s.setAuthOpen);
   const [tab, setTab] = useState<FeedTab>('trending');
   const [channel, setChannel] = useState('all');
 
@@ -127,16 +124,7 @@ export default function FeedPage() {
     <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)_300px]">
       <aside className="hidden space-y-4 lg:block">
         <div className="sticky top-24 space-y-4">
-          {signedIn ? (
-            <ProfileSummary />
-          ) : (
-            <div className="card p-5 text-sm">
-              <p className="text-on-surface-variant">Join to follow mentors, book sessions, and publish dispatches.</p>
-              <button type="button" className="btn-primary mt-3 w-full" onClick={() => setAuthOpen(true)}>
-                Sign In / Join
-              </button>
-            </div>
-          )}
+          <ProfileSummary />
           <div className="rounded-xl bg-surface-container-low p-4">
             <p className="text-sm font-bold uppercase tracking-wide text-primary">Credential Protocol</p>
             <ul className="mt-3 space-y-2 text-xs text-on-surface-variant">

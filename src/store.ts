@@ -21,7 +21,7 @@ interface AppState {
   vote: (postId: string, direction: 1 | -1) => void;
   toggleBookmark: (postId: string) => void;
   addComment: (postId: string, text: string) => void;
-  publish: (input: { title: string; body: string; forum: string; anonymous: boolean }) => void;
+  publish: (input: { title: string; body: string; forum: string; anonymous: boolean; image?: Post['image'] }) => void;
 
   markRead: (ticketId: string) => void;
   reply: (ticketId: string, text: string) => void;
@@ -82,7 +82,7 @@ export const useApp = create<AppState>((set) => ({
       })),
     })),
 
-  publish: ({ title, body, forum, anonymous }) =>
+  publish: ({ title, body, forum, anonymous, image }) =>
     set((s) => ({
       posts: [
         {
@@ -91,6 +91,7 @@ export const useApp = create<AppState>((set) => ({
           timeAgo: 'Just now',
           title,
           body,
+          ...(image ? { image } : {}),
           channelId: channelForForum(forum),
           tabs: ['trending', 'latest'],
           votes: 0,

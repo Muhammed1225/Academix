@@ -5,14 +5,15 @@ export const BRAND = 'Academix';
 
 const img = (name: string) => `/images/${name}`;
 
-export const people = {
+export const people: Record<string, Person> = {
   maya: {
     id: 'maya',
     name: 'Maya Patel',
     subtitle: "B.S. Computer Science '25 • Carnegie Mellon",
     verification: 'edu',
     avatar: img('avatar_maya_patel.jpg'),
-    badge: '.edu Verified Scholar',
+    badge: 'Institution Verified Scholar',
+    interests: ['Computer Science', 'Research', 'Robotics'],
   },
   arisThorne: {
     id: 'aris',
@@ -21,26 +22,40 @@ export const people = {
     verification: 'gold',
     avatar: img('avatar_aris_thorne.jpg'),
     badge: 'Gold Verified Dean',
+    interests: ['Computer Science', 'Admissions', 'Mentorship'],
   },
   kevLin: {
     id: 'kevlin',
     name: 'KevLin_Applicant',
     subtitle: 'Prospective Scholar',
     verification: 'prospective',
+    interests: ['Computer Science', 'Campus life', 'Admissions'],
   },
   anonymousIvy: {
     id: 'anon-ivy',
     name: 'Anonymous_IvyApplicant_24',
-    subtitle: 'No institutional .edu address validated',
+    subtitle: 'No institutional identity verified',
     verification: 'unverified',
   },
   anonymous: {
     id: 'anon',
     name: 'Anonymous Scholar',
-    subtitle: 'Identity hidden • .edu Verified',
+    subtitle: 'Identity hidden • Institution Verified',
     verification: 'edu',
   },
-} satisfies Record<string, Person>;
+  fuadTest: {
+    id: 'fuad-test',
+    name: 'Fuad (Test Profile)',
+    subtitle: 'B.S. Computer Science • Carnegie Mellon University • Class of 2027',
+    verification: 'unverified',
+    avatar: img('avatar_fuad_test.jpg'),
+    badge: 'Fictional test profile',
+    interests: ['Computer Science', 'Robotics', 'Campus life'],
+    about: 'A fictional Academix member created for product testing. Curious about computer science, robotics, and student communities, and always happy to learn what others are building.',
+    location: 'Pittsburgh, PA',
+    education: 'Carnegie Mellon University • Class of 2027 • B.S. Computer Science',
+  },
+};
 
 export const currentUser: Person = people.maya;
 
@@ -124,6 +139,22 @@ export const posts: Post[] = [
     dislikes: 0,
     myVote: 0,
     commentCount: 9,
+    bookmarked: false,
+    comments: [],
+  },
+  {
+    id: 'p-test-fuad',
+    author: people.fuadTest,
+    timeAgo: 'Just now',
+    channelId: 'all',
+    tabs: ['latest'],
+    title: 'Testing out the Academix community',
+    body: 'Hi everyone! This is a fictional profile for testing. I am exploring computer science, robotics, and campus life. What projects or student communities would you recommend?',
+    votes: 0,
+    likes: 0,
+    dislikes: 0,
+    myVote: 0,
+    commentCount: 0,
     bookmarked: false,
     comments: [],
   },

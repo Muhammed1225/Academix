@@ -3,9 +3,9 @@ export type Verification = 'gold' | 'edu' | 'prospective' | 'unverified';
 
 export const verificationLabel: Record<Verification, string> = {
   gold: 'Gold Verified',
-  edu: '.edu Verified',
+  edu: 'Institution Verified',
   prospective: 'Prospective',
-  unverified: 'Unverified Claim',
+  unverified: 'Unverified Account',
 };
 
 export interface Person {
@@ -16,6 +16,10 @@ export interface Person {
   avatar?: string;
   /** Rozet üzerindeki özel metin (ör. "Gold Verified Dean"). */
   badge?: string;
+  interests?: string[];
+  about?: string;
+  location?: string;
+  education?: string;
 }
 
 export interface Comment {
@@ -35,6 +39,7 @@ export interface Post {
   channelId: string;
   insight?: string;
   attachment?: { fileName: string; meta: string };
+  image?: { fileName: string; src: string };
   votes: number;
   likes: number;
   dislikes: number;

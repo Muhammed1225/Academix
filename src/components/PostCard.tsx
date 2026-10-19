@@ -86,6 +86,15 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
         {post.title && <h3 className="mt-4 font-headline text-xl font-semibold leading-snug text-primary">{post.title}</h3>}
         <RichText text={post.body} className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-on-surface-variant" />
 
+        {post.image && (
+          <img
+            src={post.image.src}
+            alt={post.image.fileName}
+            loading="lazy"
+            className="mt-4 max-h-[32rem] w-full rounded-lg bg-surface-container-low object-contain"
+          />
+        )}
+
         {post.insight && (
           <div className="mt-4 flex gap-2.5 rounded-lg border border-secondary-fixed bg-surface-container-low px-4 py-3 text-sm text-on-surface">
             <Icon name="lightbulb" className="text-secondary" />
@@ -182,7 +191,7 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
                     {c.author.name}
                   </Link>{' '}
                   <span className="text-xs text-on-surface-variant">
-                    ({c.author.verification === 'edu' ? '.edu Verified CMU' : 'Prospective Scholar'}) • {c.timeAgo}
+                    ({c.author.verification === 'edu' ? 'Verified CMU Scholar' : 'Prospective Scholar'}) • {c.timeAgo}
                   </span>
                 </div>
                 <p className="mt-0.5 text-on-surface">{c.text}</p>

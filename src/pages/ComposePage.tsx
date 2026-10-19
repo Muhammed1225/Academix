@@ -8,6 +8,8 @@ import { useApp } from '../store';
 
 const MAX = 4000;
 const MIN_BODY = 40;
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 const attachmentTypes = [
   { icon: 'picture_as_pdf', label: 'PDF Dossier' },
@@ -57,11 +59,24 @@ function wrapEditorText(editor: HTMLElement, tag: 'strong' | 'em', existingTags:
   }
 }
 
+function readImageAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('Unable to read the selected image.'));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Unable to read the selected image.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function ComposePage() {
   const navigate = useNavigate();
   const publish = useApp((s) => s.publish);
   const showToast = useApp((s) => s.showToast);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState('');
   const [bodyHtml, setBodyHtml] = useState('');
@@ -69,11 +84,13 @@ export default function ComposePage() {
   const [forum, setForum] = useState(composerForums[0]);
   const [anonymous, setAnonymous] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
+  const [image, setImage] = useState<{ fileName: string; src: string } | null>(null);
+  const [imageError, setImageError] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [activeFormats, setActiveFormats] = useState({ bold: false, italic: false, quote: false, code: false, heading: false });
   const [pendingInlineMarks, setPendingInlineMarks] = useState({ bold: false, italic: false });
 
-  const dirty = Boolean(title || bodyText || attachments.length);
+  const dirty = Boolean(title || bodyText || attachments.length || image);
   const error =
     title.trim().length < 8 ? 'Add a descriptive title (8+ characters)' : bodyText.trim().length < MIN_BODY ? `Write at least ${MIN_BODY} characters` : null;
 
@@ -155,9 +172,32 @@ export default function ComposePage() {
 
   const submit = () => {
     if (error) return;
-    publish({ title: title.trim(), body: sanitizeRichText(bodyHtml).trim(), forum, anonymous });
+    publish({ title: title.trim(), body: sanitizeRichText(bodyHtml).trim(), forum, anonymous, image: image ?? undefined });
     showToast(anonymous ? 'Dispatch published anonymously' : 'Dispatch published to the feed', 'send');
     navigate('/');
+  };
+
+  const selectImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    if (!imageTypes.includes(file.type)) {
+      setImage(null);
+      setImageError('Choose a JPG, PNG, WebP, or GIF image.');
+      return;
+    }
+    if (file.size > MAX_IMAGE_SIZE) {
+      setImage(null);
+      setImageError('Choose an image no larger than 5 MB.');
+      return;
+    }
+    try {
+      setImage({ fileName: file.name, src: await readImageAsDataUrl(file) });
+      setImageError('');
+    } catch {
+      setImage(null);
+      setImageError('Unable to read this image. Please try another file.');
+    }
   };
 
   const authorName = anonymous ? 'Anonymous Scholar' : currentUser.name;
@@ -237,6 +277,21 @@ export default function ComposePage() {
                 );
               })}
               <div className="flex-1" />
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={selectImage}
+                className="sr-only"
+                aria-label="Choose an image to attach"
+              />
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-secondary hover:bg-white"
+              >
+                <Icon name="image" className="!text-[17px]" /> Add Picture
+              </button>
               {attachmentTypes.map((a) => (
                 <button
                   key={a.label}
@@ -279,6 +334,24 @@ export default function ComposePage() {
               ))}
             </div>
           )}
+
+          {image && (
+            <div className="rounded-xl border border-outline-variant/60 p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="min-w-0 truncate text-sm font-semibold">{image.fileName}</span>
+                <button
+                  type="button"
+                  onClick={() => setImage(null)}
+                  className="btn-ghost !h-8 !px-2 text-error"
+                  aria-label={`Remove ${image.fileName}`}
+                >
+                  <Icon name="close" /> Remove
+                </button>
+              </div>
+              <img src={image.src} alt={`Preview of ${image.fileName}`} className="max-h-64 max-w-full rounded-lg object-contain" />
+            </div>
+          )}
+          {imageError && <p role="alert" className="text-sm font-medium text-error">{imageError}</p>}
 
           <div className="border-t border-outline-variant/50 pt-5">
             <span className={cx('mb-3 flex items-center gap-1 text-xs font-semibold', error ? 'text-on-surface-variant' : 'text-on-tertiary-container')}>

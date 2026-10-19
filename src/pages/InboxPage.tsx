@@ -103,8 +103,8 @@ export default function InboxPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-headline text-3xl font-semibold text-primary">Scholarly Q&A Inbox</h1>
-        <p className="mt-1 text-on-surface-variant">Direct student mentorship tickets and pending supplemental essay teardowns.</p>
+        <h1 className="font-headline text-3xl font-semibold text-primary">Messages</h1>
+        <p className="mt-1 text-on-surface-variant">Your mentorship conversations and pending supplemental essay feedback.</p>
       </div>
       <div className="card grid overflow-hidden md:grid-cols-[360px_minmax(0,1fr)]">
         <aside className={cx('border-r border-outline-variant/50', active && 'hidden md:block')}>

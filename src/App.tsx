@@ -5,6 +5,7 @@ import Layout from './components/Layout';
 import CollegeHubPage from './pages/CollegeHubPage';
 import CollegesPage from './pages/CollegesPage';
 import ComposePage from './pages/ComposePage';
+import ConnectionsPage from './pages/ConnectionsPage';
 import FeedPage from './pages/FeedPage';
 import InboxPage from './pages/InboxPage';
 import MajorsPage from './pages/MajorsPage';
@@ -43,6 +44,7 @@ export default function App() {
           <Route path="colleges/:collegeId" element={<CollegeHubPage />} />
           <Route path="colleges/:collegeId/majors" element={<MajorsPage />} />
           <Route path="colleges/:collegeId/majors/:majorId" element={<MajorsPage />} />
+          <Route path="connections" element={<ConnectionsPage />} />
           <Route path="mentors/:mentorId" element={<MentorProfilePage />} />
           <Route path="people/:personId" element={<PersonProfilePage />} />
           <Route path="inbox" element={<InboxPage />} />
