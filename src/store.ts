@@ -54,7 +54,7 @@ export const useApp = create<AppState>((set) => ({
   posts: initialPosts,
   tickets: initialTickets,
   savedColleges: [],
-  signedIn: true,
+  signedIn: false,
   advisorOpen: false,
   authOpen: false,
   toast: null,
@@ -64,7 +64,9 @@ export const useApp = create<AppState>((set) => ({
     set((s) => ({
       posts: updatePost(s.posts, postId, (p) => {
         const next = p.myVote === direction ? 0 : direction;
-        return { ...p, votes: p.votes - p.myVote + next, myVote: next };
+        const likes = p.likes + (next === 1 ? 1 : 0) - (p.myVote === 1 ? 1 : 0);
+        const dislikes = p.dislikes + (next === -1 ? 1 : 0) - (p.myVote === -1 ? 1 : 0);
+        return { ...p, likes, dislikes, votes: likes - dislikes, myVote: next };
       }),
     })),
 
@@ -92,6 +94,8 @@ export const useApp = create<AppState>((set) => ({
           channelId: channelForForum(forum),
           tabs: ['trending', 'latest'],
           votes: 0,
+          likes: 0,
+          dislikes: 0,
           myVote: 0,
           commentCount: 0,
           comments: [],

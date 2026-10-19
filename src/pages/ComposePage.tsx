@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Avatar, Icon, Modal, cx } from '../components/ui';
+import { sanitizeRichText } from '../components/RichText';
 import { composerForums, currentUser } from '../data/mock';
 import { useApp } from '../store';
 
@@ -14,37 +15,67 @@ const attachmentTypes = [
   { icon: 'link', label: 'Course Link' },
 ];
 
-/** Basit markdown → JSX: **kalın**, _italik_, `kod`, > alıntı, ## başlık. */
-function renderMarkdown(text: string) {
-  return text.split('\n').map((line, i) => {
-    const inline = line.split(/(\*\*[^*]+\*\*|_[^_]+_|`[^`]+`)/g).map((part, j) => {
-      if (part.startsWith('**') && part.endsWith('**')) return <strong key={j}>{part.slice(2, -2)}</strong>;
-      if (part.startsWith('_') && part.endsWith('_') && part.length > 2) return <em key={j}>{part.slice(1, -1)}</em>;
-      if (part.startsWith('`') && part.endsWith('`')) return <code key={j} className="rounded bg-surface-container px-1 text-[0.9em]">{part.slice(1, -1)}</code>;
-      return part;
-    });
-    if (line.startsWith('## ')) return <h4 key={i} className="mt-3 font-headline text-lg font-semibold text-primary">{inline.map((p) => (typeof p === 'string' ? p.replace(/^## /, '') : p))}</h4>;
-    if (line.startsWith('> ')) return <blockquote key={i} className="my-2 border-l-4 border-secondary-fixed-dim pl-3 italic">{inline.map((p) => (typeof p === 'string' ? p.replace(/^> /, '') : p))}</blockquote>;
-    return line ? <p key={i} className="mb-2">{inline}</p> : <br key={i} />;
-  });
+function hasTextInFormat(editor: HTMLElement, tags: string[]) {
+  const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    if (node.textContent?.trim()) {
+      let parent = node.parentElement;
+      while (parent && parent !== editor) {
+        if (tags.includes(parent.tagName)) return true;
+        parent = parent.parentElement;
+      }
+    }
+    node = walker.nextNode();
+  }
+  return false;
+}
+
+function wrapEditorText(editor: HTMLElement, tag: 'strong' | 'em', existingTags: string[]) {
+  const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  let node = walker.nextNode();
+  while (node) {
+    if (node.textContent?.trim()) {
+      let parent = node.parentElement;
+      let alreadyFormatted = false;
+      while (parent && parent !== editor) {
+        if (existingTags.includes(parent.tagName)) {
+          alreadyFormatted = true;
+          break;
+        }
+        parent = parent.parentElement;
+      }
+      if (!alreadyFormatted) textNodes.push(node as Text);
+    }
+    node = walker.nextNode();
+  }
+  for (const textNode of textNodes) {
+    const wrapper = document.createElement(tag);
+    textNode.parentNode?.replaceChild(wrapper, textNode);
+    wrapper.appendChild(textNode);
+  }
 }
 
 export default function ComposePage() {
   const navigate = useNavigate();
   const publish = useApp((s) => s.publish);
   const showToast = useApp((s) => s.showToast);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
+  const [bodyHtml, setBodyHtml] = useState('');
+  const [bodyText, setBodyText] = useState('');
   const [forum, setForum] = useState(composerForums[0]);
   const [anonymous, setAnonymous] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [activeFormats, setActiveFormats] = useState({ bold: false, italic: false, quote: false, code: false, heading: false });
+  const [pendingInlineMarks, setPendingInlineMarks] = useState({ bold: false, italic: false });
 
-  const dirty = Boolean(title || body || attachments.length);
+  const dirty = Boolean(title || bodyText || attachments.length);
   const error =
-    title.trim().length < 8 ? 'Add a descriptive title (8+ characters)' : body.trim().length < MIN_BODY ? `Write at least ${MIN_BODY} characters` : null;
+    title.trim().length < 8 ? 'Add a descriptive title (8+ characters)' : bodyText.trim().length < MIN_BODY ? `Write at least ${MIN_BODY} characters` : null;
 
   // Sayfadan ayrılırken kaydedilmemiş taslak uyarısı.
   useEffect(() => {
@@ -54,23 +85,77 @@ export default function ComposePage() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [dirty]);
 
-  const wrap = (left: string, right = '') => {
+  const applyFormat = (command: string, value?: string) => {
     const el = bodyRef.current;
     if (!el) return;
-    const { selectionStart: s, selectionEnd: e } = el;
-    const next = body.slice(0, s) + left + body.slice(s, e) + right + body.slice(e);
-    setBody(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(s + left.length, e + left.length);
+    const canPendInlineMark = !el.innerText.trim() && (command === 'bold' || command === 'italic');
+    if (canPendInlineMark) {
+      const mark = command as 'bold' | 'italic';
+      const nextValue = !pendingInlineMarks[mark];
+      setPendingInlineMarks((current) => ({ ...current, [mark]: !current[mark] }));
+      setActiveFormats((current) => ({ ...current, [mark]: nextValue }));
+    }
+    el.focus();
+    document.execCommand(command, false, value);
+    setBodyHtml(el.innerHTML);
+    setBodyText(el.innerText);
+    if (!canPendInlineMark) updateActiveFormats();
+  };
+
+  const updateActiveFormats = useCallback(() => {
+    const editor = bodyRef.current;
+    const selection = window.getSelection();
+    if (!editor || !selection?.anchorNode || !editor.contains(selection.anchorNode)) {
+      setActiveFormats({ bold: false, italic: false, quote: false, code: false, heading: false });
+      return;
+    }
+
+    const hasAncestor = (tags: string[]) => {
+      let node: Node | null = selection.anchorNode;
+      if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+      while (node && node !== editor) {
+        if (node instanceof HTMLElement && tags.includes(node.tagName)) return true;
+        node = node.parentNode;
+      }
+      return false;
+    };
+    const blockFormat = document.queryCommandValue('formatBlock').toLowerCase().replace(/[<>]/g, '');
+    const isEmpty = !editor.innerText.trim();
+
+    setActiveFormats({
+      bold: hasAncestor(['B', 'STRONG']) || document.queryCommandState('bold') || (isEmpty && pendingInlineMarks.bold),
+      italic: hasAncestor(['I', 'EM']) || document.queryCommandState('italic') || (isEmpty && pendingInlineMarks.italic),
+      quote: hasAncestor(['BLOCKQUOTE']) || blockFormat === 'blockquote',
+      code: hasAncestor(['PRE']) || blockFormat === 'pre',
+      heading: hasAncestor(['H2']) || blockFormat === 'h2',
     });
+  }, [pendingInlineMarks]);
+
+  useEffect(() => {
+    document.addEventListener('selectionchange', updateActiveFormats);
+    return () => document.removeEventListener('selectionchange', updateActiveFormats);
+  }, [updateActiveFormats]);
+
+  const updateEditor = (el: HTMLDivElement) => {
+    if (el.innerText.trim()) {
+      if (pendingInlineMarks.bold && !hasTextInFormat(el, ['B', 'STRONG'])) wrapEditorText(el, 'strong', ['B', 'STRONG']);
+      if (pendingInlineMarks.italic && !hasTextInFormat(el, ['I', 'EM'])) wrapEditorText(el, 'em', ['I', 'EM']);
+      setPendingInlineMarks({ bold: false, italic: false });
+    }
+    let text = el.innerText;
+    if (text.length > MAX) {
+      text = text.slice(0, MAX);
+      el.innerText = text;
+    }
+    setBodyText(text);
+    setBodyHtml(el.innerHTML);
   };
 
   const leave = () => (dirty ? setConfirmDiscard(true) : navigate(-1));
 
   const submit = () => {
     if (error) return;
-    publish({ title: title.trim(), body: body.trim(), forum, anonymous });
+    publish({ title: title.trim(), body: sanitizeRichText(bodyHtml).trim(), forum, anonymous });
     showToast(anonymous ? 'Dispatch published anonymously' : 'Dispatch published to the feed', 'send');
     navigate('/');
   };
@@ -89,7 +174,7 @@ export default function ComposePage() {
         </button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid gap-6">
         <section className="card space-y-5 p-6">
           <div className="flex flex-wrap items-center gap-3">
             <Avatar src={anonymous ? undefined : currentUser.avatar} name={anonymous ? '?' : currentUser.name} size={44} />
@@ -126,16 +211,31 @@ export default function ComposePage() {
           <div className="overflow-hidden rounded-xl border border-outline-variant/60 focus-within:border-secondary/50 focus-within:ring-2 focus-within:ring-secondary/20">
             <div className="flex flex-wrap items-center gap-0.5 border-b border-outline-variant/50 bg-surface-container-low px-2 py-1.5">
               {[
-                ['format_bold', () => wrap('**', '**'), 'Bold'],
-                ['format_italic', () => wrap('_', '_'), 'Italic'],
-                ['format_quote', () => wrap('\n> '), 'Quote'],
-                ['code', () => wrap('`', '`'), 'Code'],
-                ['title', () => wrap('\n## '), 'Heading'],
-              ].map(([icon, fn, label]) => (
-                <button key={label as string} type="button" title={label as string} onClick={fn as () => void} className="rounded-md p-2 text-on-surface-variant hover:bg-white">
-                  <Icon name={icon as string} />
-                </button>
-              ))}
+                ['format_bold', () => applyFormat('bold'), 'Bold', 'bold'],
+                ['format_italic', () => applyFormat('italic'), 'Italic', 'italic'],
+                ['format_quote', () => applyFormat('formatBlock', 'blockquote'), 'Quote', 'quote'],
+                ['code', () => applyFormat('formatBlock', 'pre'), 'Code block', 'code'],
+                ['title', () => applyFormat('formatBlock', 'h2'), 'Heading', 'heading'],
+              ].map(([icon, fn, label, format]) => {
+                const active = activeFormats[format as keyof typeof activeFormats];
+                return (
+                  <button
+                    key={label as string}
+                    type="button"
+                    title={label as string}
+                    aria-label={label as string}
+                    aria-pressed={active}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={fn as () => void}
+                    className={cx(
+                      'rounded-md p-2 transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                      active ? 'bg-secondary text-white shadow-sm ring-1 ring-secondary' : 'text-on-surface-variant hover:bg-white',
+                    )}
+                  >
+                    <Icon name={icon as string} />
+                  </button>
+                );
+              })}
               <div className="flex-1" />
               {attachmentTypes.map((a) => (
                 <button
@@ -148,19 +248,22 @@ export default function ComposePage() {
                 </button>
               ))}
             </div>
-            <textarea
+            <div
               ref={bodyRef}
-              value={body}
-              onChange={(e) => setBody(e.target.value.slice(0, MAX))}
-              rows={12}
-              placeholder="Share syllabus teardowns, admissions advice, or research openings..."
-              className="w-full resize-y bg-white px-4 py-3 text-[15px] leading-relaxed outline-none"
+              contentEditable
+              suppressContentEditableWarning
+              role="textbox"
+              aria-label="Write your academic dispatch"
+              aria-multiline="true"
+              data-placeholder="Share syllabus teardowns, admissions advice, or research openings..."
+              onInput={(event) => updateEditor(event.currentTarget)}
+              className="editor-content min-h-72 max-h-[32rem] overflow-y-auto bg-white px-4 py-3 text-[15px] leading-relaxed outline-none"
             />
           </div>
           <div className="flex items-center justify-between text-xs text-on-surface-variant">
-            <span>Markdown formatting supported</span>
-            <span className={cx('font-semibold', body.length > MAX * 0.9 && 'text-error')}>
-              {body.length.toLocaleString()} / {MAX.toLocaleString()} characters
+            <span>Formatting is applied as you write</span>
+            <span className={cx('font-semibold', bodyText.length > MAX * 0.9 && 'text-error')}>
+              {bodyText.length.toLocaleString()} / {MAX.toLocaleString()} characters
             </span>
           </div>
 
@@ -197,33 +300,6 @@ export default function ComposePage() {
           </div>
         </section>
 
-        <aside>
-          <div className="card sticky top-24 p-6">
-            <div className="flex items-center justify-between">
-              <p className="eyebrow">Live Reader Preview</p>
-              <span className="text-xs text-on-surface-variant">Formatted Output</span>
-            </div>
-            <div className="mt-4 flex items-center gap-2.5">
-              <Avatar src={anonymous ? undefined : currentUser.avatar} name={anonymous ? '?' : 'Maya Patel'} size={36} />
-              <div>
-                <div className="text-sm font-semibold">{authorName}</div>
-                <div className="text-xs text-on-surface-variant">CMU SCS Senior • .edu Verified</div>
-              </div>
-            </div>
-            <h3 className="mt-4 font-headline text-xl font-semibold text-primary">{title || 'Your title appears here'}</h3>
-            <div className="mt-2 text-[15px] leading-relaxed text-on-surface-variant">
-              {body ? renderMarkdown(body) : <p className="italic">Start writing to see how scholars will read your dispatch.</p>}
-            </div>
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              <span className="chip bg-surface-container-low text-on-surface-variant">{forum}</span>
-              {attachments.map((a, i) => (
-                <span key={`${a}-p-${i}`} className="chip bg-surface-container-low text-on-surface-variant">
-                  <Icon name="attach_file" className="!text-[14px]" /> {a}
-                </span>
-              ))}
-            </div>
-          </div>
-        </aside>
       </div>
 
       <Modal open={confirmDiscard} onClose={() => setConfirmDiscard(false)} label="Discard draft" width="max-w-sm">

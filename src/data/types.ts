@@ -36,6 +36,8 @@ export interface Post {
   insight?: string;
   attachment?: { fileName: string; meta: string };
   votes: number;
+  likes: number;
+  dislikes: number;
   myVote: -1 | 0 | 1;
   commentCount: number;
   comments: Comment[];

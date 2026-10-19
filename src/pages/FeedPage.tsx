@@ -43,7 +43,7 @@ function ProfileSummary() {
         </div>
       </div>
       <Link to="/compose" className="btn-primary mt-4 w-full">
-        <Icon name="add_circle" /> Draft Scholarly Dispatch
+        <Icon name="add_circle" /> Post a Dispatch
       </Link>
     </div>
   );
@@ -137,27 +137,6 @@ export default function FeedPage() {
               </button>
             </div>
           )}
-          <div className="card p-4">
-            <div className="mb-2 flex items-center justify-between px-1">
-              <p className="eyebrow">Subscribed Channels</p>
-              <Icon name="tune" className="text-outline" />
-            </div>
-            {channels.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setChannel(c.id)}
-                className={cx(
-                  'flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm',
-                  channel === c.id ? 'bg-secondary-fixed font-semibold text-on-secondary-fixed' : 'text-on-surface-variant hover:bg-surface-container-low',
-                )}
-              >
-                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: c.color }} />
-                <span className="flex-1">{c.name}</span>
-                <span className="text-xs">{c.count}</span>
-              </button>
-            ))}
-          </div>
           <div className="rounded-xl bg-surface-container-low p-4">
             <p className="text-sm font-bold uppercase tracking-wide text-primary">Credential Protocol</p>
             <ul className="mt-3 space-y-2 text-xs text-on-surface-variant">

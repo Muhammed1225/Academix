@@ -99,6 +99,7 @@ function Header() {
                   <button
                     type="button"
                     onClick={() => {
+                      void fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
                       setSignedIn(false);
                       setMenuOpen(false);
                       showToast('Signed out', 'logout');

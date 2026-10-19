@@ -17,6 +17,14 @@
   .input { @apply w-full rounded-lg bg-surface-container-low px-3.5 py-2.5 text-sm placeholder:text-outline border border-transparent focus:outline-none focus:border-secondary/50 focus:ring-2 focus:ring-secondary/20 focus:bg-white transition; }
   .chip { @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors; }
   .eyebrow { @apply text-[11px] font-bold uppercase tracking-wider text-on-surface-variant; }
+  .editor-content:empty::before { content: attr(data-placeholder); @apply text-outline; }
+  .rich-text p { @apply mb-2; }
+  .rich-text h2, .rich-text h3 { @apply mt-3 font-headline text-xl font-semibold text-primary; }
+  .rich-text blockquote { @apply my-2 border-l-4 border-secondary-fixed-dim pl-3 italic; }
+  .rich-text pre { @apply my-2 overflow-x-auto rounded-lg bg-surface-container px-3 py-2 font-mono text-sm; }
+  .rich-text code { @apply rounded bg-surface-container px-1 font-mono text-[0.9em]; }
+  .rich-text ul { @apply my-2 list-disc pl-6; }
+  .rich-text ol { @apply my-2 list-decimal pl-6; }
 }
 
 .material-symbols-outlined {

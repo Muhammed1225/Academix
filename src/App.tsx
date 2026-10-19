@@ -9,7 +9,9 @@ import FeedPage from './pages/FeedPage';
 import InboxPage from './pages/InboxPage';
 import MajorsPage from './pages/MajorsPage';
 import MentorProfilePage from './pages/MentorProfilePage';
+import PersonProfilePage from './pages/PersonProfilePage';
 import SearchPage from './pages/SearchPage';
+import { useApp } from './store';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -20,6 +22,17 @@ function ScrollToTop() {
 }
 
 export default function App() {
+  const setSignedIn = useApp((s) => s.setSignedIn);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/auth/session', { credentials: 'same-origin' })
+      .then((response) => response.ok ? response.json() as Promise<{ authenticated: boolean }> : null)
+      .then((session) => { if (active && session) setSignedIn(session.authenticated); })
+      .catch(() => { if (active) setSignedIn(false); });
+    return () => { active = false; };
+  }, [setSignedIn]);
+
   return (
     <>
       <ScrollToTop />
@@ -31,6 +44,7 @@ export default function App() {
           <Route path="colleges/:collegeId/majors" element={<MajorsPage />} />
           <Route path="colleges/:collegeId/majors/:majorId" element={<MajorsPage />} />
           <Route path="mentors/:mentorId" element={<MentorProfilePage />} />
+          <Route path="people/:personId" element={<PersonProfilePage />} />
           <Route path="inbox" element={<InboxPage />} />
           <Route path="inbox/:ticketId" element={<InboxPage />} />
           <Route path="compose" element={<ComposePage />} />

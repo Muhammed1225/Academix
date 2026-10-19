@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { currentUser } from '../data/mock';
 import type { Post } from '../data/types';
 import { useApp } from '../store';
+import RichText from './RichText';
 import { Avatar, Icon, PersonAvatar, VerificationBadge, cx } from './ui';
 
 function FlaggedClaim({ post }: { post: Post }) {
@@ -83,7 +84,7 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
           authorHeader
         )}
         {post.title && <h3 className="mt-4 font-headline text-xl font-semibold leading-snug text-primary">{post.title}</h3>}
-        <p className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-on-surface-variant">{post.body}</p>
+        <RichText text={post.body} className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-on-surface-variant" />
 
         {post.insight && (
           <div className="mt-4 flex gap-2.5 rounded-lg border border-secondary-fixed bg-surface-container-low px-4 py-3 text-sm text-on-surface">
@@ -114,25 +115,30 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
       </div>
 
       <div className="mx-5 mt-4 flex items-center gap-1 border-t border-outline-variant/50 py-2">
-        <div className="flex items-center rounded-lg bg-surface-container-low">
+        <div className="flex items-center gap-1">
           <button
             type="button"
             disabled={!interactive}
             onClick={() => vote(post.id, 1)}
-            className={cx('rounded-l-lg p-2 hover:bg-surface-container', post.myVote === 1 ? 'text-secondary' : 'text-on-surface-variant')}
-            aria-label="Upvote"
+            className={cx('btn-ghost !h-9 !gap-1.5 !px-2.5', post.myVote === 1 && '!bg-secondary-fixed !text-secondary')}
+            aria-label={`Like post (${post.likes})`}
+            aria-pressed={post.myVote === 1}
           >
-            <Icon name="arrow_upward" />
+            <Icon name="thumb_up" fill={post.myVote === 1} />
+            <span>Like</span>
+            <span className="tabular-nums">{post.likes}</span>
           </button>
-          <span className={cx('min-w-8 text-center text-sm font-semibold', post.myVote !== 0 && 'text-secondary')}>{post.votes}</span>
           <button
             type="button"
             disabled={!interactive}
             onClick={() => vote(post.id, -1)}
-            className={cx('rounded-r-lg p-2 hover:bg-surface-container', post.myVote === -1 ? 'text-error' : 'text-on-surface-variant')}
-            aria-label="Downvote"
+            className={cx('btn-ghost !h-9 !gap-1.5 !px-2.5', post.myVote === -1 && '!bg-error-container !text-error')}
+            aria-label={`Dislike post (${post.dislikes})`}
+            aria-pressed={post.myVote === -1}
           >
-            <Icon name="arrow_downward" />
+            <Icon name="thumb_down" fill={post.myVote === -1} />
+            <span>Dislike</span>
+            <span className="tabular-nums">{post.dislikes}</span>
           </button>
         </div>
         <button type="button" disabled={!interactive} onClick={() => setThreadOpen((v) => !v)} className="btn-ghost !h-9 !px-3">
@@ -167,10 +173,14 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
         <div className="space-y-4 bg-surface-container-low/60 px-5 py-4">
           {visibleComments.map((c, i) => (
             <div key={i} className="flex gap-3">
-              <Avatar name={c.author.name} size={32} rounded="rounded-lg" />
+              <Link to={`/people/${c.author.id}`} className="shrink-0 rounded-lg hover:opacity-80" aria-label={`View ${c.author.name}'s profile`}>
+                <Avatar src={c.author.avatar} name={c.author.name} size={32} rounded="rounded-lg" />
+              </Link>
               <div className="min-w-0 flex-1 text-sm">
                 <div>
-                  <span className="font-semibold">{c.author.name}</span>{' '}
+                  <Link to={`/people/${c.author.id}`} className="font-semibold text-on-surface hover:text-secondary hover:underline">
+                    {c.author.name}
+                  </Link>{' '}
                   <span className="text-xs text-on-surface-variant">
                     ({c.author.verification === 'edu' ? '.edu Verified CMU' : 'Prospective Scholar'}) • {c.timeAgo}
                   </span>

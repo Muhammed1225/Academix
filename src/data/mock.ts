@@ -68,6 +68,8 @@ export const posts: Post[] = [
       'We rank essays along three orthogonal axes: Cognitive Persistence (40%), Domain Nuance (35%), and Collegiate ' +
       'Generosity (25%).',
     votes: 482,
+    likes: 482,
+    dislikes: 0,
     myVote: 0,
     commentCount: 47,
     bookmarked: false,
@@ -94,6 +96,8 @@ export const posts: Post[] = [
       'weekly workload for incoming freshmen.',
     attachment: { fileName: 'CMU_SCS_CourseSchedule_Plan_Patel.pdf', meta: 'PDF Document • 2.4 MB • 1,320 Downloads' },
     votes: 712,
+    likes: 712,
+    dislikes: 0,
     myVote: 0,
     commentCount: 83,
     bookmarked: false,
@@ -116,6 +120,8 @@ export const posts: Post[] = [
       'are automatically routed to the transfer option pool."',
     auditNote: '3 Verified Admissions Mentors flagged this claim as inaccurate.',
     votes: 12,
+    likes: 12,
+    dislikes: 0,
     myVote: 0,
     commentCount: 9,
     bookmarked: false,
@@ -144,6 +150,12 @@ export const amas: Ama[] = [
 export const composerForums = [
   'Undergrad Admissions & Essays',
   'Computer Science & Engineering',
+  'Process Automation Engineering',
+  'Information Security',
+  'Finance',
+  'Business Administration',
+  'Petroleum Engineering',
+  'Chemical Engineering',
   'Research Lab Recruitment',
   'Campus Life & Housing',
 ];
@@ -480,6 +492,8 @@ const mayaSystems: Person = { ...people.maya, subtitle: 'Carnegie Mellon SCS •
 
 const profilePost = (p: Pick<Post, 'id' | 'timeAgo' | 'title' | 'body' | 'votes' | 'commentCount'>): Post => ({
   ...p,
+  likes: p.votes,
+  dislikes: 0,
   author: mayaSystems,
   channelId: 'research',
   myVote: 0,
