@@ -283,7 +283,7 @@ export default function MentorProfilePage() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-headline text-3xl font-bold text-primary">{profile.name}</h1>
               <Tag tone="blue" icon="school">
-                .edu Verified
+                Institution Verified
               </Tag>
               <Tag tone="gold" icon="workspace_premium">
                 Gold Peer Mentor
