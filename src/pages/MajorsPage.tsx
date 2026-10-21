@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 
-import AdvisorChat from '../components/AdvisorChat';
 import { Chip, Icon, SectionHeader, Tag, cx } from '../components/ui';
 import { colleges } from '../data/mock';
 import type { College, Major } from '../data/types';
@@ -105,7 +104,7 @@ function MajorDetail({ college, major }: { college: College; major: Major }) {
         )}
         {!major.metrics && (
           <p className="mt-4 rounded-lg bg-surface-container-low p-4 text-sm text-on-surface-variant">
-            The full dossier for this major is being verified by CMU mentors. Ask the AI Major Advisor or book a mentor for details.
+            The full dossier for this major is being verified by CMU mentors. Book a mentor for more details.
           </p>
         )}
       </section>
@@ -308,17 +307,12 @@ export default function MajorsPage() {
         <span className="font-semibold text-primary">{major.name}</span>
       </nav>
 
-      <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)_380px]">
+      <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
         <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
           <p className="eyebrow mb-3">Majors Directory ({college.majorCount})</p>
           <MajorList college={college} activeId={major.id} />
         </aside>
         <MajorDetail college={college} major={major} />
-        <aside className="lg:col-span-2 2xl:col-span-1">
-          <div className="card overflow-hidden 2xl:sticky 2xl:top-24">
-            <AdvisorChat key={major.id} mode="majorAdvisor" className="h-[560px] 2xl:h-[calc(100vh-8rem)]" />
-          </div>
-        </aside>
       </div>
     </div>
   );

@@ -37,6 +37,7 @@ export interface Post {
   title?: string;
   body: string;
   channelId: string;
+  universityId?: string;
   insight?: string;
   attachment?: { fileName: string; meta: string };
   image?: { fileName: string; src: string };
@@ -92,6 +93,7 @@ export interface Mentor {
 
 export interface Discussion {
   votes: number;
+  dislikes: number;
   tags: string[];
   askedBy: string;
   question: string;
@@ -155,6 +157,7 @@ export interface Major {
   category: string;
   salary: string;
   acceptance: string;
+  dimStyleIllustrativeScores?: { year: number; points: number }[];
   summary: string;
   degree?: string;
   metrics?: MajorMetric[];

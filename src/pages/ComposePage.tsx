@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Avatar, Icon, Modal, cx } from '../components/ui';
 import { sanitizeRichText } from '../components/RichText';
-import { composerForums, currentUser } from '../data/mock';
+import { colleges, composerForums, currentUser } from '../data/mock';
 import { useApp } from '../store';
 
 const MAX = 4000;
@@ -73,6 +73,7 @@ function readImageAsDataUrl(file: File) {
 
 export default function ComposePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const publish = useApp((s) => s.publish);
   const showToast = useApp((s) => s.showToast);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -89,6 +90,9 @@ export default function ComposePage() {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [activeFormats, setActiveFormats] = useState({ bold: false, italic: false, quote: false, code: false, heading: false });
   const [pendingInlineMarks, setPendingInlineMarks] = useState({ bold: false, italic: false });
+  const universityId = searchParams.get('university');
+  const university = colleges.find((college) => college.id === universityId);
+  const askingAffiliatedStudents = searchParams.get('intent') === 'question' && Boolean(university);
 
   const dirty = Boolean(title || bodyText || attachments.length || image);
   const error =
@@ -172,7 +176,14 @@ export default function ComposePage() {
 
   const submit = () => {
     if (error) return;
-    publish({ title: title.trim(), body: sanitizeRichText(bodyHtml).trim(), forum, anonymous, image: image ?? undefined });
+    publish({
+      title: title.trim(),
+      body: sanitizeRichText(bodyHtml).trim(),
+      forum,
+      anonymous,
+      image: image ?? undefined,
+      universityId: university?.id,
+    });
     showToast(anonymous ? 'Dispatch published anonymously' : 'Dispatch published to the feed', 'send');
     navigate('/');
   };
@@ -206,8 +217,14 @@ export default function ComposePage() {
     <div className="mx-auto max-w-6xl">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-headline text-3xl font-semibold text-primary">Collegiate Post Composer</h1>
-          <p className="mt-1 text-on-surface-variant">Draft verified dispatches, syllabus teardowns, or admissions advice for the network.</p>
+          <h1 className="font-headline text-3xl font-semibold text-primary">
+            {askingAffiliatedStudents ? `Ask the campus community at ${university?.name}` : 'Collegiate Post Composer'}
+          </h1>
+          <p className="mt-1 text-on-surface-variant">
+            {askingAffiliatedStudents
+              ? 'Ask a question for this university’s campus community.'
+              : 'Draft verified dispatches, syllabus teardowns, or admissions advice for the network.'}
+          </p>
         </div>
         <button type="button" onClick={leave} className="btn-ghost">
           <Icon name="close" /> Back to Feed
@@ -232,6 +249,15 @@ export default function ComposePage() {
             </label>
           </div>
 
+          {university && (
+            <div className="flex items-center gap-2 rounded-lg bg-secondary-fixed px-3 py-2 text-sm text-on-secondary-fixed">
+              <Icon name="account_balance" />
+              <span>
+                {askingAffiliatedStudents ? 'Question tagged to' : 'Experience tagged to'} <strong>{university.name}</strong>
+              </span>
+            </div>
+          )}
+
           <label className="block text-sm font-semibold">
             Target Forum
             <select value={forum} onChange={(e) => setForum(e.target.value)} className="input mt-1.5">
@@ -244,7 +270,7 @@ export default function ComposePage() {
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Title of Academic Dispatch"
+            placeholder={askingAffiliatedStudents ? 'What would you like to ask?' : 'Title of Academic Dispatch'}
             className="input !py-3 font-headline !text-xl font-semibold"
           />
 
@@ -310,7 +336,7 @@ export default function ComposePage() {
               role="textbox"
               aria-label="Write your academic dispatch"
               aria-multiline="true"
-              data-placeholder="Share syllabus teardowns, admissions advice, or research openings..."
+              data-placeholder={askingAffiliatedStudents ? 'Write your question for affiliated students...' : 'Share syllabus teardowns, admissions advice, or research openings...'}
               onInput={(event) => updateEditor(event.currentTarget)}
               className="editor-content min-h-72 max-h-[32rem] overflow-y-auto bg-white px-4 py-3 text-[15px] leading-relaxed outline-none"
             />

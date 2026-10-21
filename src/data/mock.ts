@@ -199,6 +199,11 @@ const csMajor: Major = {
   category: 'Computer Science & AI',
   salary: '$138.5k',
   acceptance: '4.2%',
+  dimStyleIllustrativeScores: [
+    { year: 2023, points: 685 },
+    { year: 2024, points: 690 },
+    { year: 2025, points: 695 },
+  ],
   degree: 'Bachelor of Science (4-Year Track) • ABET Computing Accredited',
   summary:
     'An internationally distinguished curriculum combining rigorous mathematical reasoning, algorithmic design, ' +
@@ -282,6 +287,11 @@ const otherMajors: Major[] = [
     category: 'Engineering & Robotics',
     salary: '$126.0k',
     acceptance: '6.8%',
+    dimStyleIllustrativeScores: [
+      { year: 2023, points: 650 },
+      { year: 2024, points: 660 },
+      { year: 2025, points: 670 },
+    ],
     summary: 'Hardware-software co-design spanning circuits, signal processing, embedded systems, and computer architecture.',
   },
   {
@@ -292,6 +302,11 @@ const otherMajors: Major[] = [
     category: 'Computer Science & AI',
     salary: '$142.0k',
     acceptance: '3.9%',
+    dimStyleIllustrativeScores: [
+      { year: 2023, points: 680 },
+      { year: 2024, points: 685 },
+      { year: 2025, points: 690 },
+    ],
     summary: 'The first undergraduate AI degree in the US: machine perception, NLP, deep reinforcement learning, and AI ethics.',
   },
   {
@@ -302,6 +317,11 @@ const otherMajors: Major[] = [
     category: 'Business & Info Systems',
     salary: '$115.0k',
     acceptance: '11.4%',
+    dimStyleIllustrativeScores: [
+      { year: 2023, points: 600 },
+      { year: 2024, points: 610 },
+      { year: 2025, points: 620 },
+    ],
     summary: 'Technology strategy, data analytics, and software development applied to organizations and policy.',
   },
   {
@@ -312,6 +332,11 @@ const otherMajors: Major[] = [
     category: 'Natural Sciences',
     salary: '$121.0k',
     acceptance: '7.1%',
+    dimStyleIllustrativeScores: [
+      { year: 2023, points: 640 },
+      { year: 2024, points: 650 },
+      { year: 2025, points: 660 },
+    ],
     summary: 'Algorithms and machine learning applied to genomics, protein structure, and systems biology.',
   },
 ];
@@ -319,12 +344,12 @@ const otherMajors: Major[] = [
 export const colleges: College[] = [
   {
     id: 'cmu',
-    name: 'Carnegie Mellon University',
-    shortName: 'CMU',
+    name: 'Baku Higher Oil School',
+    shortName: 'BHOS',
     location: 'Pittsburgh, PA',
     founded: 'Founded 1900',
     kind: 'Private R1 Research',
-    heroImage: img('campus_cmu.jpg'),
+    heroImage: img('bhos-campus.jpg'),
     description:
       'World-renowned private research university pioneering computing, artificial intelligence, robotics, ' +
       'computational biology, and interdisciplinary fine arts.',
@@ -395,6 +420,7 @@ export const colleges: College[] = [
     discussions: [
       {
         votes: 389,
+        dislikes: 14,
         tags: ['Campus Culture', 'Mental Health'],
         askedBy: 'Asked by prospective CS applicant',
         question: "Is the infamous 'CMU stress culture' as overwhelming as Reddit claims? How do you cope?",
@@ -411,6 +437,7 @@ export const colleges: College[] = [
       },
       {
         votes: 241,
+        dislikes: 9,
         tags: ['Student Life', 'Housing & Oakland'],
         askedBy: 'Asked by incoming Sophomore',
         question: 'Best off-campus neighborhoods for students: Squirrel Hill vs. Shadyside vs. South Oakland?',
@@ -423,6 +450,45 @@ export const colleges: College[] = [
           'minutes. Shadyside is pricier but very walkable to Walnut Street coffee shops.',
         answers: 31,
         accuracy: 96,
+      },
+      {
+        votes: 178,
+        dislikes: 6,
+        tags: ['Student Life', 'Getting Started'],
+        askedBy: 'Asked by an incoming student',
+        question: 'What helped you feel at home during your first semester?',
+        answerer: 'Student Contributor',
+        answererRole: 'Student perspective',
+        answeredAgo: '1 week ago',
+        answer: 'Joining one or two student groups and making time to talk with classmates helped me build a routine and meet people. Give yourself time to settle in, and ask your peers or student support offices for help when you need it.',
+        answers: 22,
+        accuracy: 94,
+      },
+      {
+        votes: 132,
+        dislikes: 5,
+        tags: ['Course Planning', 'Academics'],
+        askedBy: 'Asked by a prospective student',
+        question: 'How do you balance a demanding course load with activities outside class?',
+        answerer: 'Student Contributor',
+        answererRole: 'Student perspective',
+        answeredAgo: '3 days ago',
+        answer: 'Plan the week around fixed deadlines, leave time between classes for breaks, and avoid taking on every opportunity at once. Classmates can also be a good resource for comparing study strategies and workload expectations.',
+        answers: 17,
+        accuracy: 91,
+      },
+      {
+        votes: 96,
+        dislikes: 3,
+        tags: ['Campus Life', 'Advice'],
+        askedBy: 'Asked by an incoming student',
+        question: 'What is one thing you wish you had known before starting university?',
+        answerer: 'Student Contributor',
+        answererRole: 'Student perspective',
+        answeredAgo: '5 days ago',
+        answer: 'You do not need to have everything figured out on day one. Explore your options, talk to students in different programs, and use campus resources early rather than waiting until you feel stuck.',
+        answers: 13,
+        accuracy: 97,
       },
     ],
     deadlines: [

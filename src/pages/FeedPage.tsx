@@ -2,16 +2,10 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import PostCard from '../components/PostCard';
-import { Avatar, Icon, MetricTile, Tag, cx } from '../components/ui';
+import { Avatar, MetricTile, Tag, cx } from '../components/ui';
 import { amas, channels, people } from '../data/mock';
-import type { Ama, FeedTab } from '../data/types';
+import type { Ama } from '../data/types';
 import { useApp } from '../store';
-
-const tabs: { id: FeedTab; label: string }[] = [
-  { id: 'trending', label: 'Trending Discussions' },
-  { id: 'latest', label: 'Latest Queries' },
-  { id: 'essays', label: 'Verified Essays' },
-];
 
 const protocol = [
   ['bg-amber-500', 'Gold Verified', 'Faculty / Admissions Dean'],
@@ -115,10 +109,9 @@ export function InstitutionSpotlight() {
 
 export default function FeedPage() {
   const posts = useApp((s) => s.posts);
-  const [tab, setTab] = useState<FeedTab>('trending');
   const [channel, setChannel] = useState('all');
 
-  const visible = posts.filter((p) => p.tabs.includes(tab) && (channel === 'all' || p.channelId === channel));
+  const visible = posts.filter((p) => channel === 'all' || p.channelId === channel);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)_300px]">
@@ -154,24 +147,6 @@ export default function FeedPage() {
               {c.name}
             </button>
           ))}
-        </div>
-
-        <div className="card flex items-center gap-1 overflow-x-auto p-1.5">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={cx(
-                'whitespace-nowrap rounded-lg px-3.5 py-2 text-sm',
-                tab === t.id ? 'bg-secondary-fixed font-semibold text-on-secondary-fixed' : 'text-on-surface-variant hover:bg-surface-container-low',
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-          <div className="flex-1" />
-          <Icon name="filter_list" className="mr-2 text-outline" />
         </div>
 
         {visible.length === 0 && <div className="card p-10 text-center text-sm text-on-surface-variant">No dispatches in this channel yet.</div>}
