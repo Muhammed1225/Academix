@@ -4,7 +4,6 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { BRAND, people } from '../data/mock';
 import { useApp, useUnreadCount } from '../store';
 import AdvisorDrawer from './AdvisorDrawer';
-import AuthModal from './AuthModal';
 import { Avatar, BrandMark, Icon, cx } from './ui';
 
 const navItems = [
@@ -18,7 +17,6 @@ function Header() {
   const unread = useUnreadCount();
   const signedIn = useApp((s) => s.signedIn);
   const setSignedIn = useApp((s) => s.setSignedIn);
-  const setAuthOpen = useApp((s) => s.setAuthOpen);
   const showToast = useApp((s) => s.showToast);
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
@@ -73,14 +71,14 @@ function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Link
+          {signedIn && <Link
             to="/people/fuad-test"
             aria-label="My profile"
             title="My profile"
             className="rounded-full ring-2 ring-transparent transition hover:ring-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
           >
             <Avatar src={people.fuadTest.avatar} name={people.fuadTest.name} size={44} rounded="rounded-full" />
-          </Link>
+          </Link>}
           <button
             type="button"
             className="relative rounded-full p-2 text-on-surface-variant hover:bg-surface-container-low"
@@ -120,9 +118,7 @@ function Header() {
             </div>
           )}
           {!signedIn && (
-            <button type="button" className="btn-primary" onClick={() => setAuthOpen(true)}>
-              Sign In / Join
-            </button>
+            <Link to="/auth" className="btn-primary">Sign up / Log in</Link>
           )}
         </div>
       </div>
@@ -276,7 +272,6 @@ export default function Layout() {
       <CommunityLauncher />
       <AdvisorLauncher />
       <AdvisorDrawer />
-      <AuthModal />
       <ToastHost />
     </div>
   );

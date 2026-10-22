@@ -12,6 +12,7 @@ import MajorsPage from './pages/MajorsPage';
 import MentorProfilePage from './pages/MentorProfilePage';
 import PersonProfilePage from './pages/PersonProfilePage';
 import SearchPage from './pages/SearchPage';
+import AuthPage from './pages/AuthPage';
 import { useApp } from './store';
 
 function ScrollToTop() {
@@ -38,6 +39,7 @@ export default function App() {
     <>
       <ScrollToTop />
       <Routes>
+        <Route path="auth" element={<AuthPage />} />
         <Route element={<Layout />}>
           <Route index element={<FeedPage />} />
           <Route path="colleges" element={<CollegesPage />} />

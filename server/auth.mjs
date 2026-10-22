@@ -51,7 +51,7 @@ function decodeIdentityDocument(document) {
   if (
     !document ||
     !['student_card', 'work_card'].includes(document.type) ||
-    !['application/pdf', 'image/jpeg', 'image/png'].includes(document.mimeType) ||
+    !['image/jpeg', 'image/png'].includes(document.mimeType) ||
     typeof document.base64 !== 'string' ||
     document.base64.length > Math.ceil((5 * 1024 * 1024) / 3) * 4
   ) {
@@ -62,7 +62,6 @@ function decodeIdentityDocument(document) {
   if (!content.length || content.length > 5 * 1024 * 1024 || content.toString('base64') !== document.base64) return null;
 
   const validSignature =
-    (document.mimeType === 'application/pdf' && content.subarray(0, 5).toString() === '%PDF-') ||
     (document.mimeType === 'image/jpeg' && content.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) ||
     (document.mimeType === 'image/png' && content.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])));
 
@@ -113,6 +112,10 @@ const server = createServer(async (req, res) => {
         sendJson(res, 400, { error: 'Enter your first and last name.' });
         return;
       }
+      if (input.confirmPassword !== password) {
+        sendJson(res, 400, { error: 'Passwords do not match.' });
+        return;
+      }
       if (
         password.length < 12 ||
         !/[A-Za-z]/.test(password) ||
@@ -129,6 +132,14 @@ const server = createServer(async (req, res) => {
         sendJson(res, 400, { error: 'Choose a valid account role.' });
         return;
       }
+      if (input.role !== 'prospective' && (!input.university || !input.major)) {
+        sendJson(res, 400, { error: 'Choose your university and major or subject.' });
+        return;
+      }
+      if (input.role === 'scholar' && (!Number.isInteger(Number(input.graduationYear)) || Number(input.graduationYear) < 2000 || Number(input.graduationYear) > 2100)) {
+        sendJson(res, 400, { error: 'Choose a valid graduation year.' });
+        return;
+      }
       const isVerificationRequest = input.requestGoldVerification === true;
       if (isVerificationRequest && !['scholar', 'faculty'].includes(input.role)) {
         sendJson(res, 400, { error: 'Gold verification is available for student / scholar and faculty / representative accounts.' });
@@ -139,13 +150,18 @@ const server = createServer(async (req, res) => {
         sendJson(res, 400, { error: 'Choose a valid verification method.' });
         return;
       }
-      if (isVerificationRequest && verificationMethod === 'edu_email' && !email.endsWith('.edu')) {
-        sendJson(res, 400, { error: 'Use an institutional .edu email for this verification option.' });
+      const eduEmail = typeof input.eduEmail === 'string' ? input.eduEmail.trim().toLowerCase() : '';
+      if (isVerificationRequest && verificationMethod === 'edu_email' && !/^[^@\s]+@[^@\s]+\.edu$/.test(eduEmail)) {
+        sendJson(res, 400, { error: 'Enter a valid institutional .edu email for this verification option.' });
         return;
       }
       const identityDocument = input.identityDocument ? decodeIdentityDocument(input.identityDocument) : null;
+      if (identityDocument && input.identityDocument.type !== (input.role === 'faculty' ? 'work_card' : 'student_card')) {
+        sendJson(res, 400, { error: 'Choose the identity document type that matches your account role.' });
+        return;
+      }
       if (input.identityDocument && !identityDocument) {
-        sendJson(res, 400, { error: 'Upload a valid PDF, JPG, or PNG identity document no larger than 5 MB.' });
+        sendJson(res, 400, { error: 'Upload a valid JPG or PNG identity document no larger than 5 MB.' });
         return;
       }
       if (isVerificationRequest && verificationMethod === 'identity_document' && !identityDocument) {
@@ -182,9 +198,12 @@ const server = createServer(async (req, res) => {
         email,
         name,
         role: input.role,
+        ...(typeof input.university === 'string' && input.university ? { university: input.university } : {}),
+        ...(typeof input.major === 'string' && input.major ? { major: input.major } : {}),
+        ...(input.role === 'scholar' ? { graduationYear: Number(input.graduationYear) } : {}),
         verificationStatus: isVerificationRequest ? 'pending' : 'unverified',
         ...(isVerificationRequest
-          ? { verificationRequest: { method: verificationMethod, submittedAt: new Date().toISOString() } }
+          ? { verificationRequest: { method: verificationMethod, ...(verificationMethod === 'edu_email' ? { eduEmail } : {}), submittedAt: new Date().toISOString() } }
           : {}),
         ...(verificationDocument ? { verificationDocument } : {}),
         salt,
