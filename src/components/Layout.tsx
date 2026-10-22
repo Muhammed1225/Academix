@@ -16,6 +16,7 @@ const navItems = [
 function Header() {
   const unread = useUnreadCount();
   const signedIn = useApp((s) => s.signedIn);
+  const authChecked = useApp((s) => s.authChecked);
   const setSignedIn = useApp((s) => s.setSignedIn);
   const showToast = useApp((s) => s.showToast);
   const navigate = useNavigate();
@@ -71,6 +72,7 @@ function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
+<<<<<<< HEAD
           {signedIn && <Link
             to="/people/fuad-test"
             aria-label="My profile"
@@ -79,6 +81,57 @@ function Header() {
           >
             <Avatar src={people.fuadTest.avatar} name={people.fuadTest.name} size={44} rounded="rounded-full" />
           </Link>}
+=======
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((value) => !value)}
+              aria-label="Account menu"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              className="group relative inline-flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-none"
+            >
+              <Avatar src={people.fuadTest.avatar} name={people.fuadTest.name} size={44} rounded="rounded-full" />
+              <span className="pointer-events-none absolute inset-0 rounded-full border-2 border-transparent transition-colors group-hover:border-secondary group-focus-visible:border-secondary" />
+            </button>
+            {menuOpen && (
+              <div role="menu" className="animate-slide-up absolute right-0 top-12 w-48 overflow-hidden rounded-xl border border-outline-variant/60 bg-white py-1 shadow-float">
+                <Link
+                  to="/people/fuad-test"
+                  role="menuitem"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-surface-container-low"
+                >
+                  <Icon name="person" /> View profile
+                </Link>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    showToast('Settings are coming soon', 'settings');
+                  }}
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-surface-container-low"
+                >
+                  <Icon name="settings" /> Settings
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    void fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+                    setSignedIn(false);
+                    setMenuOpen(false);
+                    showToast('Signed out', 'logout');
+                  }}
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-error hover:bg-error-container/50"
+                >
+                  <Icon name="logout" /> Sign out
+                </button>
+              </div>
+            )}
+          </div>
+>>>>>>> 676b9de3b62c332f61f41de3c1b6ce52cabf3a94
           <button
             type="button"
             className="relative rounded-full p-2 text-on-surface-variant hover:bg-surface-container-low"
@@ -88,6 +141,7 @@ function Header() {
             <Icon name="notifications" />
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-error" />
           </button>
+<<<<<<< HEAD
           {signedIn && (
             <div className="relative">
               <button
@@ -119,6 +173,12 @@ function Header() {
           )}
           {!signedIn && (
             <Link to="/auth" className="btn-primary">Sign up / Log in</Link>
+=======
+          {!signedIn && authChecked && (
+            <button type="button" className="btn-primary" onClick={() => setAuthOpen(true)}>
+              Sign In / Join
+            </button>
+>>>>>>> 676b9de3b62c332f61f41de3c1b6ce52cabf3a94
           )}
         </div>
       </div>

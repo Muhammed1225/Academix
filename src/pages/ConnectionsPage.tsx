@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { Avatar, Icon, Tag, cx } from '../components/ui';
 import { colleges } from '../data/mock';
@@ -8,15 +8,20 @@ import { useApp } from '../store';
 const connections = colleges.flatMap((college) =>
   college.mentors.map((mentor) => ({ college, mentor })),
 );
-const interests = [...new Set(connections.flatMap(({ mentor }) => mentor.tags))].sort();
 const initialPreferences = ['15-122 Rigor', 'SCS Supplemental Essay'];
 
 export default function ConnectionsPage() {
   const showToast = useApp((s) => s.showToast);
-  const [preferences, setPreferences] = useState(initialPreferences);
+  const [searchParams] = useSearchParams();
+  const [preferences, setPreferences] = useState(() => searchParams.has('university') ? [] : initialPreferences);
   const [requested, setRequested] = useState<string[]>([]);
+  const university = colleges.find((college) => college.id === searchParams.get('university'));
+  const affiliatedConnections = university
+    ? connections.filter(({ college }) => college.id === university.id)
+    : connections;
+  const availableInterests = [...new Set(affiliatedConnections.flatMap(({ mentor }) => mentor.tags))].sort();
 
-  const recommendations = connections
+  const recommendations = affiliatedConnections
     .filter(({ mentor }) => !preferences.length || mentor.tags.some((tag) => preferences.includes(tag)))
     .sort(
       (a, b) =>
@@ -39,10 +44,13 @@ export default function ConnectionsPage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <header>
         <p className="eyebrow text-secondary">Your academic network</p>
-        <h1 className="mt-1 font-headline text-3xl font-semibold text-primary">Make Connections</h1>
+        <h1 className="mt-1 font-headline text-3xl font-semibold text-primary">
+          {university ? `Connect with ${university.shortName} Students & Alumni` : 'Make Connections'}
+        </h1>
         <p className="mt-2 max-w-2xl text-on-surface-variant">
-          Choose the topics you care about to find students and mentors with shared interests.
-          Recommendations update as you change your preferences.
+          {university
+            ? `Browse students and mentors affiliated with ${university.name}. Choose topics to find people with shared interests.`
+            : 'Choose the topics you care about to find students and mentors with shared interests. Recommendations update as you change your preferences.'}
         </p>
       </header>
 
@@ -57,7 +65,7 @@ export default function ConnectionsPage() {
           </button>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          {interests.map((interest) => {
+          {availableInterests.map((interest) => {
             const selected = preferences.includes(interest);
             return (
               <button

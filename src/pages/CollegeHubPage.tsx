@@ -1,123 +1,134 @@
 import { useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 
-import { DiscussionCard, MentorCard } from '../components/CollegeCards';
-import { Chip, Icon, SectionHeader, Tag, cx } from '../components/ui';
+import { DiscussionCard } from '../components/CollegeCards';
+import { Avatar, Icon, SectionHeader, Tag, cx } from '../components/ui';
 import { colleges } from '../data/mock';
 import type { College } from '../data/types';
 import { useApp } from '../store';
 
-type HubTab = 'overview' | 'mentors' | 'insights' | 'qa';
-
-function MentorsSection({ college, limit }: { college: College; limit?: number }) {
-  const [filter, setFilter] = useState('All');
-  const filters = ['All', ...new Set(college.mentors.map((m) => m.collegeShort))];
-  const mentors = college.mentors.filter((m) => filter === 'All' || m.collegeShort === filter).slice(0, limit);
-  return (
-    <section className="card p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="flex items-center gap-2 font-headline text-2xl font-semibold text-primary">
-            <span className="h-2.5 w-2.5 rounded-full bg-secondary" /> Available Peer Mentors
-          </h2>
-          <p className="mt-1 text-sm text-on-surface-variant">Connect 1-on-1 with vetted CMU students currently enrolled in target colleges.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="eyebrow mr-1">College:</span>
-          {filters.map((f) => (
-            <Chip key={f} active={f === filter} onClick={() => setFilter(f)}>
-              {f}
-            </Chip>
-          ))}
-        </div>
-      </div>
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
-        {mentors.map((m) => (
-          <MentorCard key={m.id} mentor={m} />
-        ))}
-      </div>
-      <p className="mt-5 text-center text-sm font-semibold text-secondary">
-        Explore all {college.mentorCount} CMU Mentors across 7 colleges →
-      </p>
-    </section>
-  );
-}
+type HubTab = 'overview' | 'insights' | 'qa';
 
 function DiscussionsSection({ college }: { college: College }) {
   return (
     <section className="card p-6">
       <SectionHeader
         title="Unfiltered Student Discussions"
-        subtitle="Crowdsourced answers directly from verified CMU undergraduate & alumni accounts."
+        subtitle={`Crowdsourced answers from students and alumni in the ${college.shortName} network.`}
         icon="forum"
-        action={<span className="chip bg-surface-container-low text-on-surface-variant"><Icon name="tune" className="!text-[16px]" /> Most Helpful</span>}
+        action={
+          <div className="flex flex-col items-end gap-2">
+            <Link to={`/compose?university=${encodeURIComponent(college.id)}`} className="btn-outline !h-9 !px-3 text-xs">
+              <Icon name="edit_note" className="!text-[18px]" /> Share your experience
+            </Link>
+            <Link to={`/compose?university=${encodeURIComponent(college.id)}&intent=question`} className="btn-primary !h-9 !px-3 text-xs">
+              <Icon name="forum" className="!text-[18px]" /> Ask campus community
+            </Link>
+            <span className="chip bg-surface-container-low text-on-surface-variant"><Icon name="tune" className="!text-[16px]" /> Most Helpful</span>
+          </div>
+        }
       />
       {college.discussions.map((d) => (
         <DiscussionCard key={d.question} discussion={d} />
       ))}
       <p className="mt-2 text-center text-sm text-on-surface-variant">
-        Showing {college.discussions.length} of {college.questionCount} verified questions
+        Showing {college.discussions.length} discussions
       </p>
+      <Link
+        to={`/search?university=${encodeURIComponent(college.id)}`}
+        className="mt-4 flex items-center justify-center gap-1 border-t border-outline-variant/40 pt-4 text-sm font-semibold text-secondary hover:underline"
+      >
+        View more posts about {college.shortName} <Icon name="arrow_forward" className="!text-[18px]" />
+      </Link>
     </section>
   );
 }
 
-function Sidebar({ college }: { college: College }) {
+function PopularMajorsSection({ college }: { college: College }) {
+  const majors = college.majors.slice(0, 3);
+
+  return (
+    <section className="card p-6">
+      <SectionHeader
+        title={`Popular Majors at ${college.shortName}`}
+        subtitle="Explore standout programs at this university."
+        icon="school"
+        action={
+          <Link to={`/colleges/${college.id}/majors`} className="text-sm font-semibold text-secondary hover:underline">
+            View all majors
+          </Link>
+        }
+      />
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {majors.map((major) => (
+          <Link
+            key={major.id}
+            to={`/colleges/${college.id}/majors/${major.id}`}
+            className="group rounded-xl border border-outline-variant/50 p-4 transition hover:border-secondary/50 hover:bg-surface-container-low"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="font-semibold text-primary group-hover:text-secondary">{major.name}</div>
+              <Icon name="arrow_outward" className="shrink-0 text-outline group-hover:text-secondary" />
+            </div>
+            <div className="mt-1 text-xs font-medium text-secondary">{major.category}</div>
+            <p className="mt-2 text-sm leading-relaxed text-on-surface-variant">{major.summary}</p>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Sidebar({ college, onViewInsights }: { college: College; onViewInsights: () => void }) {
   return (
     <div className="space-y-4">
       <div className="card p-5">
-        <SectionHeader title="Admissions Timelines" icon="event_upcoming" />
-        <div className="space-y-2.5">
-          {college.deadlines.map((d) => (
-            <div key={d.name} className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-low p-3">
-              <div>
-                <Tag tone={d.kind === 'Binding' ? 'dark' : 'neutral'}>{d.kind}</Tag>
-                <div className="mt-1.5 font-semibold">{d.name}</div>
-                <div className="text-xs text-on-surface-variant">{d.sub}</div>
+        <SectionHeader
+          title="Acceptance Requirements"
+          icon="rule"
+          action={
+            <button type="button" onClick={onViewInsights} className="text-right text-xs font-semibold text-secondary hover:underline">
+              Admission insights
+            </button>
+          }
+        />
+        <p className="mb-3 text-xs leading-relaxed text-on-surface-variant">
+          Illustrative DIM-scale estimates out of 700, not official university cutoffs.
+        </p>
+        <div className="space-y-3">
+          {college.majors.map((major) => (
+            <Link
+              key={major.id}
+              to={`/colleges/${college.id}/majors/${major.id}`}
+              className="block rounded-lg bg-surface-container-low p-3 transition hover:bg-surface-container"
+            >
+              <div className="font-semibold text-primary hover:text-secondary">{major.name}</div>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {major.dimStyleIllustrativeScores?.map(({ year, points }) => (
+                  <div key={year} className="text-center">
+                    <div className="text-[11px] text-on-surface-variant">{year}</div>
+                    <div className="font-headline text-lg font-semibold text-secondary">{points}</div>
+                  </div>
+                ))}
               </div>
-              <div className="text-right">
-                <div className="font-headline text-xl font-semibold text-secondary">{d.date}</div>
-                <div className="text-xs text-on-surface-variant">{d.notice}</div>
-              </div>
-            </div>
+            </Link>
           ))}
         </div>
-        <h3 className="mt-6 flex items-center gap-2 font-semibold text-primary">
-          <Icon name="checklist" className="text-secondary" /> Applicant Requirements Checklist
-        </h3>
-        <ul className="mt-3 space-y-2 text-sm">
-          {college.checklist.map((c) => (
-            <li key={c.label} className="flex items-start gap-2">
-              <Icon name={c.required ? 'check_box' : 'check_box_outline_blank'} fill={c.required} className={c.required ? 'text-on-tertiary-container' : 'text-outline'} />
-              {c.label}
-            </li>
-          ))}
-        </ul>
       </div>
 
       <div className="card p-5">
-        <SectionHeader title="Outcomes & Placements" icon="trending_up" />
-        <p className="text-xs text-on-surface-variant">Median Starting Salary (Undergrad)</p>
-        <p className="font-headline text-3xl font-semibold text-primary">$121,500</p>
-        <div className="mt-4 space-y-3">
-          {college.salaries.map((s) => (
-            <div key={s.label}>
-              <div className="flex justify-between text-sm">
-                <span className="font-medium">{s.label}</span>
-                <span className="font-semibold text-secondary">{s.value}</span>
-              </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-container-low">
-                <div className="h-full rounded-full bg-secondary" style={{ width: `${s.fraction * 100}%` }} />
-              </div>
-            </div>
+        <SectionHeader title="Students & Alumni to Connect With" subtitle="Suggested profiles from the university network." icon="group" />
+        <div className="mt-2 divide-y divide-outline-variant/40">
+          {college.mentors.slice(0, 3).map((mentor) => (
+            <SuggestedConnection key={mentor.id} mentor={mentor} />
           ))}
         </div>
-        <p className="mt-5 text-sm font-semibold">Top Hiring Employers</p>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {college.employers.map((e) => (
-            <Tag key={e}>{e}</Tag>
-          ))}
-        </div>
+        <Link
+          to={`/connections?university=${encodeURIComponent(college.id)}`}
+          className="mt-3 flex items-center justify-center gap-1 border-t border-outline-variant/40 pt-3 text-sm font-semibold text-secondary hover:underline"
+        >
+          Connect with more {college.shortName} people <Icon name="arrow_forward" className="!text-[18px]" />
+        </Link>
       </div>
 
       <div className="card p-5">
@@ -134,15 +145,28 @@ function Sidebar({ college }: { college: College }) {
         ))}
       </div>
 
-      <div className="card flex items-center gap-3 p-5">
-        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-secondary-fixed text-secondary">
-          <Icon name="location_on" />
-        </span>
-        <div>
-          <div className="font-semibold">Campus & Neighborhood</div>
-          <div className="text-xs text-on-surface-variant">{college.address}</div>
-        </div>
+    </div>
+  );
+}
+
+function SuggestedConnection({ mentor }: { mentor: College['mentors'][number] }) {
+  const showToast = useApp((s) => s.showToast);
+
+  return (
+    <div className="flex items-center gap-3 py-3 first:pt-1">
+      <Avatar src={mentor.avatar} name={mentor.name} size={44} verified />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold text-primary">{mentor.name}</div>
+        <div className="truncate text-xs text-on-surface-variant">{mentor.program}</div>
+        <Tag tone="blue" className="mt-1">{mentor.tags[0]}</Tag>
       </div>
+      <button
+        type="button"
+        onClick={() => showToast(`Connection request sent to ${mentor.name}`, 'person_add')}
+        className="btn-outline !h-8 !px-2.5 text-xs"
+      >
+        Connect
+      </button>
     </div>
   );
 }
@@ -159,11 +183,20 @@ export default function CollegeHubPage() {
 
   const tabs: { id: HubTab | 'majors'; label: string; count?: number }[] = [
     { id: 'overview', label: 'Overview' },
-    { id: 'mentors', label: 'Verified Student Mentors', count: college.mentorCount },
     { id: 'majors', label: 'Majors Directory', count: college.majorCount },
     { id: 'insights', label: 'Admissions Insights' },
     { id: 'qa', label: 'Q&A Board', count: college.questionCount },
   ];
+  const latestMajorScores = college.majors.flatMap((major) => {
+    const scores = major.dimStyleIllustrativeScores;
+    const latestScore = scores?.[scores.length - 1];
+    return latestScore ? [latestScore.points] : [];
+  });
+  const averageAcceptancePoints = latestMajorScores.length
+    ? Math.round(latestMajorScores.reduce((total, points) => total + points, 0) / latestMajorScores.length)
+    : null;
+  const undergraduatePrograms = college.majors.filter((major) => major.name.startsWith('B.S.')).length;
+  const graduatePrograms = college.majors.filter((major) => /^(M\.S\.|M\.A\.|Ph\.D\.|Master|Doctor)/i.test(major.name)).length;
 
   return (
     <div className="space-y-6">
@@ -175,15 +208,12 @@ export default function CollegeHubPage() {
             <span className="flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-semibold text-secondary">
               <Icon name="verified" fill className="!text-[15px] text-on-tertiary-container" /> Verified Campus Network
             </span>
-            <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-semibold">
-              <span className="h-2 w-2 rounded-full bg-on-tertiary-container" /> {college.mentorCount} Mentors Online
-            </span>
           </div>
           <h1 className="absolute bottom-5 left-5 right-5 font-headline text-3xl font-bold text-white sm:left-44 sm:text-4xl">{college.name}</h1>
         </div>
-        <div className="relative flex flex-col gap-4 px-5 pb-5 pt-4 sm:flex-row sm:items-end sm:pl-44">
-          <span className="absolute -top-14 left-5 hidden h-28 w-28 items-center justify-center rounded-xl border-4 border-white bg-secondary-fixed shadow-header sm:flex">
-            <Icon name="account_balance" className="!text-5xl text-secondary" />
+        <div className="relative flex flex-col gap-4 px-5 pb-5 pt-4 sm:flex-row sm:items-end sm:pl-56">
+          <span className="absolute -top-14 left-5 hidden h-28 w-48 items-center justify-center rounded-xl border-4 border-white bg-secondary-fixed p-3 shadow-header sm:flex">
+            <img src="/images/bhos-logo.png" alt={`${college.name} logo`} className="max-h-full w-full object-contain" />
           </span>
           <div className="flex flex-1 flex-wrap items-center gap-2 text-sm text-on-surface-variant">
             <Tag tone="green" icon="verified">
@@ -198,16 +228,14 @@ export default function CollegeHubPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
+              aria-pressed={saved}
               className={cx(saved ? 'btn-outline' : 'btn-primary')}
               onClick={() => {
                 toggleSaved(college.id);
-                showToast(saved ? 'Removed from your list' : `${college.name} bookmarked`, 'bookmark');
+                showToast(saved ? `Removed ${college.name} from your dream universities` : `${college.name} added to your dream universities`, 'star');
               }}
             >
-              <Icon name="bookmark" fill={saved} /> {saved ? 'Bookmarked' : 'Bookmark University'}
-            </button>
-            <button type="button" className="btn-outline" onClick={() => setTab('mentors')}>
-              <Icon name="forum" /> Find a Mentor ({college.mentorCount})
+              <Icon name="star" fill={saved} /> Dream University
             </button>
             <Link to="/compose" className="btn-outline">
               <Icon name="question_answer" /> Ask Campus Community
@@ -215,17 +243,39 @@ export default function CollegeHubPage() {
           </div>
         </div>
         <div className="grid gap-3 border-t border-outline-variant/40 p-5 sm:grid-cols-2 lg:grid-cols-4">
-          {college.stats.map((s) => (
+          {college.stats.map((s) => s.label === 'Student-to-Faculty' ? (
             <div key={s.label} className="rounded-xl border border-outline-variant/50 p-4">
               <div className="flex items-center justify-between">
-                <span className="eyebrow">{s.label}</span>
-                <Icon name={s.icon} className="text-secondary" />
+                <span className="eyebrow">Programs Listed</span>
+                <Icon name="school" className="text-secondary" />
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div>
+                  <div className="font-headline text-3xl font-semibold text-primary">{undergraduatePrograms}</div>
+                  <div className="text-xs font-medium text-on-surface-variant">Undergraduate</div>
+                </div>
+                <div>
+                  <div className="font-headline text-3xl font-semibold text-primary">{graduatePrograms}</div>
+                  <div className="text-xs font-medium text-on-surface-variant">Graduate</div>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-on-surface-variant">Counts reflect programs currently listed in the directory.</p>
+            </div>
+          ) : (
+            <div key={s.label} className="rounded-xl border border-outline-variant/50 p-4">
+              <div className="flex items-center justify-between">
+                <span className="eyebrow">{s.label === 'Acceptance Rate' ? 'Average Acceptance Points' : s.label}</span>
+                <Icon name={s.label === 'Acceptance Rate' ? 'score' : s.icon} className="text-secondary" />
               </div>
               <div className="mt-2 flex flex-wrap items-baseline gap-2">
-                <span className="font-headline text-3xl font-semibold text-primary">{s.value}</span>
-                {s.tag && <Tag tone="blue">{s.tag}</Tag>}
+                <span className="font-headline text-3xl font-semibold text-primary">
+                  {s.label === 'Acceptance Rate' ? averageAcceptancePoints ?? 'N/A' : s.value}
+                </span>
+                {s.label === 'Acceptance Rate' ? <Tag tone="blue">DIM / 700</Tag> : s.tag && <Tag tone="blue">{s.tag}</Tag>}
               </div>
-              {s.note && <p className="mt-1 text-xs text-on-surface-variant">{s.note}</p>}
+              <p className="mt-1 text-xs text-on-surface-variant">
+                {s.label === 'Acceptance Rate' ? 'Illustrative average of latest major scores; not an official cutoff.' : s.note}
+              </p>
             </div>
           ))}
         </div>
@@ -265,11 +315,10 @@ export default function CollegeHubPage() {
                 <SectionHeader title={`About ${college.name}`} icon="info" />
                 <p className="leading-relaxed text-on-surface-variant">{college.description}</p>
               </section>
-              <MentorsSection college={college} limit={4} />
+              {college.majors.length > 0 && <PopularMajorsSection college={college} />}
               <DiscussionsSection college={college} />
             </>
           )}
-          {tab === 'mentors' && <MentorsSection college={college} />}
           {tab === 'qa' && <DiscussionsSection college={college} />}
           {tab === 'insights' && (
             <section className="card p-6">
@@ -291,7 +340,7 @@ export default function CollegeHubPage() {
         </div>
         <aside>
           <div className="space-y-4">
-            <Sidebar college={college} />
+            <Sidebar college={college} onViewInsights={() => setTab('insights')} />
           </div>
         </aside>
       </div>

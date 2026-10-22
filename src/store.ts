@@ -14,6 +14,7 @@ interface AppState {
   tickets: Ticket[];
   savedColleges: string[];
   signedIn: boolean;
+  authChecked: boolean;
   advisorOpen: boolean;
   authOpen: boolean;
   toast: Toast | null;
@@ -21,7 +22,7 @@ interface AppState {
   vote: (postId: string, direction: 1 | -1) => void;
   toggleBookmark: (postId: string) => void;
   addComment: (postId: string, text: string) => void;
-  publish: (input: { title: string; body: string; forum: string; anonymous: boolean; image?: Post['image'] }) => void;
+  publish: (input: { title: string; body: string; forum: string; anonymous: boolean; image?: Post['image']; universityId?: string }) => void;
 
   markRead: (ticketId: string) => void;
   reply: (ticketId: string, text: string) => void;
@@ -55,6 +56,7 @@ export const useApp = create<AppState>((set) => ({
   tickets: initialTickets,
   savedColleges: [],
   signedIn: false,
+  authChecked: false,
   advisorOpen: false,
   authOpen: false,
   toast: null,
@@ -82,7 +84,7 @@ export const useApp = create<AppState>((set) => ({
       })),
     })),
 
-  publish: ({ title, body, forum, anonymous, image }) =>
+  publish: ({ title, body, forum, anonymous, image, universityId }) =>
     set((s) => ({
       posts: [
         {
@@ -93,6 +95,7 @@ export const useApp = create<AppState>((set) => ({
           body,
           ...(image ? { image } : {}),
           channelId: channelForForum(forum),
+          ...(universityId ? { universityId } : {}),
           tabs: ['trending', 'latest'],
           votes: 0,
           likes: 0,
@@ -128,7 +131,7 @@ export const useApp = create<AppState>((set) => ({
         : [...s.savedColleges, collegeId],
     })),
 
-  setSignedIn: (signedIn) => set({ signedIn }),
+  setSignedIn: (signedIn) => set({ signedIn, authChecked: true }),
   setAdvisorOpen: (advisorOpen) => set({ advisorOpen }),
   setAuthOpen: (authOpen) => set({ authOpen }),
 

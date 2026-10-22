@@ -43,22 +43,39 @@ export function MentorCard({ mentor }: { mentor: Mentor }) {
 }
 
 export function DiscussionCard({ discussion: d }: { discussion: Discussion }) {
-  const [voted, setVoted] = useState(false);
+  const [vote, setVote] = useState<-1 | 0 | 1>(0);
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="flex gap-4 border-b border-outline-variant/50 py-5 last:border-0">
-      <button
-        type="button"
-        onClick={() => setVoted((v) => !v)}
-        className={cx(
-          'flex h-fit w-14 shrink-0 flex-col items-center rounded-lg py-2 text-xs',
-          voted ? 'bg-secondary-fixed text-secondary' : 'bg-surface-container-low text-on-surface-variant',
-        )}
-      >
-        <Icon name="thumb_up" fill={voted} />
-        <span className="mt-1 text-base font-bold text-on-surface">{d.votes + (voted ? 1 : 0)}</span>
-        votes
-      </button>
+      <div className="flex h-fit w-14 shrink-0 flex-col items-center gap-1">
+        <button
+          type="button"
+          aria-label="Like discussion"
+          aria-pressed={vote === 1}
+          onClick={() => setVote((current) => current === 1 ? 0 : 1)}
+          className={cx(
+            'flex w-full flex-col items-center rounded-lg py-2 text-xs',
+            vote === 1 ? 'bg-secondary-fixed text-secondary' : 'bg-surface-container-low text-on-surface-variant',
+          )}
+        >
+          <Icon name="thumb_up" fill={vote === 1} />
+          <span className="mt-1 text-base font-bold text-on-surface">{d.votes + (vote === 1 ? 1 : 0)}</span>
+          votes
+        </button>
+        <button
+          type="button"
+          aria-label="Dislike discussion"
+          aria-pressed={vote === -1}
+          onClick={() => setVote((current) => current === -1 ? 0 : -1)}
+          className={cx(
+            'flex w-full items-center justify-center rounded-lg py-2',
+            vote === -1 ? 'bg-error-container text-error' : 'bg-surface-container-low text-on-surface-variant',
+          )}
+        >
+          <Icon name="thumb_down" fill={vote === -1} />
+          <span className="mt-1 text-xs font-bold text-on-surface">{d.dislikes + (vote === -1 ? 1 : 0)}</span>
+        </button>
+      </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-on-surface-variant">
           {d.tags.map((t) => (

@@ -10,22 +10,31 @@ export default function SearchPage() {
   const query = (params.get('q') ?? '').trim();
   const q = query.toLowerCase();
   const posts = useApp((s) => s.posts);
+  const university = colleges.find((college) => college.id === params.get('university'));
 
   const matches = (text: string) => !q || text.toLowerCase().includes(q);
-  const postHits = posts.filter((p) => matches(`${p.title ?? ''} ${p.body} ${p.author.name}`));
+  const postHits = posts.filter((post) =>
+    university
+      ? post.universityId === university.id
+      : matches(`${post.title ?? ''} ${post.body} ${post.author.name}`),
+  );
   const collegeHits = colleges.filter((c) => matches(`${c.name} ${c.shortName} ${c.location}`));
   const majorHits = colleges.flatMap((c) => c.majors.filter((m) => matches(`${m.name} ${m.school} ${m.summary}`)).map((m) => ({ college: c, major: m })));
   const mentorHits = colleges.flatMap((c) => c.mentors.filter((m) => matches(`${m.name} ${m.program} ${m.tags.join(' ')}`)));
-  const total = postHits.length + collegeHits.length + majorHits.length + mentorHits.length;
+  const total = university ? postHits.length : postHits.length + collegeHits.length + majorHits.length + mentorHits.length;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
-        <h1 className="font-headline text-3xl font-semibold text-primary">{query ? `Results for “${query}”` : 'Search'}</h1>
-        <p className="mt-1 text-sm text-on-surface-variant">{total} matches across colleges, majors, mentors, and dispatches.</p>
+        <h1 className="font-headline text-3xl font-semibold text-primary">
+          {university ? `Posts about ${university.shortName}` : query ? `Results for “${query}”` : 'Search'}
+        </h1>
+        <p className="mt-1 text-sm text-on-surface-variant">
+          {university ? `${total} posts tagged with ${university.name}.` : `${total} matches across colleges, majors, mentors, and dispatches.`}
+        </p>
       </div>
 
-      {collegeHits.length + majorHits.length + mentorHits.length > 0 && (
+      {!university && collegeHits.length + majorHits.length + mentorHits.length > 0 && (
         <div className="card divide-y divide-outline-variant/40">
           {collegeHits.map((c) => (
             <Link key={c.id} to={`/colleges/${c.id}`} className="flex items-center gap-3 p-4 hover:bg-surface-container-low">
@@ -60,7 +69,11 @@ export default function SearchPage() {
       {postHits.map((p) => (
         <PostCard key={p.id} post={p} />
       ))}
-      {total === 0 && <div className="card p-10 text-center text-on-surface-variant">Nothing matched your search. Try a university, major, or course number.</div>}
+      {total === 0 && (
+        <div className="card p-10 text-center text-on-surface-variant">
+          {university ? `No posts have been shared about ${university.name} yet.` : 'Nothing matched your search. Try a university, major, or course number.'}
+        </div>
+      )}
     </div>
   );
 }

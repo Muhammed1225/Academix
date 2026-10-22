@@ -29,8 +29,8 @@ export default function App() {
   useEffect(() => {
     let active = true;
     fetch('/api/auth/session', { credentials: 'same-origin' })
-      .then((response) => response.ok ? response.json() as Promise<{ authenticated: boolean }> : null)
-      .then((session) => { if (active && session) setSignedIn(session.authenticated); })
+      .then((response) => response.ok ? response.json() as Promise<{ authenticated: boolean }> : { authenticated: false })
+      .then((session) => { if (active) setSignedIn(session.authenticated); })
       .catch(() => { if (active) setSignedIn(false); });
     return () => { active = false; };
   }, [setSignedIn]);

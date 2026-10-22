@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 
-import { currentUser } from '../data/mock';
+import { colleges, currentUser } from '../data/mock';
 import type { Post } from '../data/types';
 import { useApp } from '../store';
 import RichText from './RichText';
@@ -45,6 +45,7 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
   const showToast = useApp((s) => s.showToast);
   const [threadOpen, setThreadOpen] = useState(false);
   const [draft, setDraft] = useState('');
+  const university = colleges.find((college) => college.id === post.universityId);
 
   if (post.auditNote) return <FlaggedClaim post={post} />;
 
@@ -84,6 +85,12 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
           authorHeader
         )}
         {post.title && <h3 className="mt-4 font-headline text-xl font-semibold leading-snug text-primary">{post.title}</h3>}
+        {university && (
+          <Link to={`/colleges/${university.id}`} className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-secondary-fixed px-3 py-1 text-xs font-semibold text-on-secondary-fixed hover:underline">
+            <Icon name="account_balance" className="!text-[15px]" />
+            About {university.name}
+          </Link>
+        )}
         <RichText text={post.body} className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-on-surface-variant" />
 
         {post.image && (
