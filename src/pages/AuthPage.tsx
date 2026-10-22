@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useApp } from '../store';
 import { BrandMark, Icon, cx } from '../components/ui';
+import SearchableSelect from '../components/SearchableSelect';
+import { majors, universities } from '../data/educationOptions';
 
 type Role = 'scholar' | 'prospective' | 'faculty';
 type Method = 'identity_document' | 'edu_email';
@@ -13,8 +15,6 @@ const roles: { id: Role; label: string; icon: string }[] = [
   { id: 'prospective', label: 'Prospective', icon: 'person_search' },
   { id: 'faculty', label: 'Faculty Representative', icon: 'account_balance' },
 ];
-const universities = ['Carnegie Mellon University', 'Massachusetts Institute of Technology', 'Stanford University', 'University of California, Berkeley', 'Cornell University', 'Georgia Institute of Technology'];
-const majors = ['Computer Science', 'Artificial Intelligence', 'Electrical & Computer Engineering', 'Information Systems', 'Business Administration', 'Mathematics', 'Physics', 'Other'];
 const requirements = [
   { label: 'At least 12 characters', test: (value: string) => value.length >= 12 },
   { label: 'At least one letter', test: (value: string) => /[A-Za-z]/.test(value) },
@@ -29,14 +29,12 @@ const readFile = (file: File) => new Promise<string>((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
-function SelectField({ label, value, onChange, options, optional = false, error }: { label: string; value: string; onChange: (value: string) => void; options: string[]; optional?: boolean; error?: string }) {
-  return <label className="block min-w-0 text-sm font-semibold">{label}{optional && <span className="font-normal text-on-surface-variant"> (optional)</span>}<select value={value} onChange={(e) => onChange(e.target.value)} className="input mt-2 !bg-surface-container-low/40 !py-[9px]" aria-invalid={Boolean(error)}><option value="">Select {label.toLowerCase()}{optional ? ' (optional)' : ''}</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select>{error && <span className="mt-1 block text-xs font-medium text-error">{error}</span>}</label>;
-}
-
 export default function AuthPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [mode, setModeValue] = useState<'login' | 'register'>(params.get('mode') === 'create' ? 'register' : 'login');
+  const [forgotPassword, setForgotPassword] = useState(false);
+  const [resetConfirmation, setResetConfirmation] = useState('');
   const [role, setRole] = useState<Role>('scholar');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -59,6 +57,26 @@ export default function AuthPage() {
   const verificationTitle = role === 'faculty' ? 'Faculty / Work ID' : 'Student card';
 
   const switchMode = (next: 'login' | 'register') => setModeValue(next);
+
+  const sendPasswordResetCode = (emailAddress: string) => {
+    // TODO: Connect this UI to the password-reset API when it is available.
+    setResetConfirmation(`We've sent a code to ${emailAddress}.`);
+  };
+
+  const submitPasswordReset = (event: FormEvent) => {
+    event.preventDefault();
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      setErrors({ email: 'Enter your email address.' });
+      return;
+    }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalizedEmail)) {
+      setErrors({ email: 'Enter a valid email address.' });
+      return;
+    }
+    setErrors({});
+    sendPasswordResetCode(normalizedEmail);
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -93,7 +111,12 @@ export default function AuthPage() {
       const result = await response.json() as { error?: string; verificationStatus?: 'pending' | 'unverified' };
       if (!response.ok) { setErrors({ form: result.error ?? 'Unable to complete your request. Please try again.' }); return; }
       setPassword(''); setConfirm(''); setSignedIn(true);
-      showToast(registration ? result.verificationStatus === 'pending' ? 'Account created; verification review is pending' : 'Account created; welcome to Academix' : 'Signed in successfully');
+      if (registration) {
+        showToast(result.verificationStatus === 'pending' ? 'Account created; verification review is pending' : 'Account created; welcome to Academix');
+        navigate('/onboarding', { replace: true, state: { name: name.trim() } });
+        return;
+      }
+      showToast('Signed in successfully');
       navigate('/', { replace: true });
     } catch {
       setErrors({ form: 'Unable to reach the authentication service. Please try again.' });
@@ -114,6 +137,18 @@ export default function AuthPage() {
     <main className={cx('mx-auto mt-6 max-w-[1440px]', registration ? 'max-w-[720px]' : 'grid min-h-[calc(100vh-112px)] overflow-hidden rounded-3xl bg-white shadow-header lg:grid-cols-[1.12fr_0.88fr]')}>
       {!registration && <div className="relative hidden min-h-[700px] overflow-hidden bg-surface-container-high lg:block"><img src="/images/graduates.png" alt="Graduates celebrating together" className="absolute inset-0 h-full w-full object-cover"/><div className="absolute inset-0 bg-gradient-to-t from-primary/80 via-primary/10 to-transparent"/><div className="absolute bottom-12 left-12 right-12 text-white"><p className="eyebrow !text-white/80">Your next chapter starts here</p><h1 className="mt-3 max-w-xl font-headline text-4xl font-semibold leading-tight">Find your people. Shape what comes next.</h1><p className="mt-3 max-w-lg text-white/85">Connect with students, mentors, and the universities that move you forward.</p></div></div>}
       <section className={cx('rounded-3xl bg-white p-5 shadow-header sm:p-9 lg:rounded-none lg:shadow-none', registration && 'mx-auto max-w-[720px]')}>
+        {forgotPassword ? <>
+          <p className="eyebrow text-secondary">Account recovery</p>
+          <h1 className="mt-2 font-headline text-3xl font-semibold text-primary">Forgot password</h1>
+          <p className="mt-2 text-sm text-on-surface-variant">Enter the email address associated with your account.</p>
+          {resetConfirmation ? <div role="status" className="mt-7 rounded-xl bg-mint p-4 text-sm font-semibold text-on-tertiary-fixed-variant">
+            <p>{resetConfirmation}</p>
+          </div> : <form onSubmit={submitPasswordReset} noValidate className="mt-7 space-y-5">
+            <label className="block text-sm font-semibold">Email address<input value={email} onChange={(event) => { setEmail(event.target.value); setErrors({}); }} type="email" autoComplete="email" placeholder="you@example.com" className="input mt-1.5" aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'reset-email-error' : undefined}/>{errors.email && <span id="reset-email-error" role="alert" className="mt-1 block text-xs font-medium text-error">{errors.email}</span>}</label>
+            <button type="submit" className="btn-primary h-12 w-full">Send code</button>
+          </form>}
+          <button type="button" onClick={() => { setForgotPassword(false); setErrors({}); setResetConfirmation(''); }} className="mt-6 text-sm font-semibold text-secondary">Back to log in</button>
+        </> : <>
         <p className="eyebrow text-secondary">{registration ? 'Join the academic network' : 'Welcome back'}</p>
         <h1 className="mt-2 font-headline text-3xl font-semibold text-primary">{registration ? 'Create your account' : 'Log in to Academix'}</h1>
         <p className="mt-2 text-sm text-on-surface-variant">{registration ? 'Choose how you’ll take part in the community.' : 'Continue your academic journey with your community.'}</p>
@@ -124,9 +159,9 @@ export default function AuthPage() {
             <label className="block text-sm font-semibold">Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" className="input mt-2 !bg-surface-container-low/40 !py-[9px]" aria-invalid={Boolean(errors.email)}/>{errors.email && <span className="mt-1 block text-xs text-error">{errors.email}</span>}</label>
             {passwordInput('password')}
             {passwordInput('confirm')}
-            {role === 'prospective' ? <div className="grid gap-5 sm:grid-cols-2"><SelectField label="Dream University" value={university} onChange={setUniversity} options={universities} optional/><SelectField label="Dream Major" value={major} onChange={setMajor} options={majors} optional/></div> : <div className={cx('grid gap-5', role === 'scholar' ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
-              <SelectField label="University" value={university} onChange={setUniversity} options={universities} error={errors.university}/>
-              <SelectField label={role === 'faculty' ? 'Major / Subject taught' : 'Major'} value={major} onChange={setMajor} options={majors} error={errors.major}/>
+            {role === 'prospective' ? <div className="grid gap-5 sm:grid-cols-2"><SearchableSelect label="Dream University" value={university} onChange={setUniversity} options={universities} optional/><SearchableSelect label="Dream Major" value={major} onChange={setMajor} options={majors} optional/></div> : <div className={cx('grid gap-5', role === 'scholar' ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
+              <SearchableSelect label="University" value={university} onChange={setUniversity} options={universities} error={errors.university}/>
+              <SearchableSelect label={role === 'faculty' ? 'Major / Subject taught' : 'Major'} value={major} onChange={setMajor} options={majors} error={errors.major}/>
               {role === 'scholar' && <label className="block text-sm font-semibold">Graduation year<select value={graduationYear} onChange={(e) => setGraduationYear(e.target.value)} className="input mt-2 !bg-surface-container-low/40 !py-[9px]" aria-invalid={Boolean(errors.graduationYear)}><option value="">Select graduation year</option>{Array.from({ length: 12 }, (_, index) => String(new Date().getFullYear() + index - 4)).map((year) => <option key={year}>{year}</option>)}</select>{errors.graduationYear && <span className="mt-1 block text-xs text-error">{errors.graduationYear}</span>}</label>}
             </div>}
             {role !== 'prospective' && <div className="rounded-xl border border-outline-variant/70 bg-surface-container-low/60 p-3.5">
@@ -140,8 +175,9 @@ export default function AuthPage() {
           {!registration && <><label className="block text-sm font-semibold">Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" className="input mt-1.5" aria-invalid={Boolean(errors.email)}/>{errors.email && <span className="mt-1 block text-xs text-error">{errors.email}</span>}</label>{passwordInput('password')}</>}
           {errors.form && <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-sm text-on-error-container">{errors.form}</p>}
           <button type="submit" disabled={busy} className={cx('btn-primary h-12 w-full', registration && 'mt-1')}>{busy ? 'Please wait…' : registration ? 'Create account' : 'Log in'}</button>
-          <div className="flex items-center justify-between gap-4 text-sm">{registration ? <span/> : <button type="button" onClick={() => showToast('Password reset is not connected yet', 'info')} className="font-semibold text-secondary">Forgot password?</button>}<button type="button" onClick={() => { switchMode(registration ? 'login' : 'register'); setErrors({}); }} className="ml-auto font-semibold text-secondary">{registration ? 'Sign in' : 'Create account'}</button></div>
+          <div className="flex items-center justify-between gap-4 text-sm">{registration ? <span/> : <button type="button" onClick={() => { setForgotPassword(true); setErrors({}); setResetConfirmation(''); }} className="font-semibold text-secondary">Forgot your password?</button>}<button type="button" onClick={() => { switchMode(registration ? 'login' : 'register'); setErrors({}); }} className="ml-auto font-semibold text-secondary">{registration ? 'Sign in' : 'Create account'}</button></div>
         </form>
+        </>}
       </section>
     </main>
   </div>;

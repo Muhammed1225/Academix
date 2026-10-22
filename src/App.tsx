@@ -13,6 +13,8 @@ import MentorProfilePage from './pages/MentorProfilePage';
 import PersonProfilePage from './pages/PersonProfilePage';
 import SearchPage from './pages/SearchPage';
 import AuthPage from './pages/AuthPage';
+import OnboardingPage from './pages/OnboardingPage';
+import OwnProfilePage from './pages/OwnProfilePage';
 import { useApp } from './store';
 
 function ScrollToTop() {
@@ -40,6 +42,7 @@ export default function App() {
       <ScrollToTop />
       <Routes>
         <Route path="auth" element={<AuthPage />} />
+        <Route path="onboarding" element={<OnboardingPage />} />
         <Route element={<Layout />}>
           <Route index element={<FeedPage />} />
           <Route path="colleges" element={<CollegesPage />} />
@@ -49,6 +52,7 @@ export default function App() {
           <Route path="connections" element={<ConnectionsPage />} />
           <Route path="mentors/:mentorId" element={<MentorProfilePage />} />
           <Route path="people/:personId" element={<PersonProfilePage />} />
+          <Route path="profile" element={<OwnProfilePage />} />
           <Route path="inbox" element={<InboxPage />} />
           <Route path="inbox/:ticketId" element={<InboxPage />} />
           <Route path="compose" element={<ComposePage />} />

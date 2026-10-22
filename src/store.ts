@@ -9,12 +9,21 @@ interface Toast {
   icon: string;
 }
 
+export interface OnboardingProfile {
+  name: string;
+  photo: string;
+  biography: string;
+  interests: string[];
+  purpose: string;
+}
+
 interface AppState {
   posts: Post[];
   tickets: Ticket[];
   savedColleges: string[];
   signedIn: boolean;
   authChecked: boolean;
+  onboardingProfile: OnboardingProfile | null;
   advisorOpen: boolean;
   authOpen: boolean;
   toast: Toast | null;
@@ -30,6 +39,7 @@ interface AppState {
 
   toggleSavedCollege: (collegeId: string) => void;
   setSignedIn: (value: boolean) => void;
+  setOnboardingProfile: (profile: OnboardingProfile) => void;
   setAdvisorOpen: (value: boolean) => void;
   setAuthOpen: (value: boolean) => void;
   showToast: (message: string, icon?: string) => void;
@@ -57,6 +67,7 @@ export const useApp = create<AppState>((set) => ({
   savedColleges: [],
   signedIn: false,
   authChecked: false,
+  onboardingProfile: null,
   advisorOpen: false,
   authOpen: false,
   toast: null,
@@ -132,6 +143,7 @@ export const useApp = create<AppState>((set) => ({
     })),
 
   setSignedIn: (signedIn) => set({ signedIn, authChecked: true }),
+  setOnboardingProfile: (onboardingProfile) => set({ onboardingProfile }),
   setAdvisorOpen: (advisorOpen) => set({ advisorOpen }),
   setAuthOpen: (authOpen) => set({ authOpen }),
 
