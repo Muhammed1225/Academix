@@ -72,16 +72,7 @@ function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-<<<<<<< HEAD
-          {signedIn && <Link
-            to="/people/fuad-test"
-            aria-label="My profile"
-            title="My profile"
-            className="rounded-full ring-2 ring-transparent transition hover:ring-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
-          >
-            <Avatar src={people.fuadTest.avatar} name={people.fuadTest.name} size={44} rounded="rounded-full" />
-          </Link>}
-=======
+          {signedIn && (
           <div className="relative">
             <button
               type="button"
@@ -131,7 +122,7 @@ function Header() {
               </div>
             )}
           </div>
->>>>>>> 676b9de3b62c332f61f41de3c1b6ce52cabf3a94
+          )}
           <button
             type="button"
             className="relative rounded-full p-2 text-on-surface-variant hover:bg-surface-container-low"
@@ -141,44 +132,8 @@ function Header() {
             <Icon name="notifications" />
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-error" />
           </button>
-<<<<<<< HEAD
-          {signedIn && (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setMenuOpen((value) => !value)}
-                aria-label="Account options"
-                aria-expanded={menuOpen}
-                className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-low"
-              >
-                <Icon name="more_vert" />
-              </button>
-              {menuOpen && (
-                <div className="animate-slide-up absolute right-0 top-12 w-36 overflow-hidden rounded-xl border border-outline-variant/60 bg-white py-1 shadow-float">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
-                      setSignedIn(false);
-                      setMenuOpen(false);
-                      showToast('Signed out', 'logout');
-                    }}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-surface-container-low"
-                  >
-                    <Icon name="logout" /> Sign out
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-          {!signedIn && (
-            <Link to="/auth" className="btn-primary">Sign up / Log in</Link>
-=======
           {!signedIn && authChecked && (
-            <button type="button" className="btn-primary" onClick={() => setAuthOpen(true)}>
-              Sign In / Join
-            </button>
->>>>>>> 676b9de3b62c332f61f41de3c1b6ce52cabf3a94
+            <Link to="/auth" className="btn-primary">Sign up / Log in</Link>
           )}
         </div>
       </div>
