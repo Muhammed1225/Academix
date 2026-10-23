@@ -220,13 +220,6 @@ export default function CollegeHubPage() {
   const about = college.shortName.toLocaleUpperCase('en') === 'BHOS'
     ? bhosInfo.replace(/\s+/g, ' ').trim()
     : college.description;
-  const universitySections = [
-    { id: 'majors', emoji: '🎓', label: 'Majors' },
-    { id: 'mentors', emoji: '🧑‍🏫', label: 'Mentors' },
-    { id: 'news', emoji: '📰', label: 'News' },
-    { id: 'gallery', emoji: '📸', label: 'Gallery' },
-  ];
-
   return (
     <div className="space-y-6">
       <section className="card overflow-hidden">
@@ -277,20 +270,6 @@ export default function CollegeHubPage() {
         <SectionHeader title={`About ${college.name}`} icon="info" />
         <p className="leading-relaxed text-on-surface-variant">{about}</p>
       </section>
-
-      {tab === 'overview' && (
-        <nav aria-label={`${college.shortName} sections`} className="card flex items-center gap-2 overflow-x-auto p-3">
-          {universitySections.map((section, index) => (
-            <div key={section.id} className="flex shrink-0 items-center gap-2">
-              <a href={`#${section.id}`} className="flex items-center gap-2 rounded-xl border border-outline-variant/50 px-4 py-3 text-sm font-semibold text-primary transition hover:border-secondary/50 hover:bg-surface-container-low">
-                <span aria-hidden="true" className="text-xl">{section.emoji}</span>
-                {section.label}
-              </a>
-              {index < universitySections.length - 1 && <Icon name="arrow_forward" className="text-outline" />}
-            </div>
-          ))}
-        </nav>
-      )}
 
       <nav className="card sticky top-[72px] z-30 flex gap-1 overflow-x-auto p-1.5">
         {tabs.map((t) =>

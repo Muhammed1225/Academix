@@ -20,10 +20,20 @@ export function Icon({ name, className, fill, size }: { name: string; className?
 }
 
 export function BrandMark({ className, size = 'text-2xl' }: { className?: string; size?: string }) {
+  const compact = size === 'text-xl';
+  const logoSize = compact ? 'h-12 w-12' : 'h-[60px] w-[60px]';
+  const imageSize = compact ? 'h-[78px] w-[78px]' : 'h-[99px] w-[99px]';
   return (
     <span className={cx('inline-flex items-center gap-1.5 font-headline font-bold tracking-tight text-primary', size, className)}>
+      <span className={cx('relative inline-flex shrink-0 items-center justify-center overflow-hidden', logoSize)}>
+        <img
+          src="/images/academix-logo.png"
+          alt=""
+          aria-hidden="true"
+          className={cx('absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 object-contain', imageSize)}
+        />
+      </span>
       {BRAND}
-      <Icon name="verified" className="!text-[0.85em] text-secondary" />
     </span>
   );
 }

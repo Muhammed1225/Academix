@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Avatar, Icon, Modal, cx } from '../components/ui';
 import { sanitizeRichText } from '../components/RichText';
-import { colleges, composerForums, currentUser } from '../data/mock';
+import { colleges, composerForums } from '../data/mock';
 import { useApp } from '../store';
 
 const MAX = 4000;
@@ -83,6 +83,7 @@ export default function ComposePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const publish = useApp((s) => s.publish);
+  const user = useApp((s) => s.user);
   const showToast = useApp((s) => s.showToast);
   const bodyRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -293,7 +294,7 @@ export default function ComposePage() {
     }
   };
 
-  const authorName = anonymous ? 'Anonymous Scholar' : currentUser.name;
+  const authorName = anonymous ? 'Anonymous Scholar' : user?.name ?? 'Sign in to post';
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -316,7 +317,7 @@ export default function ComposePage() {
       <div className="grid gap-6">
         <section className="card space-y-5 p-6">
           <div className="flex flex-wrap items-center gap-3">
-            <Avatar src={anonymous ? undefined : currentUser.avatar} name={anonymous ? '?' : currentUser.name} size={44} />
+            <Avatar src={anonymous ? undefined : user?.photo || undefined} name={anonymous ? '?' : authorName} size={44} />
             <div className="min-w-0 flex-1">
               <div className="font-semibold">{authorName}</div>
               <div className="flex items-center gap-1 text-xs text-on-surface-variant">

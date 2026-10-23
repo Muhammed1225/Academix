@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 import PostCard from '../components/PostCard';
 import { Avatar, MetricTile, Tag, cx } from '../components/ui';
-import { amas, channels, people } from '../data/mock';
+import { amas, channels } from '../data/mock';
 import type { Ama } from '../data/types';
 import { useApp } from '../store';
 
@@ -15,25 +15,36 @@ const protocol = [
 ];
 
 function ProfileSummary() {
-  const person = people.fuadTest;
+  const user = useApp((s) => s.user);
+
+  if (!user) return (
+    <div className="card p-4">
+      <p className="font-semibold text-primary">Your Academix profile</p>
+      <p className="mt-1 text-xs text-on-surface-variant">Sign in to view and complete your profile.</p>
+      <Link to="/auth" className="mt-3 inline-flex text-sm font-semibold text-secondary hover:underline">Sign up / Log in</Link>
+    </div>
+  );
+  const subtitle = user.university && user.major
+    ? `${user.major} • ${user.university}${user.graduationYear ? ` • Class of ${user.graduationYear}` : ''}`
+    : 'Academix community member';
 
   return (
     <div className="card overflow-hidden p-0">
       <div className="h-16 bg-gradient-to-r from-primary-container via-secondary-fixed to-primary/10" />
       <div className="px-4 pb-4">
         <Link
-          to="/people/fuad-test"
+          to="/profile"
           aria-label="View your profile"
           className="-mt-8 flex w-fit rounded-full ring-4 ring-white transition hover:opacity-90"
         >
-          <Avatar src={person.avatar} name={person.name} size={64} rounded="rounded-full" />
+          <Avatar src={user.photo || undefined} name={user.name} size={64} rounded="rounded-full" />
         </Link>
-        <Link to="/people/fuad-test" className="mt-2 block font-semibold text-primary hover:text-secondary hover:underline">
-          {person.name}
+        <Link to="/profile" className="mt-2 block font-semibold text-primary hover:text-secondary hover:underline">
+          {user.name}
         </Link>
-        <p className="mt-0.5 text-xs leading-relaxed text-on-surface-variant">{person.subtitle}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-on-surface-variant">{subtitle}</p>
         <div className="mt-3 border-t border-outline-variant/50 pt-3">
-          <Link to="/people/fuad-test" className="text-sm font-semibold text-secondary hover:underline">
+          <Link to="/profile" className="text-sm font-semibold text-secondary hover:underline">
             View your profile
           </Link>
         </div>

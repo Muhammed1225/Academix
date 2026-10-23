@@ -69,7 +69,6 @@ export default function PersonProfilePage() {
             <div className="mt-4">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="font-headline text-2xl font-semibold text-primary sm:text-3xl">{person.name}</h1>
-                {person.id === 'fuad-test' && <Tag tone="neutral">Test account</Tag>}
               </div>
               <p className="mt-1 text-sm text-on-surface-variant sm:text-base">{person.subtitle}</p>
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-on-surface-variant">
@@ -82,7 +81,6 @@ export default function PersonProfilePage() {
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <VerificationBadge verification={person.verification} label={person.badge} />
-                {person.id === 'fuad-test' && <Tag tone="green" icon="groups">Open to academic connections</Tag>}
               </div>
             </div>
             <div className="mt-5 flex items-center gap-2 border-t border-outline-variant/50 pt-4 text-sm text-on-surface-variant">
@@ -187,7 +185,7 @@ export default function PersonProfilePage() {
               <Icon name="verified_user" className="text-secondary" />
               <div>
                 <dt className="text-xs text-on-surface-variant">Account status</dt>
-                <dd className="mt-0.5 text-sm font-medium text-primary">{person.id === 'fuad-test' ? 'Fictional profile for testing' : person.badge ?? 'Academix member'}</dd>
+                <dd className="mt-0.5 text-sm font-medium text-primary">{person.badge ?? 'Academix member'}</dd>
               </div>
             </div>
           </dl>

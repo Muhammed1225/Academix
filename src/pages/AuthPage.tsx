@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
+import { authenticate } from '../authService';
 import { useApp } from '../store';
 import { BrandMark, Icon, cx } from '../components/ui';
 import SearchableSelect from '../components/SearchableSelect';
@@ -30,7 +31,7 @@ const readFile = (file: File) => new Promise<string>((resolve, reject) => {
 });
 
 export default function AuthPage() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [mode, setModeValue] = useState<'login' | 'register'>(params.get('mode') === 'create' ? 'register' : 'login');
   const [forgotPassword, setForgotPassword] = useState(false);
@@ -51,12 +52,15 @@ export default function AuthPage() {
   const [document, setDocument] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
-  const setSignedIn = useApp((s) => s.setSignedIn);
+  const setAuthenticatedUser = useApp((s) => s.setAuthenticatedUser);
   const showToast = useApp((s) => s.showToast);
   const registration = mode === 'register';
   const verificationTitle = role === 'faculty' ? 'Faculty / Work ID' : 'Student card';
 
-  const switchMode = (next: 'login' | 'register') => setModeValue(next);
+  const switchMode = (next: 'login' | 'register') => {
+    setModeValue(next);
+    setParams(next === 'register' ? { mode: 'create' } : { mode: 'login' }, { replace: true });
+  };
 
   const sendPasswordResetCode = (emailAddress: string) => {
     // TODO: Connect this UI to the password-reset API when it is available.
@@ -100,20 +104,17 @@ export default function AuthPage() {
     setBusy(true);
     try {
       const encoded = registration && requestGold && method === 'identity_document' && document ? await readFile(document) : undefined;
-      const response = await fetch(`/api/auth/${registration ? 'register' : 'login'}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-        body: JSON.stringify({ email: email.trim().toLowerCase(), password, ...(registration ? {
+      const result = await authenticate(registration ? 'register' : 'login', { email: email.trim().toLowerCase(), password, ...(registration ? {
           name: name.trim(), role, university, major, graduationYear: graduationYear || undefined, confirmPassword: confirm,
           requestGoldVerification: requestGold, ...(requestGold ? { verificationMethod: method, ...(method === 'edu_email' ? { eduEmail: eduEmail.trim().toLowerCase() } : {}) } : {}),
           ...(encoded && document ? { identityDocument: { type: role === 'faculty' ? 'work_card' : 'student_card', mimeType: document.type, base64: encoded } } : {}),
-        } : {}) }),
-      });
-      const result = await response.json() as { error?: string; verificationStatus?: 'pending' | 'unverified' };
-      if (!response.ok) { setErrors({ form: result.error ?? 'Unable to complete your request. Please try again.' }); return; }
-      setPassword(''); setConfirm(''); setSignedIn(true);
+        } : {}) });
+      if (!result.ok) { setErrors({ form: result.error ?? 'Unable to complete your request. Please try again.' }); return; }
+      if (!result.user) throw new Error('Authentication response did not include the account profile.');
+      setPassword(''); setConfirm(''); setAuthenticatedUser(result.user);
       if (registration) {
         showToast(result.verificationStatus === 'pending' ? 'Account created; verification review is pending' : 'Account created; welcome to Academix');
-        navigate('/onboarding', { replace: true, state: { name: name.trim() } });
+        navigate('/onboarding', { replace: true });
         return;
       }
       showToast('Signed in successfully');
@@ -175,7 +176,16 @@ export default function AuthPage() {
           {!registration && <><label className="block text-sm font-semibold">Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" className="input mt-1.5" aria-invalid={Boolean(errors.email)}/>{errors.email && <span className="mt-1 block text-xs text-error">{errors.email}</span>}</label>{passwordInput('password')}</>}
           {errors.form && <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-sm text-on-error-container">{errors.form}</p>}
           <button type="submit" disabled={busy} className={cx('btn-primary h-12 w-full', registration && 'mt-1')}>{busy ? 'Please wait…' : registration ? 'Create account' : 'Log in'}</button>
-          <div className="flex items-center justify-between gap-4 text-sm">{registration ? <span/> : <button type="button" onClick={() => { setForgotPassword(true); setErrors({}); setResetConfirmation(''); }} className="font-semibold text-secondary">Forgot your password?</button>}<button type="button" onClick={() => { switchMode(registration ? 'login' : 'register'); setErrors({}); }} className="ml-auto font-semibold text-secondary">{registration ? 'Sign in' : 'Create account'}</button></div>
+          <div className="flex items-center justify-between gap-4 text-sm">
+            {registration ? (
+              <button type="button" onClick={() => { switchMode('login'); setErrors({}); }} className="font-semibold text-secondary">I already have an account</button>
+            ) : (
+              <>
+                <button type="button" onClick={() => { setForgotPassword(true); setErrors({}); setResetConfirmation(''); }} className="font-semibold text-secondary">Forgot your password?</button>
+                <button type="button" onClick={() => { switchMode('register'); setErrors({}); }} className="font-semibold text-secondary">Create account</button>
+              </>
+            )}
+          </div>
         </form>
         </>}
       </section>

@@ -2,7 +2,6 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { Avatar, Icon, Tag, cx } from '../components/ui';
-import { currentUser } from '../data/mock';
 import type { Ticket } from '../data/types';
 import { useApp } from '../store';
 
@@ -10,6 +9,7 @@ function TicketThread({ ticket }: { ticket: Ticket }) {
   const reply = useApp((s) => s.reply);
   const toggleResolved = useApp((s) => s.toggleResolved);
   const showToast = useApp((s) => s.showToast);
+  const user = useApp((s) => s.user);
   const [draft, setDraft] = useState(ticket.suggestedReply ?? '');
 
   useEffect(() => {
@@ -52,7 +52,7 @@ function TicketThread({ ticket }: { ticket: Ticket }) {
       <div className="flex-1 space-y-4 overflow-y-auto bg-surface p-5">
         {ticket.messages.map((m, i) => (
           <div key={i} className={cx('flex gap-3', m.isMe && 'flex-row-reverse')}>
-            <Avatar src={m.isMe ? currentUser.avatar : undefined} name={m.author} size={36} rounded="rounded-full" />
+            <Avatar src={m.isMe ? user?.photo || undefined : undefined} name={m.author} size={36} rounded="rounded-full" />
             <div className={cx('max-w-[80%] rounded-2xl p-4', m.isMe ? 'rounded-tr-md bg-secondary-fixed' : 'rounded-tl-md border border-outline-variant/50 bg-white')}>
               <div className="flex items-center gap-2 text-sm">
                 <span className="font-semibold">{m.author}</span>
@@ -67,7 +67,7 @@ function TicketThread({ ticket }: { ticket: Ticket }) {
       {!ticket.resolved && (
         <form onSubmit={send} className="border-t border-outline-variant/50 p-4">
           {ticket.suggestedReply && draft === ticket.suggestedReply && (
-            <p className="mb-2 text-xs font-semibold text-on-surface-variant">Maya Patel (You) • Drafted 2m ago</p>
+            <p className="mb-2 text-xs font-semibold text-on-surface-variant">{user?.name ?? 'You'} • Drafted 2m ago</p>
           )}
           <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={3} placeholder="Write your critique..." className="input resize-none" />
           <div className="mt-2 flex items-center gap-1">

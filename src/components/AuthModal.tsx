@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 
+import { authenticate } from '../authService';
 import { useApp } from '../store';
 import { BrandMark, Icon, Modal, cx } from './ui';
 
@@ -32,7 +33,7 @@ const readFileAsBase64 = (file: File) =>
 export default function AuthModal() {
   const open = useApp((s) => s.authOpen);
   const setOpen = useApp((s) => s.setAuthOpen);
-  const setSignedIn = useApp((s) => s.setSignedIn);
+  const setAuthenticatedUser = useApp((s) => s.setAuthenticatedUser);
   const showToast = useApp((s) => s.showToast);
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [role, setRole] = useState<Role>('scholar');
@@ -98,11 +99,7 @@ export default function AuthModal() {
       const documentBase64 = mode === 'register' && requestGoldVerification && verificationMethod === 'identity_document' && identityDocument
         ? await readFileAsBase64(identityDocument)
         : undefined;
-      const response = await fetch(`/api/auth/${mode}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({
+      const result = await authenticate(mode, {
           email: email.trim().toLowerCase(),
           password,
           ...(mode === 'register'
@@ -122,15 +119,14 @@ export default function AuthModal() {
                   : {}),
               }
             : {}),
-        }),
-      });
-      const result = await response.json() as { error?: string; verificationStatus?: 'pending' | 'unverified' };
-      if (!response.ok) {
+        });
+      if (!result.ok) {
         setErrors({ form: result.error ?? 'Unable to sign in. Please try again.' });
         return;
       }
+      if (!result.user) throw new Error('Authentication response did not include the account profile.');
       setPassword('');
-      setSignedIn(true);
+      setAuthenticatedUser(result.user);
       close();
       showToast(
         mode === 'login'

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 
-import { colleges, currentUser } from '../data/mock';
+import { colleges } from '../data/mock';
 import type { Post } from '../data/types';
 import { useApp } from '../store';
 import RichText from './RichText';
@@ -43,6 +43,7 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
   const toggleBookmark = useApp((s) => s.toggleBookmark);
   const addComment = useApp((s) => s.addComment);
   const showToast = useApp((s) => s.showToast);
+  const user = useApp((s) => s.user);
   const [threadOpen, setThreadOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const university = colleges.find((college) => college.id === post.universityId);
@@ -77,7 +78,11 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
   return (
     <article className="card overflow-hidden">
       <div className="px-5 pt-5">
-        {post.author.id === 'maya' ? (
+        {user?.id === post.author.id ? (
+          <Link to="/profile" className="block rounded-lg hover:opacity-90">
+            {authorHeader}
+          </Link>
+        ) : post.author.id === 'maya' ? (
           <Link to="/mentors/maya" className="block rounded-lg hover:opacity-90">
             {authorHeader}
           </Link>
@@ -189,12 +194,12 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
         <div className="space-y-4 bg-surface-container-low/60 px-5 py-4">
           {visibleComments.map((c, i) => (
             <div key={i} className="flex gap-3">
-              <Link to={`/people/${c.author.id}`} className="shrink-0 rounded-lg hover:opacity-80" aria-label={`View ${c.author.name}'s profile`}>
+              <Link to={c.author.id === user?.id ? '/profile' : `/people/${c.author.id}`} className="shrink-0 rounded-lg hover:opacity-80" aria-label={`View ${c.author.name}'s profile`}>
                 <Avatar src={c.author.avatar} name={c.author.name} size={32} rounded="rounded-lg" />
               </Link>
               <div className="min-w-0 flex-1 text-sm">
                 <div>
-                  <Link to={`/people/${c.author.id}`} className="font-semibold text-on-surface hover:text-secondary hover:underline">
+                  <Link to={c.author.id === user?.id ? '/profile' : `/people/${c.author.id}`} className="font-semibold text-on-surface hover:text-secondary hover:underline">
                     {c.author.name}
                   </Link>{' '}
                   <span className="text-xs text-on-surface-variant">
@@ -212,7 +217,7 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
           )}
           {threadOpen && (
             <form onSubmit={submitComment} className="flex items-center gap-2">
-              <Avatar src={currentUser.avatar} name={currentUser.name} size={32} rounded="rounded-lg" />
+              <Avatar src={user?.photo || undefined} name={user?.name ?? 'You'} size={32} rounded="rounded-lg" />
               <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add a verified response..." className="input !bg-white" />
               <button type="submit" className="btn-primary !h-9">
                 Post

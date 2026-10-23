@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { currentUser, people, posts as initialPosts, tickets as initialTickets } from './data/mock';
+import { people, posts as initialPosts, tickets as initialTickets } from './data/mock';
 import type { Post, Ticket } from './data/types';
 
 interface Toast {
@@ -17,13 +17,24 @@ export interface OnboardingProfile {
   purpose: string;
 }
 
+export interface AuthenticatedUser extends OnboardingProfile {
+  id: string;
+  email: string;
+  role: 'scholar' | 'prospective' | 'faculty';
+  location?: string;
+  university?: string;
+  major?: string;
+  graduationYear?: number;
+  verificationStatus: 'pending' | 'unverified' | 'verified';
+}
+
 interface AppState {
   posts: Post[];
   tickets: Ticket[];
   savedColleges: string[];
   signedIn: boolean;
   authChecked: boolean;
-  onboardingProfile: OnboardingProfile | null;
+  user: AuthenticatedUser | null;
   advisorOpen: boolean;
   authOpen: boolean;
   toast: Toast | null;
@@ -39,7 +50,7 @@ interface AppState {
 
   toggleSavedCollege: (collegeId: string) => void;
   setSignedIn: (value: boolean) => void;
-  setOnboardingProfile: (profile: OnboardingProfile) => void;
+  setAuthenticatedUser: (user: AuthenticatedUser) => void;
   setAdvisorOpen: (value: boolean) => void;
   setAuthOpen: (value: boolean) => void;
   showToast: (message: string, icon?: string) => void;
@@ -58,8 +69,7 @@ const channelForForum = (forum: string) =>
 let toastId = 0;
 
 /**
- * Uygulama state'i. Veriler şimdilik `data/mock.ts`'ten gelir; backend bağlandığında
- * yalnızca başlangıç verisi ve aksiyonların içi değişir, bileşenler aynı kalır.
+ * Community content is seeded locally; authenticated account data comes from the API.
  */
 export const useApp = create<AppState>((set) => ({
   posts: initialPosts,
@@ -67,7 +77,7 @@ export const useApp = create<AppState>((set) => ({
   savedColleges: [],
   signedIn: false,
   authChecked: false,
-  onboardingProfile: null,
+  user: null,
   advisorOpen: false,
   authOpen: false,
   toast: null,
@@ -90,7 +100,18 @@ export const useApp = create<AppState>((set) => ({
     set((s) => ({
       posts: updatePost(s.posts, postId, (p) => ({
         ...p,
-        comments: [...p.comments, { author: currentUser, timeAgo: 'Just now', text }],
+        comments: [...p.comments, { author: s.user ? {
+          id: s.user.id,
+          name: s.user.name,
+          subtitle: s.user.university && s.user.major ? `${s.user.major} • ${s.user.university}` : 'Academix community member',
+          verification: s.user.verificationStatus === 'verified' ? 'edu' : s.user.role === 'prospective' ? 'prospective' : 'unverified',
+          ...(s.user.photo ? { avatar: s.user.photo } : {}),
+          interests: s.user.interests,
+          about: s.user.biography,
+          education: s.user.university && s.user.major
+            ? `${s.user.university} • ${s.user.major}${s.user.graduationYear ? ` • Class of ${s.user.graduationYear}` : ''}`
+            : undefined,
+        } : people.anonymous, timeAgo: 'Just now', text }],
         commentCount: p.commentCount + 1,
       })),
     })),
@@ -100,7 +121,18 @@ export const useApp = create<AppState>((set) => ({
       posts: [
         {
           id: `local-${Date.now()}`,
-          author: anonymous ? people.anonymous : currentUser,
+          author: anonymous || !s.user ? people.anonymous : {
+            id: s.user.id,
+            name: s.user.name,
+            subtitle: s.user.university && s.user.major ? `${s.user.major} • ${s.user.university}` : 'Academix community member',
+            verification: s.user.verificationStatus === 'verified' ? 'edu' : s.user.role === 'prospective' ? 'prospective' : 'unverified',
+            ...(s.user.photo ? { avatar: s.user.photo } : {}),
+            interests: s.user.interests,
+            about: s.user.biography,
+            education: s.user.university && s.user.major
+              ? `${s.user.university} • ${s.user.major}${s.user.graduationYear ? ` • Class of ${s.user.graduationYear}` : ''}`
+              : undefined,
+          },
           timeAgo: 'Just now',
           title,
           body,
@@ -127,7 +159,7 @@ export const useApp = create<AppState>((set) => ({
     set((s) => ({
       tickets: updateTicket(s.tickets, ticketId, (t) => ({
         ...t,
-        messages: [...t.messages, { author: 'Maya Patel (You)', time: 'Just now', text, isMe: true }],
+        messages: [...t.messages, { author: s.user?.name ?? 'You', time: 'Just now', text, isMe: true }],
         suggestedReply: undefined,
       })),
     })),
@@ -142,8 +174,20 @@ export const useApp = create<AppState>((set) => ({
         : [...s.savedColleges, collegeId],
     })),
 
-  setSignedIn: (signedIn) => set({ signedIn, authChecked: true }),
-  setOnboardingProfile: (onboardingProfile) => set({ onboardingProfile }),
+  setSignedIn: (signedIn) => set((s) => ({
+    signedIn,
+    authChecked: true,
+    ...(signedIn ? {} : {
+      user: null,
+      ...(s.user ? { posts: initialPosts, tickets: initialTickets, savedColleges: [] } : {}),
+    }),
+  })),
+  setAuthenticatedUser: (user) => set((s) => ({
+    user,
+    signedIn: true,
+    authChecked: true,
+    ...(s.user?.id !== user.id ? { posts: initialPosts, tickets: initialTickets, savedColleges: [] } : {}),
+  })),
   setAdvisorOpen: (advisorOpen) => set({ advisorOpen }),
   setAuthOpen: (authOpen) => set({ authOpen }),
 

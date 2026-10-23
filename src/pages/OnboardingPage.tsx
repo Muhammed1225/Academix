@@ -1,10 +1,11 @@
-import { useRef, useState, type ChangeEvent } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { BrandMark, Icon, cx } from '../components/ui';
 import { sanitizeRichText } from '../components/RichText';
 import { defaultInterestEmoji, interestEmojis, interests } from '../data/interestOptions';
-import { useApp, type OnboardingProfile } from '../store';
+import { saveProfile } from '../authService';
+import { useApp } from '../store';
 
 const purposes = [
   { label: 'Discover universities and events', icon: 'explore' },
@@ -23,39 +24,54 @@ function readImage(file: File) {
 }
 
 export default function OnboardingPage() {
-  const location = useLocation();
   const navigate = useNavigate();
-  const setOnboardingProfile = useApp((state) => state.setOnboardingProfile);
-  const locationState = location.state as { name?: string } | null;
+  const user = useApp((state) => state.user);
+  const setAuthenticatedUser = useApp((state) => state.setAuthenticatedUser);
   const [step, setStep] = useState(1);
   const [photo, setPhoto] = useState('');
   const [biography, setBiography] = useState('');
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [purpose, setPurpose] = useState('');
   const [photoError, setPhotoError] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
   const [biographyFormats, setBiographyFormats] = useState({ bold: false, italic: false });
   const photoInput = useRef<HTMLInputElement>(null);
   const editor = useRef<HTMLDivElement>(null);
 
-  const saveAndFinish = () => {
-    // TODO: Send the completed profile, interests, and purpose to the API when it is available.
-    const profile: OnboardingProfile = {
-      name: locationState?.name?.trim() || 'Academix Member',
-      photo,
-      biography,
-      interests: selectedInterests,
-      purpose,
-    };
-    setOnboardingProfile(profile);
-    navigate('/profile');
+  useEffect(() => {
+    if (!user) return;
+    setPhoto(user.photo);
+    setBiography(user.biography);
+    setSelectedInterests(user.interests);
+    setPurpose(user.purpose);
+    if (editor.current) editor.current.innerHTML = sanitizeRichText(user.biography);
+  }, [user]);
+
+  const saveAndFinish = async () => {
+    setSaving(true);
+    setSaveError('');
+    try {
+      const result = await saveProfile({ photo, biography, interests: selectedInterests, purpose });
+      if (!result.ok || !result.user) {
+        setSaveError(result.error ?? 'Unable to save your profile. Please try again.');
+        return;
+      }
+      setAuthenticatedUser(result.user);
+      navigate('/profile');
+    } catch {
+      setSaveError('Unable to reach the profile service. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const selectPhoto = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = '';
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setPhotoError('Choose an image file.');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      setPhotoError('Choose a JPG, PNG, or WebP image no larger than 5 MB.');
       return;
     }
     try {
@@ -207,7 +223,8 @@ export default function OnboardingPage() {
           <span className="flex h-16 w-16 items-center justify-center rounded-full bg-secondary-fixed text-secondary"><Icon name="north_east" className="!text-3xl" /></span>
           <h1 className="mt-6 font-headline text-4xl font-bold text-primary">Your profile is ready.</h1>
           <p className="mt-3 text-lg italic text-on-surface-variant">Let the adventure begin!</p>
-          <button type="button" onClick={saveAndFinish} className="btn-primary mt-10 min-w-48">Go to profile <Icon name="arrow_forward" /></button>
+          {saveError && <p role="alert" className="mt-4 text-sm font-medium text-error">{saveError}</p>}
+          <button type="button" disabled={saving} onClick={() => void saveAndFinish()} className="btn-primary mt-10 min-w-48">{saving ? 'Saving…' : 'Go to profile'} <Icon name="arrow_forward" /></button>
         </div>}
       </section>
     </main>

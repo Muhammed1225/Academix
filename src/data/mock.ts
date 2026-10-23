@@ -43,21 +43,7 @@ export const people: Record<string, Person> = {
     subtitle: 'Identity hidden • Institution Verified',
     verification: 'edu',
   },
-  fuadTest: {
-    id: 'fuad-test',
-    name: 'Fuad (Test Profile)',
-    subtitle: 'B.S. Computer Science • Carnegie Mellon University • Class of 2027',
-    verification: 'unverified',
-    avatar: img('avatar_fuad_test.jpg'),
-    badge: 'Fictional test profile',
-    interests: ['Computer Science', 'Robotics', 'Campus life'],
-    about: 'A fictional Academix member created for product testing. Curious about computer science, robotics, and student communities, and always happy to learn what others are building.',
-    location: 'Pittsburgh, PA',
-    education: 'Carnegie Mellon University • Class of 2027 • B.S. Computer Science',
-  },
 };
-
-export const currentUser: Person = people.maya;
 
 export const channels: Channel[] = [
   { id: 'all', name: 'All Global Academic Stream', count: '24k', color: '#0051d5' },
@@ -139,22 +125,6 @@ export const posts: Post[] = [
     dislikes: 0,
     myVote: 0,
     commentCount: 9,
-    bookmarked: false,
-    comments: [],
-  },
-  {
-    id: 'p-test-fuad',
-    author: people.fuadTest,
-    timeAgo: 'Just now',
-    channelId: 'all',
-    tabs: ['latest'],
-    title: 'Testing out the Academix community',
-    body: 'Hi everyone! This is a fictional profile for testing. I am exploring computer science, robotics, and campus life. What projects or student communities would you recommend?',
-    votes: 0,
-    likes: 0,
-    dislikes: 0,
-    myVote: 0,
-    commentCount: 0,
     bookmarked: false,
     comments: [],
   },

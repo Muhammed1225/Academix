@@ -1,20 +1,29 @@
 import { createServer } from 'node:http';
-import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 const scrypt = promisify(scryptCallback);
-const dataFile = resolve(dirname(fileURLToPath(import.meta.url)), 'data', 'users.json');
+const dataFile = resolve(process.env.AUTH_DATA_FILE || resolve(dirname(fileURLToPath(import.meta.url)), 'data', 'users.json'));
 const verificationDirectory = resolve(dirname(dataFile), 'verification-documents');
 const sessions = new Map();
 const users = new Map();
 const port = Number(process.env.AUTH_PORT || 3001);
+const allowTestLogin = process.env.NODE_ENV !== 'production' && process.env.AUTH_ALLOW_TEST_LOGIN !== 'false';
 
 try {
   const saved = JSON.parse(await readFile(dataFile, 'utf8'));
-  for (const user of saved) users.set(user.email, user);
+  let migrated = false;
+  for (const user of saved) {
+    if (!user.id) {
+      user.id = randomUUID();
+      migrated = true;
+    }
+    users.set(user.email, user);
+  }
+  if (migrated) await saveUsers();
 } catch (error) {
   if (error.code !== 'ENOENT') throw error;
 }
@@ -29,6 +38,34 @@ async function saveUsers() {
 function sendJson(res, status, body, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
   res.end(JSON.stringify(body));
+}
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    ...(user.location ? { location: user.location } : {}),
+    ...(user.university ? { university: user.university } : {}),
+    ...(user.major ? { major: user.major } : {}),
+    ...(user.graduationYear ? { graduationYear: user.graduationYear } : {}),
+    verificationStatus: user.verificationStatus,
+    photo: user.photo || '',
+    biography: user.biography || '',
+    interests: Array.isArray(user.interests) ? user.interests : [],
+    purpose: user.purpose || '',
+  };
+}
+
+function authenticatedSession(req) {
+  const token = req.headers.cookie?.match(/(?:^|;\s*)academix_session=([^;]+)/)?.[1];
+  const session = token && sessions.get(token);
+  if (!session || session.expires < Date.now()) {
+    if (token) sessions.delete(token);
+    return { session: null, user: null };
+  }
+  return { session, user: session.user || users.get(session.email) || null };
 }
 
 async function readBody(req, maxBytes = 16_384) {
@@ -71,13 +108,135 @@ function decodeIdentityDocument(document) {
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (req.method === 'GET' && url.pathname === '/api/auth/session') {
-    const token = req.headers.cookie?.match(/(?:^|;\s*)academix_session=([^;]+)/)?.[1];
-    const session = token && sessions.get(token);
-    if (!session || session.expires < Date.now()) {
-      if (token) sessions.delete(token);
-      sendJson(res, 200, { authenticated: false });
-    } else {
-      sendJson(res, 200, { authenticated: true });
+    const { user } = authenticatedSession(req);
+    sendJson(res, 200, user ? { authenticated: true, user: publicUser(user) } : { authenticated: false });
+    return;
+  }
+  if (req.method === 'PUT' && url.pathname === '/api/auth/profile') {
+    const { session, user } = authenticatedSession(req);
+    if (!user) {
+      sendJson(res, 401, { error: 'Sign in to update your profile.' });
+      return;
+    }
+    if (!req.headers['content-type']?.startsWith('application/json')) {
+      sendJson(res, 415, { error: 'Expected a JSON request' });
+      return;
+    }
+    try {
+      const input = await readBody(req, 7_100_000);
+      if (!input || typeof input !== 'object' || Array.isArray(input)) {
+        sendJson(res, 400, { error: 'Invalid profile update.' });
+        return;
+      }
+      const updated = { ...user };
+      if (input.name !== undefined) {
+        if (typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 100) {
+          sendJson(res, 400, { error: 'Enter a name no longer than 100 characters.' });
+          return;
+        }
+        updated.name = input.name.trim();
+      }
+      if (input.biography !== undefined) {
+        if (typeof input.biography !== 'string' || input.biography.length > 5_000) {
+          sendJson(res, 400, { error: 'Biography must be 5,000 characters or fewer.' });
+          return;
+        }
+        updated.biography = input.biography;
+      }
+      if (input.interests !== undefined) {
+        if (!Array.isArray(input.interests) || input.interests.length > 30 ||
+          input.interests.some((item) => typeof item !== 'string' || !item.trim() || item.trim().length > 80)) {
+          sendJson(res, 400, { error: 'Choose up to 30 valid interests.' });
+          return;
+        }
+        updated.interests = [...new Set(input.interests.map((item) => item.trim()))];
+      }
+      if (input.purpose !== undefined) {
+        if (typeof input.purpose !== 'string' || input.purpose.length > 200) {
+          sendJson(res, 400, { error: 'Purpose must be 200 characters or fewer.' });
+          return;
+        }
+        updated.purpose = input.purpose;
+      }
+      if (input.photo !== undefined) {
+        if (input.photo === '') {
+          updated.photo = '';
+        } else {
+          const match = typeof input.photo === 'string' &&
+            input.photo.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
+          const content = match ? Buffer.from(match[2], 'base64') : null;
+          if (!match || !content?.length || content.length > 5 * 1024 * 1024 || content.toString('base64') !== match[2]) {
+            sendJson(res, 400, { error: 'Choose a JPG, PNG, or WebP image no larger than 5 MB.' });
+            return;
+          }
+          updated.photo = input.photo;
+        }
+      }
+      if (input.university !== undefined) {
+        if (typeof input.university !== 'string' || input.university.length > 200) {
+          sendJson(res, 400, { error: 'University must be 200 characters or fewer.' });
+          return;
+        }
+        if (input.university.trim()) updated.university = input.university.trim();
+        else delete updated.university;
+      }
+      if (input.location !== undefined) {
+        if (typeof input.location !== 'string' || input.location.length > 200) {
+          sendJson(res, 400, { error: 'Location must be 200 characters or fewer.' });
+          return;
+        }
+        if (input.location.trim()) updated.location = input.location.trim();
+        else delete updated.location;
+      }
+      if (input.major !== undefined) {
+        if (typeof input.major !== 'string' || input.major.length > 200) {
+          sendJson(res, 400, { error: 'Major or subject must be 200 characters or fewer.' });
+          return;
+        }
+        if (input.major.trim()) updated.major = input.major.trim();
+        else delete updated.major;
+      }
+      if (input.graduationYear !== undefined) {
+        if (input.graduationYear === null || input.graduationYear === '') {
+          delete updated.graduationYear;
+        } else if (!Number.isInteger(input.graduationYear) || input.graduationYear < 1900 || input.graduationYear > 2100) {
+          sendJson(res, 400, { error: 'Enter a valid graduation year.' });
+          return;
+        } else {
+          updated.graduationYear = input.graduationYear;
+        }
+      }
+      if (input.role !== undefined) {
+        if (user.role !== 'prospective' || input.role !== 'scholar') {
+          sendJson(res, 403, { error: 'Only prospective students can update their account to student / scholar.' });
+          return;
+        }
+        if (!updated.university || !updated.major || !Number.isInteger(updated.graduationYear) ||
+          updated.graduationYear < 2000 || updated.graduationYear > 2100) {
+          sendJson(res, 400, { error: 'Choose your university, major, and a valid graduation year before updating your account.' });
+          return;
+        }
+        updated.role = 'scholar';
+      }
+      if (session.testOnly) {
+        session.user = updated;
+      } else {
+        users.set(user.email, updated);
+        try {
+          await saveUsers();
+        } catch (error) {
+          users.set(user.email, user);
+          throw error;
+        }
+      }
+      sendJson(res, 200, { user: publicUser(updated) });
+    } catch (error) {
+      if (error instanceof SyntaxError || error.message === 'Request too large') {
+        sendJson(res, 400, { error: 'Invalid profile update.' });
+        return;
+      }
+      console.error('Profile update failed:', error);
+      sendJson(res, 500, { error: 'Unable to save profile changes. Please try again.' });
     }
     return;
   }
@@ -106,6 +265,8 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    let authenticatedUser;
+    let testOnly = false;
     if (url.pathname.endsWith('/register')) {
       const name = typeof input.name === 'string' ? input.name.trim() : '';
       if (name.split(/\s+/).filter(Boolean).length < 2) {
@@ -195,6 +356,7 @@ const server = createServer(async (req, res) => {
         verificationDocument = { fileName, type: input.identityDocument.type, submittedAt: new Date().toISOString() };
       }
       const user = {
+        id: randomUUID(),
         email,
         name,
         role: input.role,
@@ -202,6 +364,10 @@ const server = createServer(async (req, res) => {
         ...(typeof input.major === 'string' && input.major ? { major: input.major } : {}),
         ...(input.role === 'scholar' ? { graduationYear: Number(input.graduationYear) } : {}),
         verificationStatus: isVerificationRequest ? 'pending' : 'unverified',
+        photo: '',
+        biography: '',
+        interests: [],
+        purpose: '',
         ...(isVerificationRequest
           ? { verificationRequest: { method: verificationMethod, ...(verificationMethod === 'edu_email' ? { eduEmail } : {}), submittedAt: new Date().toISOString() } }
           : {}),
@@ -222,25 +388,57 @@ const server = createServer(async (req, res) => {
         throw error;
       }
       input.verificationStatus = user.verificationStatus;
+      authenticatedUser = user;
     } else {
-      const user = users.get(email);
+      let user = users.get(email);
       if (!user) {
+        if (allowTestLogin) {
+          const displayName = email.split('@')[0]
+            .split(/[._+-]+/)
+            .filter(Boolean)
+            .map((part) => part[0].toUpperCase() + part.slice(1))
+            .join(' ') || 'Test User';
+          user = {
+            id: `test-${randomUUID()}`,
+            email,
+            name: displayName,
+            role: 'prospective',
+            verificationStatus: 'unverified',
+            photo: '',
+            biography: '',
+            interests: [],
+            purpose: '',
+          };
+          testOnly = true;
+        } else {
         // Spend comparable work for unknown accounts to reduce email enumeration timing differences.
         await passwordHash(password, Buffer.alloc(16));
         sendJson(res, 401, { error: 'Email or password is incorrect.' });
         return;
+        }
+      } else {
+        const candidate = await passwordHash(password, Buffer.from(user.salt, 'hex'));
+        if (!timingSafeEqual(candidate, Buffer.from(user.hash, 'hex'))) {
+          sendJson(res, 401, { error: 'Email or password is incorrect.' });
+          return;
+        }
       }
-      const candidate = await passwordHash(password, Buffer.from(user.salt, 'hex'));
-      if (!timingSafeEqual(candidate, Buffer.from(user.hash, 'hex'))) {
-        sendJson(res, 401, { error: 'Email or password is incorrect.' });
-        return;
-      }
+      authenticatedUser = user;
     }
 
     const token = randomBytes(32).toString('base64url');
-    sessions.set(token, { email, expires: Date.now() + 7 * 24 * 60 * 60 * 1000 });
+    sessions.set(token, {
+      email,
+      expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      ...(testOnly ? { testOnly: true, user: authenticatedUser } : {}),
+    });
     const cookie = `academix_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
-    sendJson(res, 200, { ok: true, ...(url.pathname.endsWith('/register') ? { verificationStatus: input.verificationStatus } : {}) }, { 'Set-Cookie': cookie });
+    sendJson(res, 200, {
+      ok: true,
+      user: publicUser(authenticatedUser),
+      ...(testOnly ? { testLogin: true } : {}),
+      ...(url.pathname.endsWith('/register') ? { verificationStatus: input.verificationStatus } : {}),
+    }, { 'Set-Cookie': cookie });
   } catch (error) {
     if (error instanceof SyntaxError || error.message === 'Request too large') {
       sendJson(res, 400, { error: 'Invalid request.' });

@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
-import { BRAND, people } from '../data/mock';
+import { BRAND } from '../data/mock';
+import { signOut as signOutAuth } from '../authService';
 import { useApp, useUnreadCount } from '../store';
 import AdvisorDrawer from './AdvisorDrawer';
 import { Avatar, BrandMark, Icon, cx } from './ui';
@@ -16,6 +17,7 @@ const navItems = [
 function Header() {
   const unread = useUnreadCount();
   const signedIn = useApp((s) => s.signedIn);
+  const user = useApp((s) => s.user);
   const authChecked = useApp((s) => s.authChecked);
   const setSignedIn = useApp((s) => s.setSignedIn);
   const showToast = useApp((s) => s.showToast);
@@ -28,11 +30,22 @@ function Header() {
     navigate(`/search?q=${encodeURIComponent(query.trim())}`);
   };
 
+  const signOut = async () => {
+    try {
+      await signOutAuth();
+      setSignedIn(false);
+      setMenuOpen(false);
+      showToast('Signed out', 'logout');
+    } catch {
+      showToast('Unable to sign out right now. Please try again.', 'error');
+    }
+  };
+
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-outline-variant/40 bg-white shadow-header">
       <div className="mx-auto flex h-16 max-w-content items-center justify-between gap-4 px-4">
         <div className="flex max-w-md flex-1 items-center gap-4">
-          <Link to="/" className="shrink-0" aria-label={`${BRAND} home`}>
+          <Link to="/" className="shrink-0" aria-label={`${BRAND} feed`}>
             <BrandMark />
           </Link>
           <form onSubmit={onSearch} className="relative hidden w-full md:block">
@@ -82,13 +95,13 @@ function Header() {
               aria-expanded={menuOpen}
               className="group relative inline-flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-none"
             >
-              <Avatar src={people.fuadTest.avatar} name={people.fuadTest.name} size={44} rounded="rounded-full" />
+              <Avatar src={user?.photo || undefined} name={user?.name ?? 'Account'} size={44} rounded="rounded-full" />
               <span className="pointer-events-none absolute inset-0 rounded-full border-2 border-transparent transition-colors group-hover:border-secondary group-focus-visible:border-secondary" />
             </button>
             {menuOpen && (
               <div role="menu" className="animate-slide-up absolute right-0 top-12 w-48 overflow-hidden rounded-xl border border-outline-variant/60 bg-white py-1 shadow-float">
                 <Link
-                  to="/people/fuad-test"
+                  to="/profile"
                   role="menuitem"
                   onClick={() => setMenuOpen(false)}
                   className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-surface-container-low"
@@ -109,12 +122,7 @@ function Header() {
                 <button
                   type="button"
                   role="menuitem"
-                  onClick={() => {
-                    void fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
-                    setSignedIn(false);
-                    setMenuOpen(false);
-                    showToast('Signed out', 'logout');
-                  }}
+                  onClick={() => void signOut()}
                   className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-error hover:bg-error-container/50"
                 >
                   <Icon name="logout" /> Sign out
@@ -146,7 +154,7 @@ function MobileNav() {
   const items = [
     { to: '/', label: 'Feed', icon: 'dynamic_feed', end: true },
     { to: '/colleges', label: 'Universities', icon: 'account_balance' },
-    { to: '/compose', label: 'Post', icon: 'add', primary: true },
+    { to: '/compose', label: 'Ask community', icon: 'forum', primary: true },
     { to: '/inbox', label: 'Messages', icon: 'mail' },
     { to: '/connections', label: 'Make Connections', icon: 'person_add' },
   ];
@@ -251,8 +259,8 @@ function CommunityLauncher() {
       to="/compose"
       className="fixed bottom-24 left-4 z-40 flex items-center gap-2 rounded-2xl bg-secondary px-4 py-3.5 font-semibold text-white shadow-float transition hover:bg-secondary/90 lg:bottom-8 lg:left-8"
     >
-      <Icon name="edit_note" />
-      <span className="hidden sm:inline">Post</span>
+      <Icon name="forum" />
+      <span className="hidden sm:inline">Ask community</span>
     </Link>
   );
 }
