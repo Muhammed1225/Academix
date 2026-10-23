@@ -295,7 +295,7 @@ export default function MajorsPage() {
     <div className="space-y-5">
       <nav className="flex flex-wrap items-center gap-1.5 text-sm text-on-surface-variant">
         <Link to="/colleges" className="hover:text-secondary">
-          Explore Colleges
+          Explore Universities
         </Link>
         <Icon name="chevron_right" className="!text-[16px]" />
         <Link to={`/colleges/${college.id}`} className="hover:text-secondary">

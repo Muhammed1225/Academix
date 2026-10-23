@@ -10,12 +10,20 @@ const MAX = 4000;
 const MIN_BODY = 40;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const emojis = ['😀', '😂', '😊', '😍', '🥳', '🤔', '👏', '🙌', '👍', '❤️', '🎓', '📚', '🧠', '💡', '🔬', '✨', '✅', '🎉', '🙏', '🚀'];
 
 const attachmentTypes = [
   { icon: 'picture_as_pdf', label: 'PDF Dossier' },
   { icon: 'poll', label: 'Student Poll' },
   { icon: 'link', label: 'Course Link' },
 ];
+
+function nextLocalMinute() {
+  const date = new Date();
+  date.setSeconds(0, 0);
+  date.setMinutes(date.getMinutes() + 1);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
 
 function hasTextInFormat(editor: HTMLElement, tags: string[]) {
   const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
@@ -78,25 +86,45 @@ export default function ComposePage() {
   const showToast = useApp((s) => s.showToast);
   const bodyRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const editorSelectionRef = useRef<Range | null>(null);
 
   const [title, setTitle] = useState('');
   const [bodyHtml, setBodyHtml] = useState('');
   const [bodyText, setBodyText] = useState('');
   const [forum, setForum] = useState(composerForums[0]);
+  const [replyVisibility, setReplyVisibility] = useState('Everyone');
   const [anonymous, setAnonymous] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [image, setImage] = useState<{ fileName: string; src: string } | null>(null);
   const [imageError, setImageError] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleMin, setScheduleMin] = useState(nextLocalMinute);
+  const [scheduleAt, setScheduleAt] = useState('');
+  const [scheduledFor, setScheduledFor] = useState('');
+  const [scheduleError, setScheduleError] = useState('');
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const [activeFormats, setActiveFormats] = useState({ bold: false, italic: false, quote: false, code: false, heading: false });
   const [pendingInlineMarks, setPendingInlineMarks] = useState({ bold: false, italic: false });
   const universityId = searchParams.get('university');
   const university = colleges.find((college) => college.id === universityId);
   const askingAffiliatedStudents = searchParams.get('intent') === 'question' && Boolean(university);
 
-  const dirty = Boolean(title || bodyText || attachments.length || image);
+  const dirty = Boolean(title || bodyText || attachments.length || image || scheduledFor);
   const error =
     title.trim().length < 8 ? 'Add a descriptive title (8+ characters)' : bodyText.trim().length < MIN_BODY ? `Write at least ${MIN_BODY} characters` : null;
+
+  useEffect(() => {
+    if (!scheduleOpen) return;
+    const refreshMinimum = () => {
+      const minimum = nextLocalMinute();
+      setScheduleMin(minimum);
+      setScheduleAt((current) => !current || current < minimum ? minimum : current);
+    };
+    refreshMinimum();
+    const interval = window.setInterval(refreshMinimum, 1000);
+    return () => window.clearInterval(interval);
+  }, [scheduleOpen]);
 
   // Sayfadan ayrılırken kaydedilmemiş taslak uyarısı.
   useEffect(() => {
@@ -130,6 +158,8 @@ export default function ComposePage() {
       setActiveFormats({ bold: false, italic: false, quote: false, code: false, heading: false });
       return;
     }
+    const range = selection.rangeCount ? selection.getRangeAt(0) : null;
+    if (range && editor.contains(range.startContainer)) editorSelectionRef.current = range.cloneRange();
 
     const hasAncestor = (tags: string[]) => {
       let node: Node | null = selection.anchorNode;
@@ -170,6 +200,58 @@ export default function ComposePage() {
     }
     setBodyText(text);
     setBodyHtml(el.innerHTML);
+  };
+
+  const insertEmoji = (emoji: string) => {
+    const editor = bodyRef.current;
+    const selection = window.getSelection();
+    if (!editor || !selection) return;
+
+    editor.focus();
+    const range = editorSelectionRef.current && editor.contains(editorSelectionRef.current.startContainer)
+      ? editorSelectionRef.current.cloneRange()
+      : document.createRange();
+    if (!editorSelectionRef.current || !editor.contains(editorSelectionRef.current.startContainer)) {
+      range.selectNodeContents(editor);
+      range.collapse(false);
+    }
+    selection.removeAllRanges();
+    selection.addRange(range);
+    range.deleteContents();
+    const emojiNode = document.createTextNode(emoji);
+    range.insertNode(emojiNode);
+    range.setStartAfter(emojiNode);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    editorSelectionRef.current = range.cloneRange();
+    updateEditor(editor);
+  };
+
+  const openSchedule = () => {
+    const minimum = nextLocalMinute();
+    setScheduleMin(minimum);
+    setScheduleAt(scheduledFor || minimum);
+    setScheduleError('');
+    setScheduleOpen(true);
+  };
+
+  const saveSchedule = () => {
+    if (error) {
+      setScheduleError('Add a title and write at least 40 characters before setting a schedule.');
+      return;
+    }
+    const selectedDate = new Date(scheduleAt);
+    if (!scheduleAt || Number.isNaN(selectedDate.getTime()) || selectedDate <= new Date()) {
+      const minimum = nextLocalMinute();
+      setScheduleMin(minimum);
+      setScheduleAt(minimum);
+      setScheduleError('Choose a date and time in the future.');
+      return;
+    }
+    setScheduledFor(scheduleAt);
+    setScheduleOpen(false);
+    showToast('Schedule time saved in this composer', 'schedule');
   };
 
   const leave = () => (dirty ? setConfirmDiscard(true) : navigate(-1));
@@ -249,6 +331,15 @@ export default function ComposePage() {
             </label>
           </div>
 
+          <label className="block text-sm font-semibold">
+            Who can reply?
+            <select value={replyVisibility} onChange={(event) => setReplyVisibility(event.target.value)} className="input mt-1.5">
+              <option>Only my connections</option>
+              <option>Everyone</option>
+              <option>No one</option>
+            </select>
+          </label>
+
           {university && (
             <div className="flex items-center gap-2 rounded-lg bg-secondary-fixed px-3 py-2 text-sm text-on-secondary-fixed">
               <Icon name="account_balance" />
@@ -302,6 +393,17 @@ export default function ComposePage() {
                   </button>
                 );
               })}
+              <button
+                type="button"
+                title="Insert emoji"
+                aria-label="Insert emoji"
+                aria-expanded={emojiOpen}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => setEmojiOpen((open) => !open)}
+                className={cx('rounded-md p-2 transition-colors', emojiOpen ? 'bg-secondary text-white' : 'text-on-surface-variant hover:bg-white')}
+              >
+                <Icon name="mood" />
+              </button>
               <div className="flex-1" />
               <input
                 ref={imageInputRef}
@@ -329,6 +431,23 @@ export default function ComposePage() {
                 </button>
               ))}
             </div>
+            {emojiOpen && (
+              <div role="group" aria-label="Choose an emoji" className="flex flex-wrap gap-1 border-b border-outline-variant/50 bg-white px-3 py-2">
+                {emojis.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    aria-label={`Insert ${emoji}`}
+                    title={`Insert ${emoji}`}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => { insertEmoji(emoji); setEmojiOpen(false); }}
+                    className="rounded-lg p-2 text-xl transition hover:bg-surface-container-low focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
             <div
               ref={bodyRef}
               contentEditable
@@ -389,6 +508,9 @@ export default function ComposePage() {
             <button type="button" onClick={() => (dirty ? setConfirmDiscard(true) : null)} disabled={!dirty} className="btn-ghost !text-error">
               <Icon name="delete" /> Discard Draft
             </button>
+            <button type="button" onClick={openSchedule} className="btn-outline">
+              <Icon name="schedule" /> {scheduledFor ? 'Edit Schedule' : 'Schedule'}
+            </button>
             <div className="flex-1" />
             <button type="button" disabled={!dirty} onClick={() => showToast('Saved as private draft', 'save')} className="btn-outline">
               Save as Private Draft
@@ -397,6 +519,12 @@ export default function ComposePage() {
               <Icon name="send" /> Publish Dispatch
             </button>
           </div>
+          {scheduledFor && (
+            <p role="status" className="flex items-center gap-2 text-sm text-secondary">
+              <Icon name="schedule" />
+              Schedule selected for {new Date(scheduledFor).toLocaleString()}.
+            </p>
+          )}
         </section>
 
       </div>
@@ -414,6 +542,33 @@ export default function ComposePage() {
             </button>
             <button type="button" className="btn bg-error text-white hover:bg-error/90" onClick={() => navigate('/')}>
               Discard
+            </button>
+          </div>
+        </div>
+      </Modal>
+      <Modal open={scheduleOpen} onClose={() => setScheduleOpen(false)} label="Schedule post" width="max-w-md">
+        <div className="space-y-4 p-6">
+          <div>
+            <h2 className="font-headline text-xl font-semibold text-primary">Schedule post</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">Choose a future date and time for this post.</p>
+          </div>
+          <label className="block text-sm font-semibold">
+            Date and time
+            <input
+              type="datetime-local"
+              value={scheduleAt}
+              min={scheduleMin}
+              step={60}
+              onChange={(event) => { setScheduleAt(event.target.value); setScheduleError(''); }}
+              className="input mt-1.5"
+            />
+          </label>
+          <p className="text-xs text-on-surface-variant">This front-end-only schedule is saved in this composer and will not publish automatically.</p>
+          {scheduleError && <p role="alert" className="text-sm font-medium text-error">{scheduleError}</p>}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setScheduleOpen(false)} className="btn-outline">Cancel</button>
+            <button type="button" onClick={saveSchedule} className="btn-primary">
+              <Icon name="schedule" /> Save Schedule
             </button>
           </div>
         </div>

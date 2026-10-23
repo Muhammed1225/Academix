@@ -8,7 +8,7 @@ import { Avatar, BrandMark, Icon, cx } from './ui';
 
 const navItems = [
   { to: '/', label: 'Feed', icon: 'dynamic_feed', end: true },
-  { to: '/colleges', label: 'Explore Colleges', icon: 'account_balance' },
+  { to: '/colleges', label: 'Explore Universities', icon: 'account_balance' },
   { to: '/connections', label: 'Make Connections', icon: 'person_add' },
   { to: '/inbox', label: 'Messages', icon: 'mail' },
 ];
@@ -145,7 +145,7 @@ function MobileNav() {
   const unread = useUnreadCount();
   const items = [
     { to: '/', label: 'Feed', icon: 'dynamic_feed', end: true },
-    { to: '/colleges', label: 'Colleges', icon: 'account_balance' },
+    { to: '/colleges', label: 'Universities', icon: 'account_balance' },
     { to: '/compose', label: 'Post', icon: 'add', primary: true },
     { to: '/inbox', label: 'Messages', icon: 'mail' },
     { to: '/connections', label: 'Make Connections', icon: 'person_add' },
@@ -252,7 +252,7 @@ function CommunityLauncher() {
       className="fixed bottom-24 left-4 z-40 flex items-center gap-2 rounded-2xl bg-secondary px-4 py-3.5 font-semibold text-white shadow-float transition hover:bg-secondary/90 lg:bottom-8 lg:left-8"
     >
       <Icon name="edit_note" />
-      <span className="hidden sm:inline">Ask Community</span>
+      <span className="hidden sm:inline">Post</span>
     </Link>
   );
 }

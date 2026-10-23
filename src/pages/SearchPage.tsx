@@ -40,7 +40,7 @@ export default function SearchPage() {
             <Link key={c.id} to={`/colleges/${c.id}`} className="flex items-center gap-3 p-4 hover:bg-surface-container-low">
               <Icon name="account_balance" className="text-secondary" />
               <span className="flex-1 font-semibold">{c.name}</span>
-              <Tag>College</Tag>
+              <Tag>University</Tag>
             </Link>
           ))}
           {majorHits.map(({ college, major }) => (

@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 
 import { DiscussionCard } from '../components/CollegeCards';
+import PostCard from '../components/PostCard';
 import { Avatar, Icon, SectionHeader, Tag, cx } from '../components/ui';
 import { colleges } from '../data/mock';
-import type { College } from '../data/types';
+import bhosInfo from '../../data/bhosinfo.txt?raw';
+import type { College, Post } from '../data/types';
 import { useApp } from '../store';
 
 type HubTab = 'overview' | 'insights' | 'qa';
@@ -48,7 +50,7 @@ function PopularMajorsSection({ college }: { college: College }) {
   const majors = college.majors.slice(0, 3);
 
   return (
-    <section className="card p-6">
+    <section id="majors" className="card p-6 scroll-mt-24">
       <SectionHeader
         title={`Popular Majors at ${college.shortName}`}
         subtitle="Explore standout programs at this university."
@@ -116,8 +118,8 @@ function Sidebar({ college, onViewInsights }: { college: College; onViewInsights
         </div>
       </div>
 
-      <div className="card p-5">
-        <SectionHeader title="Students & Alumni to Connect With" subtitle="Suggested profiles from the university network." icon="group" />
+      <div id="mentors" className="card scroll-mt-24 p-5">
+        <SectionHeader title="Mentors" subtitle="Connect with students and alumni from the university network." icon="group" />
         <div className="mt-2 divide-y divide-outline-variant/40">
           {college.mentors.slice(0, 3).map((mentor) => (
             <SuggestedConnection key={mentor.id} mentor={mentor} />
@@ -131,21 +133,48 @@ function Sidebar({ college, onViewInsights }: { college: College; onViewInsights
         </Link>
       </div>
 
-      <div className="card p-5">
-        <SectionHeader title="Similar Cohort Schools" icon="compare_arrows" />
-        {college.similar.map((s) => (
-          <div key={s.name} className="flex items-center gap-3 border-b border-outline-variant/40 py-2.5 last:border-0">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-container-high text-xs font-bold">{s.initials}</span>
-            <span className="flex-1 text-sm">
-              <span className="block font-semibold">{s.name}</span>
-              <span className="block text-xs text-on-surface-variant">{s.meta}</span>
-            </span>
-            <Icon name="chevron_right" className="text-outline" />
-          </div>
+    </div>
+  );
+}
+
+function UniversityNewsSection({ college, posts }: { college: College; posts: Post[] }) {
+  const relatedPosts = posts.filter((post) => post.universityId === college.id).slice(0, 3);
+
+  return (
+    <section id="news" className="card scroll-mt-24 p-6">
+      <SectionHeader title={`${college.shortName} News`} subtitle="Updates and dispatches connected to this university." icon="feed" />
+      {relatedPosts.length ? (
+        <div className="space-y-4">{relatedPosts.map((post) => <PostCard key={post.id} post={post} interactive={false} />)}</div>
+      ) : (
+        <div className="rounded-xl bg-surface-container-low p-4">
+          <p className="text-sm text-on-surface-variant">No university news has been shared yet.</p>
+          <Link to={`/compose?university=${encodeURIComponent(college.id)}`} className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-secondary hover:underline">
+            Share a university update <Icon name="arrow_forward" className="!text-[17px]" />
+          </Link>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function UniversityGallerySection({ college, posts }: { college: College; posts: Post[] }) {
+  const photos = [
+    { src: college.heroImage, alt: `${college.name} campus` },
+    ...posts
+      .flatMap((post) => post.universityId === college.id && post.image
+        ? [{ src: post.image.src, alt: post.title ?? `${college.shortName} community photo` }]
+        : []),
+  ];
+
+  return (
+    <section id="gallery" className="card scroll-mt-24 p-6">
+      <SectionHeader title={`${college.shortName} Gallery`} subtitle="Photos from the university community." icon="photo_library" />
+      <div className="grid gap-3 sm:grid-cols-2">
+        {photos.map((photo, index) => (
+          <img key={`${photo.src}-${index}`} src={photo.src} alt={photo.alt} className="h-52 w-full rounded-xl object-cover" />
         ))}
       </div>
-
-    </div>
+    </section>
   );
 }
 
@@ -177,6 +206,7 @@ export default function CollegeHubPage() {
   const saved = useApp((s) => (college ? s.savedColleges.includes(college.id) : false));
   const toggleSaved = useApp((s) => s.toggleSavedCollege);
   const showToast = useApp((s) => s.showToast);
+  const posts = useApp((s) => s.posts);
   const [tab, setTab] = useState<HubTab>('overview');
 
   if (!college) return <Navigate to="/colleges" replace />;
@@ -187,16 +217,15 @@ export default function CollegeHubPage() {
     { id: 'insights', label: 'Admissions Insights' },
     { id: 'qa', label: 'Q&A Board', count: college.questionCount },
   ];
-  const latestMajorScores = college.majors.flatMap((major) => {
-    const scores = major.dimStyleIllustrativeScores;
-    const latestScore = scores?.[scores.length - 1];
-    return latestScore ? [latestScore.points] : [];
-  });
-  const averageAcceptancePoints = latestMajorScores.length
-    ? Math.round(latestMajorScores.reduce((total, points) => total + points, 0) / latestMajorScores.length)
-    : null;
-  const undergraduatePrograms = college.majors.filter((major) => major.name.startsWith('B.S.')).length;
-  const graduatePrograms = college.majors.filter((major) => /^(M\.S\.|M\.A\.|Ph\.D\.|Master|Doctor)/i.test(major.name)).length;
+  const about = college.shortName.toLocaleUpperCase('en') === 'BHOS'
+    ? bhosInfo.replace(/\s+/g, ' ').trim()
+    : college.description;
+  const universitySections = [
+    { id: 'majors', emoji: '🎓', label: 'Majors' },
+    { id: 'mentors', emoji: '🧑‍🏫', label: 'Mentors' },
+    { id: 'news', emoji: '📰', label: 'News' },
+    { id: 'gallery', emoji: '📸', label: 'Gallery' },
+  ];
 
   return (
     <div className="space-y-6">
@@ -242,44 +271,26 @@ export default function CollegeHubPage() {
             </Link>
           </div>
         </div>
-        <div className="grid gap-3 border-t border-outline-variant/40 p-5 sm:grid-cols-2 lg:grid-cols-4">
-          {college.stats.map((s) => s.label === 'Student-to-Faculty' ? (
-            <div key={s.label} className="rounded-xl border border-outline-variant/50 p-4">
-              <div className="flex items-center justify-between">
-                <span className="eyebrow">Programs Listed</span>
-                <Icon name="school" className="text-secondary" />
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <div>
-                  <div className="font-headline text-3xl font-semibold text-primary">{undergraduatePrograms}</div>
-                  <div className="text-xs font-medium text-on-surface-variant">Undergraduate</div>
-                </div>
-                <div>
-                  <div className="font-headline text-3xl font-semibold text-primary">{graduatePrograms}</div>
-                  <div className="text-xs font-medium text-on-surface-variant">Graduate</div>
-                </div>
-              </div>
-              <p className="mt-2 text-xs text-on-surface-variant">Counts reflect programs currently listed in the directory.</p>
-            </div>
-          ) : (
-            <div key={s.label} className="rounded-xl border border-outline-variant/50 p-4">
-              <div className="flex items-center justify-between">
-                <span className="eyebrow">{s.label === 'Acceptance Rate' ? 'Average Acceptance Points' : s.label}</span>
-                <Icon name={s.label === 'Acceptance Rate' ? 'score' : s.icon} className="text-secondary" />
-              </div>
-              <div className="mt-2 flex flex-wrap items-baseline gap-2">
-                <span className="font-headline text-3xl font-semibold text-primary">
-                  {s.label === 'Acceptance Rate' ? averageAcceptancePoints ?? 'N/A' : s.value}
-                </span>
-                {s.label === 'Acceptance Rate' ? <Tag tone="blue">DIM / 700</Tag> : s.tag && <Tag tone="blue">{s.tag}</Tag>}
-              </div>
-              <p className="mt-1 text-xs text-on-surface-variant">
-                {s.label === 'Acceptance Rate' ? 'Illustrative average of latest major scores; not an official cutoff.' : s.note}
-              </p>
+      </section>
+
+      <section className="card p-6">
+        <SectionHeader title={`About ${college.name}`} icon="info" />
+        <p className="leading-relaxed text-on-surface-variant">{about}</p>
+      </section>
+
+      {tab === 'overview' && (
+        <nav aria-label={`${college.shortName} sections`} className="card flex items-center gap-2 overflow-x-auto p-3">
+          {universitySections.map((section, index) => (
+            <div key={section.id} className="flex shrink-0 items-center gap-2">
+              <a href={`#${section.id}`} className="flex items-center gap-2 rounded-xl border border-outline-variant/50 px-4 py-3 text-sm font-semibold text-primary transition hover:border-secondary/50 hover:bg-surface-container-low">
+                <span aria-hidden="true" className="text-xl">{section.emoji}</span>
+                {section.label}
+              </a>
+              {index < universitySections.length - 1 && <Icon name="arrow_forward" className="text-outline" />}
             </div>
           ))}
-        </div>
-      </section>
+        </nav>
+      )}
 
       <nav className="card sticky top-[72px] z-30 flex gap-1 overflow-x-auto p-1.5">
         {tabs.map((t) =>
@@ -311,11 +322,9 @@ export default function CollegeHubPage() {
         <div className="min-w-0 space-y-6">
           {tab === 'overview' && (
             <>
-              <section className="card p-6">
-                <SectionHeader title={`About ${college.name}`} icon="info" />
-                <p className="leading-relaxed text-on-surface-variant">{college.description}</p>
-              </section>
               {college.majors.length > 0 && <PopularMajorsSection college={college} />}
+              <UniversityNewsSection college={college} posts={posts} />
+              <UniversityGallerySection college={college} posts={posts} />
               <DiscussionsSection college={college} />
             </>
           )}
