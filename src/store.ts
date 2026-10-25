@@ -17,10 +17,35 @@ export interface OnboardingProfile {
   purpose: string;
 }
 
+export type ProfileBannerBackground =
+  | 'academix'
+  | 'deep-blue'
+  | 'ocean-teal'
+  | 'purple'
+  | 'sunset-orange'
+  | 'emerald-green'
+  | 'rose-pink'
+  | 'slate-gray'
+  | 'midnight-dark'
+  | 'sky-blue'
+  | 'indigo'
+  | 'lavender'
+  | 'coral'
+  | 'amber'
+  | 'forest-green'
+  | 'mint'
+  | 'berry'
+  | 'copper'
+  | `#${string}`;
+
 export interface AuthenticatedUser extends OnboardingProfile {
   id: string;
   email: string;
   role: 'scholar' | 'prospective' | 'faculty';
+  bannerBackground?: ProfileBannerBackground;
+  bannerImage?: string;
+  bannerImagePosition?: string;
+  bannerImageZoom?: number;
   location?: string;
   university?: string;
   major?: string;
@@ -38,6 +63,10 @@ interface AppState {
   advisorOpen: boolean;
   authOpen: boolean;
   toast: Toast | null;
+  miniChatTicketId: string | null;
+  miniChatMinimized: boolean;
+  miniChatHidden: boolean;
+  messageSoundsEnabled: boolean;
 
   vote: (postId: string, direction: 1 | -1) => void;
   toggleBookmark: (postId: string) => void;
@@ -53,6 +82,12 @@ interface AppState {
   setAuthenticatedUser: (user: AuthenticatedUser) => void;
   setAdvisorOpen: (value: boolean) => void;
   setAuthOpen: (value: boolean) => void;
+  setMiniChatTicketId: (ticketId: string | null) => void;
+  setMiniChatMinimized: (minimized: boolean) => void;
+  setMiniChatHidden: (hidden: boolean) => void;
+  setMessageSoundsEnabled: (enabled: boolean) => void;
+  openMiniChatForPerson: (person: { id: string; name: string; subtitle: string; avatar?: string }) => void;
+  receiveMessage: (ticketId: string, message: Ticket['messages'][number]) => void;
   showToast: (message: string, icon?: string) => void;
 }
 
@@ -68,10 +103,24 @@ const channelForForum = (forum: string) =>
 
 let toastId = 0;
 
+const playMessageNotification = () => {
+  const context = new window.AudioContext();
+  const oscillator = context.createOscillator();
+  const volume = context.createGain();
+  oscillator.type = 'sine';
+  oscillator.frequency.value = 720;
+  volume.gain.value = 0.035;
+  oscillator.connect(volume);
+  volume.connect(context.destination);
+  oscillator.onended = () => void context.close();
+  oscillator.start();
+  oscillator.stop(context.currentTime + 0.12);
+};
+
 /**
  * Community content is seeded locally; authenticated account data comes from the API.
  */
-export const useApp = create<AppState>((set) => ({
+export const useApp = create<AppState>((set, get) => ({
   posts: initialPosts,
   tickets: initialTickets,
   savedColleges: [],
@@ -81,6 +130,10 @@ export const useApp = create<AppState>((set) => ({
   advisorOpen: false,
   authOpen: false,
   toast: null,
+  miniChatTicketId: null,
+  miniChatMinimized: false,
+  miniChatHidden: false,
+  messageSoundsEnabled: typeof window !== 'undefined' && window.localStorage.getItem('academix.message-sounds') === 'true',
 
   // Aynı yöne tekrar basmak oyu geri alır.
   vote: (postId, direction) =>
@@ -179,6 +232,9 @@ export const useApp = create<AppState>((set) => ({
     authChecked: true,
     ...(signedIn ? {} : {
       user: null,
+      miniChatTicketId: null,
+      miniChatMinimized: false,
+      miniChatHidden: false,
       ...(s.user ? { posts: initialPosts, tickets: initialTickets, savedColleges: [] } : {}),
     }),
   })),
@@ -186,10 +242,88 @@ export const useApp = create<AppState>((set) => ({
     user,
     signedIn: true,
     authChecked: true,
+    ...(s.user?.id !== user.id ? { miniChatTicketId: null, miniChatMinimized: false, miniChatHidden: false } : {}),
     ...(s.user?.id !== user.id ? { posts: initialPosts, tickets: initialTickets, savedColleges: [] } : {}),
   })),
   setAdvisorOpen: (advisorOpen) => set({ advisorOpen }),
   setAuthOpen: (authOpen) => set({ authOpen }),
+  setMiniChatTicketId: (miniChatTicketId) => set({
+    miniChatTicketId,
+    ...(!miniChatTicketId ? { miniChatMinimized: false, miniChatHidden: false } : { miniChatHidden: false }),
+  }),
+  setMiniChatMinimized: (miniChatMinimized) => set({ miniChatMinimized }),
+  setMiniChatHidden: (miniChatHidden) => set({ miniChatHidden }),
+  setMessageSoundsEnabled: (messageSoundsEnabled) => {
+    window.localStorage.setItem('academix.message-sounds', String(messageSoundsEnabled));
+    set({ messageSoundsEnabled });
+  },
+  openMiniChatForPerson: (person) =>
+    set((state) => {
+      const existing = state.tickets.find((ticket) =>
+        ticket.contactId === person.id ||
+        (ticket.category === 'Direct message' &&
+          (ticket.from === person.name ||
+            ticket.messages.some((message) => message.author === person.name && !message.isMe))),
+      );
+      const ticketId = existing?.id ?? `direct-${person.id}`;
+      const tickets = existing ? state.tickets : [
+        {
+          id: ticketId,
+          contactId: person.id,
+          ...(person.avatar ? { contactAvatar: person.avatar } : {}),
+          category: 'Direct message',
+          timeAgo: 'Just now',
+          title: `Conversation with ${person.name}`,
+          preview: '',
+          from: person.name,
+          fromMeta: person.subtitle,
+          messages: [],
+          resolved: false,
+          unread: false,
+        },
+        ...state.tickets,
+      ];
+      return {
+        tickets,
+        miniChatTicketId: ticketId,
+        miniChatMinimized: false,
+        miniChatHidden: false,
+      };
+    }),
+  receiveMessage: (ticketId, message) => {
+    const state = get();
+    if (!state.tickets.some((item) => item.id === ticketId)) {
+      state.showToast('Unable to open this conversation', 'error');
+      return;
+    }
+    const shouldNotify = !message.isMe && state.messageSoundsEnabled &&
+      (state.miniChatTicketId !== ticketId || state.miniChatMinimized || state.miniChatHidden ||
+        (typeof document !== 'undefined' &&
+          (document.visibilityState !== 'visible' || !document.hasFocus())));
+    set((current) => ({
+        tickets: updateTicket(current.tickets, ticketId, (item) => ({
+          ...item,
+          messages: [...item.messages, message],
+          preview: message.text,
+          unread: !message.isMe,
+          timeAgo: 'Just now',
+        })),
+        ...(!message.isMe
+          ? {
+            miniChatTicketId: ticketId,
+            miniChatMinimized: current.miniChatTicketId !== ticketId || current.miniChatMinimized || current.miniChatHidden,
+            miniChatHidden: false,
+          }
+          : {}),
+      }));
+    if (shouldNotify && typeof window !== 'undefined' && 'AudioContext' in window) {
+      try {
+        playMessageNotification();
+      } catch {
+        get().showToast('Unable to play the message notification sound', 'error');
+      }
+    }
+  },
 
   showToast: (message, icon = 'check_circle') => {
     const id = ++toastId;

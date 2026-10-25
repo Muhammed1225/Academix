@@ -206,6 +206,8 @@ export interface Message {
 
 export interface Ticket {
   id: string;
+  contactId?: string;
+  contactAvatar?: string;
   category: string;
   timeAgo: string;
   title: string;
