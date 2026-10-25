@@ -5,10 +5,15 @@ import { authenticate } from '../authService';
 import { useApp } from '../store';
 import { BrandMark, Icon, cx } from '../components/ui';
 import SearchableSelect from '../components/SearchableSelect';
+import GoldVerificationSection from '../components/GoldVerificationSection';
+import {
+  readIdentityDocument,
+  validateGoldVerification,
+  type VerificationMethod,
+} from '../components/goldVerification';
 import { majors, universities } from '../data/educationOptions';
 
 type Role = 'scholar' | 'prospective' | 'faculty';
-type Method = 'identity_document' | 'edu_email';
 type Errors = Record<string, string>;
 
 const roles: { id: Role; label: string; icon: string }[] = [
@@ -23,13 +28,6 @@ const requirements = [
   { label: 'At least one uppercase letter', test: (value: string) => /[A-Z]/.test(value) },
   { label: 'At least one special character', test: (value: string) => /[^A-Za-z0-9\s]/.test(value) },
 ];
-const readFile = (file: File) => new Promise<string>((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result.slice(reader.result.indexOf(',') + 1)) : reject(new Error('Unable to read file'));
-  reader.onerror = () => reject(new Error('Unable to read file'));
-  reader.readAsDataURL(file);
-});
-
 export default function AuthPage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
@@ -48,14 +46,13 @@ export default function AuthPage() {
   const [major, setMajor] = useState('');
   const [graduationYear, setGraduationYear] = useState('');
   const [requestGold, setRequestGold] = useState(false);
-  const [method, setMethod] = useState<Method>('identity_document');
+  const [method, setMethod] = useState<VerificationMethod>('identity_document');
   const [document, setDocument] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const setAuthenticatedUser = useApp((s) => s.setAuthenticatedUser);
   const showToast = useApp((s) => s.showToast);
   const registration = mode === 'register';
-  const verificationTitle = role === 'faculty' ? 'Faculty / Work ID' : 'Student card';
 
   const switchMode = (next: 'login' | 'register') => {
     setModeValue(next);
@@ -93,17 +90,19 @@ export default function AuthPage() {
     if (registration && role !== 'prospective' && !university) next.university = 'Choose your university.';
     if (registration && role !== 'prospective' && !major) next.major = role === 'faculty' ? 'Choose the subject you teach.' : 'Choose your major.';
     if (registration && role === 'scholar' && !graduationYear) next.graduationYear = 'Choose your graduation year.';
-    if (registration && role !== 'prospective' && requestGold) {
-      if (method === 'edu_email' && !/^[^@\s]+@[^@\s]+\.edu$/i.test(eduEmail.trim())) next.eduEmail = 'Enter a valid .edu email address.';
-      if (method === 'identity_document' && !document) next.document = `Upload a photo of your ${role === 'faculty' ? 'faculty or work ID' : 'student card'}.`;
-      if (document && (!['image/jpeg', 'image/png'].includes(document.type) || document.size > 5 * 1024 * 1024)) next.document = 'Choose a JPG or PNG image no larger than 5 MB.';
-    }
+    if (registration && role !== 'prospective') Object.assign(next, validateGoldVerification({
+      role,
+      requestGold,
+      method,
+      eduEmail,
+      document,
+    }));
     setErrors(next);
     if (Object.keys(next).length) return;
 
     setBusy(true);
     try {
-      const encoded = registration && requestGold && method === 'identity_document' && document ? await readFile(document) : undefined;
+      const encoded = registration && requestGold && method === 'identity_document' && document ? await readIdentityDocument(document) : undefined;
       const result = await authenticate(registration ? 'register' : 'login', { email: email.trim().toLowerCase(), password, ...(registration ? {
           name: name.trim(), role, university, major, graduationYear: graduationYear || undefined, confirmPassword: confirm,
           requestGoldVerification: requestGold, ...(requestGold ? { verificationMethod: method, ...(method === 'edu_email' ? { eduEmail: eduEmail.trim().toLowerCase() } : {}) } : {}),
@@ -165,13 +164,19 @@ export default function AuthPage() {
               <SearchableSelect label={role === 'faculty' ? 'Major / Subject taught' : 'Major'} value={major} onChange={setMajor} options={majors} error={errors.major}/>
               {role === 'scholar' && <label className="block text-sm font-semibold">Graduation year<select value={graduationYear} onChange={(e) => setGraduationYear(e.target.value)} className="input mt-2 !bg-surface-container-low/40 !py-[9px]" aria-invalid={Boolean(errors.graduationYear)}><option value="">Select graduation year</option>{Array.from({ length: 32 }, (_, index) => String(2000 + index)).map((year) => <option key={year}>{year}</option>)}</select>{errors.graduationYear && <span className="mt-1 block text-xs text-error">{errors.graduationYear}</span>}</label>}
             </div>}
-            {role !== 'prospective' && <div className="rounded-xl border border-outline-variant/70 bg-surface-container-low/60 p-3.5">
-              <label className="flex cursor-pointer items-center gap-2.5 text-sm font-semibold"><input type="checkbox" checked={requestGold} onChange={(e) => { setRequestGold(e.target.checked); setErrors({}); }} className="accent-secondary"/>Request gold verification</label>
-              {requestGold && <div className="mt-3 space-y-3">
-                <fieldset><legend className="text-sm font-semibold">Verification method</legend><div className="mt-2 grid gap-2 sm:grid-cols-2"><label className="flex cursor-pointer items-center gap-2 rounded-lg border border-outline-variant bg-white p-2.5 text-xs"><input type="radio" checked={method === 'identity_document'} onChange={() => setMethod('identity_document')} name="verification-method" className="accent-secondary"/>{verificationTitle}</label><label className="flex cursor-pointer items-center gap-2 rounded-lg border border-outline-variant bg-white p-2.5 text-xs"><input type="radio" checked={method === 'edu_email'} onChange={() => setMethod('edu_email')} name="verification-method" className="accent-secondary"/>.edu email</label></div></fieldset>
-                {method === 'identity_document' ? <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-outline-variant bg-white px-3 py-4 text-center"><Icon name="cloud_upload" className="text-secondary"/><span className="mt-1 text-sm font-semibold">Upload image of your {verificationTitle.toLowerCase()}</span><span className="mt-1 text-xs text-on-surface-variant">JPG or PNG, up to 5 MB</span><input type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" className="sr-only" onChange={(e) => setDocument(e.target.files?.[0] ?? null)}/>{document && <span className="mt-2 max-w-full truncate text-xs text-secondary">{document.name}</span>}{errors.document && <span className="mt-2 text-xs text-error">{errors.document}</span>}</label> : <label className="block text-sm font-semibold">Institutional .edu email<input type="email" value={eduEmail} onChange={(e) => setEduEmail(e.target.value)} placeholder="you@university.edu" className="input mt-2 !bg-surface-container-low/40 !py-[9px]" aria-invalid={Boolean(errors.eduEmail)}/>{errors.eduEmail && <span className="mt-1 block text-xs text-error">{errors.eduEmail}</span>}</label>}
-              </div>}
-            </div>}
+            {role !== 'prospective' && <GoldVerificationSection
+              role={role}
+              requestGold={requestGold}
+              setRequestGold={setRequestGold}
+              method={method}
+              setMethod={setMethod}
+              document={document}
+              setDocument={setDocument}
+              eduEmail={eduEmail}
+              setEduEmail={setEduEmail}
+              errors={errors}
+              setErrors={setErrors}
+            />}
           </div>}
           {!registration && <><label className="block text-sm font-semibold">Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" className="input mt-1.5" aria-invalid={Boolean(errors.email)}/>{errors.email && <span className="mt-1 block text-xs text-error">{errors.email}</span>}</label>{passwordInput('password')}</>}
           {errors.form && <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-sm text-on-error-container">{errors.form}</p>}
