@@ -10,6 +10,39 @@ const dataFile = resolve(process.env.AUTH_DATA_FILE || resolve(dirname(fileURLTo
 const verificationDirectory = resolve(dirname(dataFile), 'verification-documents');
 const sessions = new Map();
 const users = new Map();
+const profileBannerBackgrounds = new Set([
+  'academix',
+  'deep-blue',
+  'ocean-teal',
+  'purple',
+  'sunset-orange',
+  'emerald-green',
+  'rose-pink',
+  'slate-gray',
+  'midnight-dark',
+  'sky-blue',
+  'indigo',
+  'lavender',
+  'coral',
+  'amber',
+  'forest-green',
+  'mint',
+  'berry',
+  'copper',
+]);
+const isProfileBannerBackground = (value) =>
+  typeof value === 'string' && (profileBannerBackgrounds.has(value) || /^#[\da-f]{6}$/i.test(value));
+function isProfileBannerImage(value) {
+  const match = typeof value === 'string' &&
+    value.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
+  const content = match ? Buffer.from(match[2], 'base64') : null;
+  if (!match || !content?.length || content.length > 5 * 1024 * 1024 || content.toString('base64') !== match[2]) return false;
+  if (match[1] === 'image/jpeg') return content.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]));
+  if (match[1] === 'image/png') return content.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  return match[1] === 'image/webp' &&
+    content.toString('ascii', 0, 4) === 'RIFF' &&
+    content.toString('ascii', 8, 12) === 'WEBP';
+}
 const port = Number(process.env.AUTH_PORT || 3001);
 const allowTestLogin = process.env.NODE_ENV !== 'production' && process.env.AUTH_ALLOW_TEST_LOGIN !== 'false';
 
@@ -41,6 +74,7 @@ function sendJson(res, status, body, headers = {}) {
 }
 
 function publicUser(user) {
+  const bannerImageValid = isProfileBannerImage(user.bannerImage);
   return {
     id: user.id,
     email: user.email,
@@ -50,6 +84,10 @@ function publicUser(user) {
     ...(user.university ? { university: user.university } : {}),
     ...(user.major ? { major: user.major } : {}),
     ...(user.graduationYear ? { graduationYear: user.graduationYear } : {}),
+    ...(isProfileBannerBackground(user.bannerBackground) ? { bannerBackground: user.bannerBackground } : {}),
+    ...(bannerImageValid ? { bannerImage: user.bannerImage } : {}),
+    ...(bannerImageValid && typeof user.bannerImagePosition === 'string' && /^(?:100|[1-9]?\d)% (?:100|[1-9]?\d)%$/.test(user.bannerImagePosition) ? { bannerImagePosition: user.bannerImagePosition } : {}),
+    ...(bannerImageValid && Number.isFinite(user.bannerImageZoom) && user.bannerImageZoom >= 1 && user.bannerImageZoom <= 2.5 ? { bannerImageZoom: user.bannerImageZoom } : {}),
     verificationStatus: user.verificationStatus,
     photo: user.photo || '',
     biography: user.biography || '',
@@ -122,6 +160,7 @@ const server = createServer(async (req, res) => {
       sendJson(res, 415, { error: 'Expected a JSON request' });
       return;
     }
+    let verificationDocumentPath;
     try {
       const input = await readBody(req, 7_100_000);
       if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -157,6 +196,46 @@ const server = createServer(async (req, res) => {
           return;
         }
         updated.purpose = input.purpose;
+      }
+      if (input.bannerBackground !== undefined) {
+        if (!isProfileBannerBackground(input.bannerBackground)) {
+          sendJson(res, 400, { error: 'Choose a valid profile banner background.' });
+          return;
+        }
+        updated.bannerBackground = input.bannerBackground;
+      }
+      if (input.bannerImage !== undefined) {
+        if (input.bannerImage === null || input.bannerImage === '') {
+          delete updated.bannerImage;
+          delete updated.bannerImagePosition;
+          delete updated.bannerImageZoom;
+        } else if (!isProfileBannerImage(input.bannerImage)) {
+          sendJson(res, 400, { error: 'Choose a valid JPG, PNG, or WebP banner image no larger than 5 MB.' });
+          return;
+        } else {
+          updated.bannerImage = input.bannerImage;
+        }
+      }
+      if (input.bannerImagePosition !== undefined) {
+        if (input.bannerImagePosition === null || input.bannerImagePosition === '') {
+          delete updated.bannerImagePosition;
+        } else if (typeof input.bannerImagePosition !== 'string' ||
+          !/^(?:100|[1-9]?\d)% (?:100|[1-9]?\d)%$/.test(input.bannerImagePosition) || !updated.bannerImage) {
+          sendJson(res, 400, { error: 'Choose a valid banner image position.' });
+          return;
+        } else {
+          updated.bannerImagePosition = input.bannerImagePosition;
+        }
+      }
+      if (input.bannerImageZoom !== undefined) {
+        if (input.bannerImageZoom === null) {
+          delete updated.bannerImageZoom;
+        } else if (!Number.isFinite(input.bannerImageZoom) || input.bannerImageZoom < 1 || input.bannerImageZoom > 2.5 || !updated.bannerImage) {
+          sendJson(res, 400, { error: 'Choose a valid banner image zoom.' });
+          return;
+        } else {
+          updated.bannerImageZoom = input.bannerImageZoom;
+        }
       }
       if (input.photo !== undefined) {
         if (input.photo === '') {
@@ -207,16 +286,103 @@ const server = createServer(async (req, res) => {
         }
       }
       if (input.role !== undefined) {
-        if (user.role !== 'prospective' || input.role !== 'scholar') {
-          sendJson(res, 403, { error: 'Only prospective students can update their account to student / scholar.' });
+        if (!['scholar', 'prospective', 'faculty'].includes(input.role) || input.role === user.role) {
+          sendJson(res, 400, { error: 'Choose a different valid account role.' });
           return;
         }
-        if (!updated.university || !updated.major || !Number.isInteger(updated.graduationYear) ||
-          updated.graduationYear < 2000 || updated.graduationYear > 2100) {
-          sendJson(res, 400, { error: 'Choose your university, major, and a valid graduation year before updating your account.' });
+        const university = typeof input.university === 'string' ? input.university.trim() : '';
+        const major = typeof input.major === 'string' ? input.major.trim() : '';
+        if (input.role !== 'prospective' && (!university || !major)) {
+          sendJson(res, 400, { error: 'Choose your university and major or subject.' });
           return;
         }
-        updated.role = 'scholar';
+        if (input.role === 'scholar' &&
+          (!Number.isInteger(input.graduationYear) || input.graduationYear < 2000 || input.graduationYear > 2100)) {
+          sendJson(res, 400, { error: 'Choose a valid graduation year.' });
+          return;
+        }
+        const isVerificationRequest = input.requestGoldVerification === true;
+        if (input.requestGoldVerification !== undefined && typeof input.requestGoldVerification !== 'boolean') {
+          sendJson(res, 400, { error: 'Invalid Gold verification request.' });
+          return;
+        }
+        if (isVerificationRequest && !['scholar', 'faculty'].includes(input.role)) {
+          sendJson(res, 400, { error: 'Gold verification is available for student / scholar and faculty / representative accounts.' });
+          return;
+        }
+        const verificationMethod = input.verificationMethod;
+        if (isVerificationRequest && !['identity_document', 'edu_email'].includes(verificationMethod)) {
+          sendJson(res, 400, { error: 'Choose a valid verification method.' });
+          return;
+        }
+        const eduEmail = typeof input.eduEmail === 'string' ? input.eduEmail.trim().toLowerCase() : '';
+        if (isVerificationRequest && verificationMethod === 'edu_email' && !/^[^@\s]+@[^@\s]+\.edu$/.test(eduEmail)) {
+          sendJson(res, 400, { error: 'Enter a valid institutional .edu email for this verification option.' });
+          return;
+        }
+        const identityDocument = input.identityDocument ? decodeIdentityDocument(input.identityDocument) : null;
+        if (identityDocument && input.identityDocument.type !== (input.role === 'faculty' ? 'work_card' : 'student_card')) {
+          sendJson(res, 400, { error: 'Choose the identity document type that matches your account role.' });
+          return;
+        }
+        if (input.identityDocument && !identityDocument) {
+          sendJson(res, 400, { error: 'Upload a valid JPG or PNG identity document no larger than 5 MB.' });
+          return;
+        }
+        if (isVerificationRequest && verificationMethod === 'identity_document' && !identityDocument) {
+          sendJson(res, 400, {
+            error: input.role === 'faculty'
+              ? 'Upload a faculty or work ID to request Gold verification.'
+              : 'Upload a student or work card to request Gold verification.',
+          });
+          return;
+        }
+        if (verificationMethod === 'edu_email' && identityDocument) {
+          sendJson(res, 400, { error: 'Choose either .edu email review or a student/work card.' });
+          return;
+        }
+        if (!isVerificationRequest && input.identityDocument) {
+          sendJson(res, 400, { error: 'Request verification to submit an identity document.' });
+          return;
+        }
+        updated.role = input.role;
+        if (university) updated.university = university;
+        else delete updated.university;
+        if (major) updated.major = major;
+        else delete updated.major;
+        if (input.role === 'scholar') updated.graduationYear = input.graduationYear;
+        else delete updated.graduationYear;
+        updated.verificationStatus = isVerificationRequest ? 'pending' : 'unverified';
+        delete updated.verificationRequest;
+        delete updated.verificationDocument;
+        if (isVerificationRequest) {
+          updated.verificationRequest = {
+            method: verificationMethod,
+            ...(verificationMethod === 'edu_email' ? { eduEmail } : {}),
+            submittedAt: new Date().toISOString(),
+          };
+          if (identityDocument) {
+            const extension = input.identityDocument.mimeType === 'image/png' ? '.png' : '.jpg';
+            const fileName = `${randomBytes(16).toString('hex')}${extension}`;
+            await mkdir(verificationDirectory, { recursive: true, mode: 0o700 });
+            const filePath = resolve(verificationDirectory, fileName);
+            await writeFile(filePath, identityDocument, { flag: 'wx', mode: 0o600 });
+            verificationDocumentPath = filePath;
+            updated.verificationDocument = {
+              fileName,
+              type: input.identityDocument.type,
+              submittedAt: new Date().toISOString(),
+            };
+          }
+        }
+      } else if (
+        input.requestGoldVerification !== undefined ||
+        input.verificationMethod !== undefined ||
+        input.eduEmail !== undefined ||
+        input.identityDocument !== undefined
+      ) {
+        sendJson(res, 400, { error: 'Gold verification details can only be submitted with a role change.' });
+        return;
       }
       if (session.testOnly) {
         session.user = updated;
@@ -226,11 +392,22 @@ const server = createServer(async (req, res) => {
           await saveUsers();
         } catch (error) {
           users.set(user.email, user);
+          if (verificationDocumentPath) {
+            await unlink(verificationDocumentPath).catch((cleanupError) => {
+              console.error('Unable to remove uncommitted verification document:', cleanupError);
+            });
+            verificationDocumentPath = undefined;
+          }
           throw error;
         }
       }
       sendJson(res, 200, { user: publicUser(updated) });
     } catch (error) {
+      if (verificationDocumentPath) {
+        await unlink(verificationDocumentPath).catch((cleanupError) => {
+          console.error('Unable to remove uncommitted verification document:', cleanupError);
+        });
+      }
       if (error instanceof SyntaxError || error.message === 'Request too large') {
         sendJson(res, 400, { error: 'Invalid profile update.' });
         return;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { BRAND } from '../data/mock';
@@ -21,6 +21,8 @@ function Header() {
   const user = useApp((s) => s.user);
   const authChecked = useApp((s) => s.authChecked);
   const setSignedIn = useApp((s) => s.setSignedIn);
+  const messageSoundsEnabled = useApp((s) => s.messageSoundsEnabled);
+  const setMessageSoundsEnabled = useApp((s) => s.setMessageSoundsEnabled);
   const showToast = useApp((s) => s.showToast);
   const posts = useApp((s) => s.posts);
   const navigate = useNavigate();
@@ -208,6 +210,20 @@ function Header() {
                 </Link>
                 <button
                   type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={messageSoundsEnabled}
+                  onClick={() => {
+                    const enabled = !messageSoundsEnabled;
+                    setMessageSoundsEnabled(enabled);
+                    showToast(`Message sounds ${enabled ? 'enabled' : 'disabled'}`, enabled ? 'volume_up' : 'volume_off');
+                  }}
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-surface-container-low"
+                >
+                  <Icon name={messageSoundsEnabled ? 'volume_up' : 'volume_off'} />
+                  Message sound notifications {messageSoundsEnabled ? 'on' : 'off'}
+                </button>
+                <button
+                  type="button"
                   role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
@@ -348,6 +364,488 @@ function ToastHost() {
   );
 }
 
+function MiniChatDock() {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const signedIn = useApp((state) => state.signedIn);
+  const ticketId = useApp((state) => state.miniChatTicketId);
+  const ticket = useApp((state) => state.tickets.find((item) => item.id === ticketId));
+  const reply = useApp((state) => state.reply);
+  const setHidden = useApp((state) => state.setMiniChatHidden);
+  const hidden = useApp((state) => state.miniChatHidden);
+  const minimized = useApp((state) => state.miniChatMinimized);
+  const setMinimized = useApp((state) => state.setMiniChatMinimized);
+  const markRead = useApp((state) => state.markRead);
+  const user = useApp((state) => state.user);
+  const [draft, setDraft] = useState('');
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [dockSize, setDockSize] = useState({ width: 340, height: 450 });
+  const [dockPosition, setDockPosition] = useState<{ left: number; top: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dockRef = useRef<HTMLElement>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    pointerX: number;
+    pointerY: number;
+    left: number;
+    top: number;
+    moved: boolean;
+  } | null>(null);
+  const pendingDragRef = useRef<{ x: number; y: number } | null>(null);
+  const dragFrameRef = useRef<number | null>(null);
+  const resizeRef = useRef<{
+    direction: 'top' | 'left' | 'corner';
+    pointerId: number;
+    pointerX: number;
+    pointerY: number;
+    width: number;
+    height: number;
+    right: number;
+    bottom: number;
+  } | null>(null);
+  const pendingPointerRef = useRef<{ x: number; y: number } | null>(null);
+  const resizeFrameRef = useRef<number | null>(null);
+  const previousUserSelectRef = useRef<string | null>(null);
+  const messageEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const emojis = ['😀', '😂', '😊', '😍', '🥳', '🤔', '👏', '🙌', '👍', '❤️', '🎓', '📚', '✨', '✅', '🎉', '🙏'];
+
+  useEffect(() => {
+    setDraft(ticket?.suggestedReply ?? '');
+    setEmojiOpen(false);
+  }, [ticket?.id, ticket?.suggestedReply]);
+
+  useEffect(() => {
+    if (!minimized) messageEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [ticket?.messages.length, minimized]);
+
+  useEffect(() => {
+    return () => {
+      if (resizeFrameRef.current !== null) window.cancelAnimationFrame(resizeFrameRef.current);
+      if (dragFrameRef.current !== null) window.cancelAnimationFrame(dragFrameRef.current);
+      if (previousUserSelectRef.current !== null) {
+        document.documentElement.style.userSelect = previousUserSelectRef.current;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!minimized && !hidden && !pathname.startsWith('/inbox')) return;
+    resizeRef.current = null;
+    pendingPointerRef.current = null;
+    if (resizeFrameRef.current !== null) {
+      window.cancelAnimationFrame(resizeFrameRef.current);
+      resizeFrameRef.current = null;
+    }
+    if (previousUserSelectRef.current !== null) {
+      document.documentElement.style.userSelect = previousUserSelectRef.current;
+      previousUserSelectRef.current = null;
+    }
+  }, [hidden, minimized, pathname]);
+
+  useEffect(() => {
+    if (!ticket || minimized || hidden || pathname.startsWith('/inbox')) return;
+    const markFocusedConversationRead = () => {
+      if (ticket.unread && document.visibilityState === 'visible' && document.hasFocus()) {
+        markRead(ticket.id);
+      }
+    };
+    markFocusedConversationRead();
+    window.addEventListener('focus', markFocusedConversationRead);
+    document.addEventListener('visibilitychange', markFocusedConversationRead);
+    return () => {
+      window.removeEventListener('focus', markFocusedConversationRead);
+      document.removeEventListener('visibilitychange', markFocusedConversationRead);
+    };
+  }, [hidden, markRead, minimized, pathname, ticket]);
+
+  if (!signedIn || !ticket || hidden || pathname.startsWith('/inbox')) return null;
+
+  const otherUser = [...ticket.messages].reverse().find((message) => !message.isMe)?.author ?? ticket.from;
+
+  const expandConversation = () => {
+    setMinimized(false);
+    navigate(`/inbox/${ticket.id}`);
+  };
+
+  const startDrag = (event: PointerEvent<HTMLElement>) => {
+    if (event.button !== 0 || resizeRef.current || dragRef.current) return;
+    if (event.target instanceof Element && event.target.closest('button, textarea, form, [role="menu"]')) return;
+    const bounds = dockRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    previousUserSelectRef.current = document.documentElement.style.userSelect;
+    document.documentElement.style.userSelect = 'none';
+    dragRef.current = {
+      pointerId: event.pointerId,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      left: bounds.left,
+      top: bounds.top,
+      moved: false,
+    };
+    setIsDragging(true);
+  };
+
+  const moveDrag = (event: PointerEvent<HTMLElement>) => {
+    const drag = dragRef.current;
+    if (drag?.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - drag.pointerX;
+    const deltaY = event.clientY - drag.pointerY;
+    if (!drag.moved && Math.hypot(deltaX, deltaY) <= 4) return;
+    event.preventDefault();
+    drag.moved = true;
+    pendingDragRef.current = { x: drag.left + deltaX, y: drag.top + deltaY };
+    if (dragFrameRef.current === null) {
+      dragFrameRef.current = window.requestAnimationFrame(() => {
+        dragFrameRef.current = null;
+        const next = pendingDragRef.current;
+        if (!next || !dockRef.current) return;
+        const bounds = dockRef.current.getBoundingClientRect();
+        setDockPosition({
+          left: Math.max(0, Math.min(window.innerWidth - bounds.width, next.x)),
+          top: Math.max(0, Math.min(window.innerHeight - bounds.height, next.y)),
+        });
+      });
+    }
+  };
+
+  const stopDrag = (event: PointerEvent<HTMLElement>) => {
+    const drag = dragRef.current;
+    if (drag?.pointerId !== event.pointerId) return;
+    if (drag.moved) {
+      const bounds = dockRef.current?.getBoundingClientRect();
+      if (bounds) {
+        const deltaX = event.clientX - drag.pointerX;
+        const deltaY = event.clientY - drag.pointerY;
+        setDockPosition({
+          left: Math.max(0, Math.min(window.innerWidth - bounds.width, drag.left + deltaX)),
+          top: Math.max(0, Math.min(window.innerHeight - bounds.height, drag.top + deltaY)),
+        });
+      }
+    } else {
+      setMinimized(!minimized);
+    }
+    dragRef.current = null;
+    setIsDragging(false);
+    pendingDragRef.current = null;
+    if (dragFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = null;
+    }
+    document.documentElement.style.userSelect = previousUserSelectRef.current ?? '';
+    previousUserSelectRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const cancelDrag = (event: PointerEvent<HTMLElement>) => {
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setIsDragging(false);
+    pendingDragRef.current = null;
+    if (dragFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = null;
+    }
+    document.documentElement.style.userSelect = previousUserSelectRef.current ?? '';
+    previousUserSelectRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const startResize = (direction: 'top' | 'left' | 'corner', event: PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (resizeRef.current || dragRef.current) return;
+    const bounds = dockRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    previousUserSelectRef.current = document.documentElement.style.userSelect;
+    document.documentElement.style.userSelect = 'none';
+    resizeRef.current = {
+      direction,
+      pointerId: event.pointerId,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      width: bounds.width,
+      height: bounds.height,
+      right: bounds.right,
+      bottom: bounds.bottom,
+    };
+  };
+
+  const applyResize = (pointerX: number, pointerY: number) => {
+    const start = resizeRef.current;
+    if (!start) return;
+    const desktop = window.matchMedia('(min-width: 640px)').matches;
+    const maxWidth = Math.max(1, Math.min(
+      start.right,
+      window.innerWidth - (desktop ? 32 : 24),
+    ));
+    const maxHeight = Math.max(1, Math.min(
+      start.bottom,
+      window.innerHeight - (desktop ? 32 : 96),
+    ));
+    const minWidth = Math.min(280, maxWidth);
+    const minHeight = Math.min(300, maxHeight);
+    const width = start.direction === 'top'
+      ? start.width
+      : Math.max(minWidth, Math.min(maxWidth, start.width - (pointerX - start.pointerX)));
+    const height = start.direction === 'left'
+      ? start.height
+      : Math.max(minHeight, Math.min(maxHeight, start.height - (pointerY - start.pointerY)));
+    setDockSize({ width, height });
+    setDockPosition({
+      left: Math.max(0, Math.min(window.innerWidth - width, start.right - width)),
+      top: Math.max(0, Math.min(window.innerHeight - height, start.bottom - height)),
+    });
+  };
+
+  const moveResize = (event: PointerEvent<HTMLDivElement>) => {
+    if (resizeRef.current?.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    pendingPointerRef.current = { x: event.clientX, y: event.clientY };
+    if (resizeFrameRef.current === null) {
+      resizeFrameRef.current = window.requestAnimationFrame(() => {
+        resizeFrameRef.current = null;
+        const pointer = pendingPointerRef.current;
+        if (pointer) applyResize(pointer.x, pointer.y);
+      });
+    }
+  };
+
+  const stopResize = (event: PointerEvent<HTMLDivElement>) => {
+    if (resizeRef.current?.pointerId !== event.pointerId) return;
+    applyResize(event.clientX, event.clientY);
+    resizeRef.current = null;
+    pendingPointerRef.current = null;
+    if (resizeFrameRef.current !== null) {
+      window.cancelAnimationFrame(resizeFrameRef.current);
+      resizeFrameRef.current = null;
+    }
+    document.documentElement.style.userSelect = previousUserSelectRef.current ?? '';
+    previousUserSelectRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const sendReply = (event: FormEvent) => {
+    event.preventDefault();
+    if (!draft.trim() || ticket.resolved) return;
+    reply(ticket.id, draft.trim());
+    setDraft('');
+    setEmojiOpen(false);
+  };
+
+  if (minimized) {
+    return (
+      <button
+        type="button"
+        onClick={() => setMinimized(false)}
+        aria-label={`Restore conversation with ${otherUser}`}
+        className="fixed bottom-20 right-3 z-40 flex max-w-[calc(100vw-1.5rem)] items-center gap-3 rounded-full border border-outline-variant/60 bg-white py-2 pl-2 pr-4 text-left shadow-float transition hover:-translate-y-0.5 hover:shadow-lg sm:bottom-4 sm:right-4"
+      >
+        <span className="relative">
+          <Avatar src={ticket.contactAvatar} name={otherUser} size={40} rounded="rounded-full" />
+          <span role="img" aria-label="Presence unavailable" title="Presence unavailable" className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-slate-400" />
+          {ticket.unread && <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-white bg-error" />}
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-semibold text-primary">{otherUser}</span>
+          <span className="block text-xs text-on-surface-variant">Conversation minimized</span>
+        </span>
+        <Icon name="chat" className="text-secondary" />
+      </button>
+    );
+  }
+
+  return (
+    <section
+      ref={dockRef}
+      aria-label={`Conversation with ${otherUser}`}
+      style={{
+        width: dockSize.width,
+        height: dockSize.height,
+        ...(dockPosition ? { left: dockPosition.left, top: dockPosition.top } : {}),
+      }}
+      className={`group fixed z-40 flex max-h-[calc(100dvh-6rem)] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-t-2xl rounded-b-xl border border-outline-variant/60 bg-white shadow-float sm:max-h-[calc(100dvh-2rem)] sm:max-w-[calc(100vw-2rem)] ${dockPosition ? '' : 'bottom-20 right-3 sm:bottom-4 sm:right-4'}`}
+    >
+      <div
+        role="separator"
+        aria-label="Resize chat height"
+        aria-orientation="horizontal"
+        onPointerDown={(event) => startResize('top', event)}
+        onPointerMove={moveResize}
+        onPointerUp={stopResize}
+        onPointerCancel={stopResize}
+        onLostPointerCapture={stopResize}
+        className="absolute inset-x-2 top-0 z-20 h-2 cursor-ns-resize touch-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-transparent before:transition-colors hover:before:bg-[#0B5BD3]/70"
+      />
+      <div
+        role="separator"
+        aria-label="Resize chat width"
+        aria-orientation="vertical"
+        onPointerDown={(event) => startResize('left', event)}
+        onPointerMove={moveResize}
+        onPointerUp={stopResize}
+        onPointerCancel={stopResize}
+        onLostPointerCapture={stopResize}
+        className="absolute bottom-2 left-0 top-2 z-20 w-2 cursor-ew-resize touch-none before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-transparent before:transition-colors hover:before:bg-[#0B5BD3]/70"
+      />
+      <div
+        role="separator"
+        aria-label="Resize chat width and height"
+        aria-orientation="vertical"
+        onPointerDown={(event) => startResize('corner', event)}
+        onPointerMove={moveResize}
+        onPointerUp={stopResize}
+        onPointerCancel={stopResize}
+        onLostPointerCapture={stopResize}
+        className="group/corner absolute left-0 top-0 z-30 h-3 w-3 cursor-nwse-resize touch-none"
+      >
+        <span className="pointer-events-none absolute left-1 top-1 flex rotate-45 gap-px opacity-0 transition-opacity group-hover/corner:opacity-100">
+          <span className="h-1 w-1 rounded-full bg-[#0B5BD3]" />
+          <span className="h-1 w-1 rounded-full bg-[#0B5BD3]" />
+          <span className="h-1 w-1 rounded-full bg-[#0B5BD3]" />
+        </span>
+      </div>
+      <header
+        onPointerDown={startDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={stopDrag}
+        onPointerCancel={cancelDrag}
+        onLostPointerCapture={cancelDrag}
+        className={`flex touch-none items-center gap-2.5 border-b border-white/15 bg-[#0B5BD3] px-3.5 py-3 text-white ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+      >
+        <div
+          role="button"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              setMinimized(!minimized);
+            }
+          }}
+          aria-label={`Conversation with ${otherUser}. Drag to move, click to ${minimized ? 'restore' : 'minimize'}.`}
+          className="flex min-w-0 flex-1 touch-none items-center gap-2.5 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+        >
+          <span className="relative">
+            <Avatar src={ticket.contactAvatar} name={otherUser} size={38} rounded="rounded-full" />
+            <span role="img" aria-label="Presence unavailable" title="Presence unavailable" className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#0B5BD3] bg-slate-300" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold">{otherUser}</span>
+            <span className="block truncate text-xs text-white/80">{ticket.title}</span>
+          </span>
+          <span aria-hidden="true" className="flex shrink-0 gap-0.5 opacity-60">
+            <span className="h-1 w-1 rounded-full bg-white" />
+            <span className="h-1 w-1 rounded-full bg-white" />
+            <span className="h-1 w-1 rounded-full bg-white" />
+          </span>
+        </div>
+        <div className="flex items-center">
+          <button
+            type="button"
+            onClick={expandConversation}
+            className="rounded-full p-2 transition hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            aria-label="Expand conversation to Messages"
+            title="Expand"
+          >
+            <Icon name="open_in_full" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMinimized(true)}
+            className="rounded-full p-2 transition hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            aria-label="Minimize chat"
+            title="Minimize"
+          >
+            <Icon name="minimize" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setHidden(true)}
+            className="rounded-full p-2 transition hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            aria-label="Close mini chat"
+            title="Close"
+          >
+            <Icon name="close" />
+          </button>
+        </div>
+      </header>
+      <div role="log" aria-label="Conversation messages" aria-live="polite" className="flex-1 space-y-3 overflow-y-auto bg-surface p-3">
+        {ticket.messages.map((message, index) => (
+          <div key={`${ticket.id}-${index}`} className={`flex ${message.isMe ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[88%] rounded-2xl px-3 py-2 ${message.isMe ? 'rounded-br-md bg-secondary text-white' : 'rounded-bl-md border border-outline-variant/50 bg-white text-on-surface'}`}>
+              {!message.isMe && <p className="mb-0.5 text-[11px] font-semibold text-on-surface-variant">{message.author}</p>}
+              <p className="whitespace-pre-wrap break-words text-sm">{message.text}</p>
+              <p className={`mt-1 text-right text-[10px] ${message.isMe ? 'text-white/75' : 'text-on-surface-variant'}`}>{message.time}</p>
+            </div>
+          </div>
+        ))}
+        <div ref={messageEndRef} />
+      </div>
+      {ticket.resolved ? (
+        <p className="border-t border-outline-variant/50 px-4 py-3 text-center text-xs text-on-surface-variant">This conversation is resolved.</p>
+      ) : (
+        <div className="relative border-t border-outline-variant/50 bg-white p-2.5">
+          {emojiOpen && (
+            <div role="group" aria-label="Choose an emoji" className="absolute bottom-full left-2 right-2 mb-2 flex flex-wrap gap-1 rounded-xl border border-outline-variant/60 bg-white p-2 shadow-float">
+              {emojis.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => {
+                    setDraft((value) => `${value}${emoji}`);
+                    inputRef.current?.focus();
+                  }}
+                  className="rounded-lg p-1.5 text-lg transition hover:bg-surface-container-low focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary"
+                  aria-label={`Insert ${emoji}`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+          <form onSubmit={sendReply} className="flex items-end gap-1.5">
+            <button
+              type="button"
+              onClick={() => setEmojiOpen((open) => !open)}
+              aria-label="Insert emoji"
+              aria-expanded={emojiOpen}
+              className="mb-1 rounded-full p-2 text-on-surface-variant transition hover:bg-surface-container-low hover:text-secondary"
+            >
+              <Icon name="mood" />
+            </button>
+            <textarea
+              ref={inputRef}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+              rows={1}
+              placeholder="Write a message…"
+              aria-label="Write a reply"
+              className="input min-h-10 resize-none !rounded-2xl !px-3 !py-2 text-sm"
+            />
+            <button type="submit" disabled={!draft.trim()} className="mb-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary text-white transition hover:bg-secondary/90 disabled:cursor-not-allowed disabled:opacity-50" aria-label={`Send reply as ${user?.name ?? 'you'}`}>
+              <Icon name="send" className="!text-[18px]" />
+            </button>
+          </form>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function CommunityLauncher() {
   const { pathname } = useLocation();
   if (pathname.startsWith('/compose')) return null;
@@ -393,6 +891,7 @@ export default function Layout() {
       <CommunityLauncher />
       <AdvisorLauncher />
       <AdvisorDrawer />
+      <MiniChatDock />
       <ToastHost />
     </div>
   );

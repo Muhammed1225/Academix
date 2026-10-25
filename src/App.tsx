@@ -14,7 +14,7 @@ import PersonProfilePage from './pages/PersonProfilePage';
 import SearchPage from './pages/SearchPage';
 import AuthPage from './pages/AuthPage';
 import OnboardingPage from './pages/OnboardingPage';
-import OwnProfilePage from './pages/OwnProfilePage';
+import OwnProfilePage, { RoleChangePage } from './pages/OwnProfilePage';
 import UniversityJoinedPage from './pages/UniversityJoinedPage';
 import { loadAuthSession } from './authService';
 import { useApp } from './store';
@@ -60,6 +60,7 @@ export default function App() {
           <Route path="mentors/:mentorId" element={<MentorProfilePage />} />
           <Route path="people/:personId" element={<PersonProfilePage />} />
           <Route path="profile" element={<OwnProfilePage />} />
+          <Route path="change-role" element={<RoleChangePage />} />
           <Route path="profile/university-joined" element={<UniversityJoinedPage />} />
           <Route path="inbox" element={<InboxPage />} />
           <Route path="inbox/:ticketId" element={<InboxPage />} />
