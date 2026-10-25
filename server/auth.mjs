@@ -10,6 +10,39 @@ const dataFile = resolve(process.env.AUTH_DATA_FILE || resolve(dirname(fileURLTo
 const verificationDirectory = resolve(dirname(dataFile), 'verification-documents');
 const sessions = new Map();
 const users = new Map();
+const profileBannerBackgrounds = new Set([
+  'academix',
+  'deep-blue',
+  'ocean-teal',
+  'purple',
+  'sunset-orange',
+  'emerald-green',
+  'rose-pink',
+  'slate-gray',
+  'midnight-dark',
+  'sky-blue',
+  'indigo',
+  'lavender',
+  'coral',
+  'amber',
+  'forest-green',
+  'mint',
+  'berry',
+  'copper',
+]);
+const isProfileBannerBackground = (value) =>
+  typeof value === 'string' && (profileBannerBackgrounds.has(value) || /^#[\da-f]{6}$/i.test(value));
+function isProfileBannerImage(value) {
+  const match = typeof value === 'string' &&
+    value.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
+  const content = match ? Buffer.from(match[2], 'base64') : null;
+  if (!match || !content?.length || content.length > 5 * 1024 * 1024 || content.toString('base64') !== match[2]) return false;
+  if (match[1] === 'image/jpeg') return content.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]));
+  if (match[1] === 'image/png') return content.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  return match[1] === 'image/webp' &&
+    content.toString('ascii', 0, 4) === 'RIFF' &&
+    content.toString('ascii', 8, 12) === 'WEBP';
+}
 const port = Number(process.env.AUTH_PORT || 3001);
 const allowTestLogin = process.env.NODE_ENV !== 'production' && process.env.AUTH_ALLOW_TEST_LOGIN !== 'false';
 
@@ -41,6 +74,7 @@ function sendJson(res, status, body, headers = {}) {
 }
 
 function publicUser(user) {
+  const bannerImageValid = isProfileBannerImage(user.bannerImage);
   return {
     id: user.id,
     email: user.email,
@@ -50,6 +84,10 @@ function publicUser(user) {
     ...(user.university ? { university: user.university } : {}),
     ...(user.major ? { major: user.major } : {}),
     ...(user.graduationYear ? { graduationYear: user.graduationYear } : {}),
+    ...(isProfileBannerBackground(user.bannerBackground) ? { bannerBackground: user.bannerBackground } : {}),
+    ...(bannerImageValid ? { bannerImage: user.bannerImage } : {}),
+    ...(bannerImageValid && typeof user.bannerImagePosition === 'string' && /^(?:100|[1-9]?\d)% (?:100|[1-9]?\d)%$/.test(user.bannerImagePosition) ? { bannerImagePosition: user.bannerImagePosition } : {}),
+    ...(bannerImageValid && Number.isFinite(user.bannerImageZoom) && user.bannerImageZoom >= 1 && user.bannerImageZoom <= 2.5 ? { bannerImageZoom: user.bannerImageZoom } : {}),
     verificationStatus: user.verificationStatus,
     photo: user.photo || '',
     biography: user.biography || '',
@@ -158,6 +196,46 @@ const server = createServer(async (req, res) => {
           return;
         }
         updated.purpose = input.purpose;
+      }
+      if (input.bannerBackground !== undefined) {
+        if (!isProfileBannerBackground(input.bannerBackground)) {
+          sendJson(res, 400, { error: 'Choose a valid profile banner background.' });
+          return;
+        }
+        updated.bannerBackground = input.bannerBackground;
+      }
+      if (input.bannerImage !== undefined) {
+        if (input.bannerImage === null || input.bannerImage === '') {
+          delete updated.bannerImage;
+          delete updated.bannerImagePosition;
+          delete updated.bannerImageZoom;
+        } else if (!isProfileBannerImage(input.bannerImage)) {
+          sendJson(res, 400, { error: 'Choose a valid JPG, PNG, or WebP banner image no larger than 5 MB.' });
+          return;
+        } else {
+          updated.bannerImage = input.bannerImage;
+        }
+      }
+      if (input.bannerImagePosition !== undefined) {
+        if (input.bannerImagePosition === null || input.bannerImagePosition === '') {
+          delete updated.bannerImagePosition;
+        } else if (typeof input.bannerImagePosition !== 'string' ||
+          !/^(?:100|[1-9]?\d)% (?:100|[1-9]?\d)%$/.test(input.bannerImagePosition) || !updated.bannerImage) {
+          sendJson(res, 400, { error: 'Choose a valid banner image position.' });
+          return;
+        } else {
+          updated.bannerImagePosition = input.bannerImagePosition;
+        }
+      }
+      if (input.bannerImageZoom !== undefined) {
+        if (input.bannerImageZoom === null) {
+          delete updated.bannerImageZoom;
+        } else if (!Number.isFinite(input.bannerImageZoom) || input.bannerImageZoom < 1 || input.bannerImageZoom > 2.5 || !updated.bannerImage) {
+          sendJson(res, 400, { error: 'Choose a valid banner image zoom.' });
+          return;
+        } else {
+          updated.bannerImageZoom = input.bannerImageZoom;
+        }
       }
       if (input.photo !== undefined) {
         if (input.photo === '') {

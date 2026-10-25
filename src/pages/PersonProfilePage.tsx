@@ -10,6 +10,7 @@ export default function PersonProfilePage() {
   const { personId = '' } = useParams();
   const person = Object.values(people).find((entry) => entry.id === personId);
   const showToast = useApp((s) => s.showToast);
+  const openMiniChatForPerson = useApp((s) => s.openMiniChatForPerson);
   const [connectionRequested, setConnectionRequested] = useState(false);
   const [requestedProfiles, setRequestedProfiles] = useState<string[]>([]);
 
@@ -59,7 +60,7 @@ export default function PersonProfilePage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => showToast('Messaging is available from your Messages inbox', 'mail')}
+                  onClick={() => openMiniChatForPerson(person)}
                   className="btn-outline flex-1 sm:flex-none"
                 >
                   <Icon name="mail" /> Message

@@ -11,6 +11,7 @@ function TicketThread({ ticket }: { ticket: Ticket }) {
   const showToast = useApp((s) => s.showToast);
   const user = useApp((s) => s.user);
   const [draft, setDraft] = useState(ticket.suggestedReply ?? '');
+  const directMessage = ticket.category === 'Direct message';
 
   useEffect(() => {
     setDraft(ticket.suggestedReply ?? '');
@@ -21,7 +22,7 @@ function TicketThread({ ticket }: { ticket: Ticket }) {
     if (!draft.trim()) return;
     reply(ticket.id, draft.trim());
     setDraft('');
-    showToast('Critique sent', 'send');
+    showToast(directMessage ? 'Message sent' : 'Critique sent', 'send');
   };
 
   return (
@@ -31,13 +32,15 @@ function TicketThread({ ticket }: { ticket: Ticket }) {
           <Icon name="arrow_back" />
         </Link>
         <div className="min-w-0 flex-1">
-          <h2 className="font-headline text-xl font-semibold text-primary">{ticket.title}</h2>
+          <h2 className="font-headline text-xl font-semibold text-primary">
+            {directMessage ? `Conversation with ${ticket.from}` : ticket.title}
+          </h2>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
-            <Tag tone={ticket.resolved ? 'green' : 'blue'}>{ticket.resolved ? 'Resolved' : 'Active Ticket'}</Tag>
-            Submitted by {ticket.from} • {ticket.fromMeta}
+            {!directMessage && <Tag tone={ticket.resolved ? 'green' : 'blue'}>{ticket.resolved ? 'Resolved' : 'Active Ticket'}</Tag>}
+            {directMessage ? ticket.fromMeta : `Submitted by ${ticket.from} • ${ticket.fromMeta}`}
           </div>
         </div>
-        <button
+        {!directMessage && <button
           type="button"
           className={ticket.resolved ? 'btn-outline' : 'btn-primary'}
           onClick={() => {
@@ -46,13 +49,13 @@ function TicketThread({ ticket }: { ticket: Ticket }) {
           }}
         >
           <Icon name={ticket.resolved ? 'undo' : 'task_alt'} /> {ticket.resolved ? 'Reopen' : 'Mark Resolved'}
-        </button>
+        </button>}
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto bg-surface p-5">
         {ticket.messages.map((m, i) => (
           <div key={i} className={cx('flex gap-3', m.isMe && 'flex-row-reverse')}>
-            <Avatar src={m.isMe ? user?.photo || undefined : undefined} name={m.author} size={36} rounded="rounded-full" />
+            <Avatar src={m.isMe ? user?.photo || undefined : ticket.contactAvatar} name={m.author} size={36} rounded="rounded-full" />
             <div className={cx('max-w-[80%] rounded-2xl p-4', m.isMe ? 'rounded-tr-md bg-secondary-fixed' : 'rounded-tl-md border border-outline-variant/50 bg-white')}>
               <div className="flex items-center gap-2 text-sm">
                 <span className="font-semibold">{m.author}</span>
@@ -69,7 +72,13 @@ function TicketThread({ ticket }: { ticket: Ticket }) {
           {ticket.suggestedReply && draft === ticket.suggestedReply && (
             <p className="mb-2 text-xs font-semibold text-on-surface-variant">{user?.name ?? 'You'} • Drafted 2m ago</p>
           )}
-          <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={3} placeholder="Write your critique..." className="input resize-none" />
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={3}
+            placeholder={directMessage ? 'Write a message...' : 'Write your critique...'}
+            className="input resize-none"
+          />
           <div className="mt-2 flex items-center gap-1">
             <button type="button" onClick={() => showToast('Attachments are not connected yet', 'attach_file')} className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-low" aria-label="Attach file">
               <Icon name="attach_file" />
@@ -79,7 +88,7 @@ function TicketThread({ ticket }: { ticket: Ticket }) {
             </button>
             <div className="flex-1" />
             <button type="submit" disabled={!draft.trim()} className="btn-primary">
-              <Icon name="send" /> Send Critique
+              <Icon name="send" /> {directMessage ? 'Send' : 'Send Critique'}
             </button>
           </div>
         </form>
@@ -93,12 +102,31 @@ export default function InboxPage() {
   const navigate = useNavigate();
   const tickets = useApp((s) => s.tickets);
   const markRead = useApp((s) => s.markRead);
-  const active = tickets.find((t) => t.id === ticketId);
-  const openCount = tickets.filter((t) => !t.resolved).length;
+  const setMiniChatTicketId = useApp((s) => s.setMiniChatTicketId);
+  const miniChatTicketId = useApp((s) => s.miniChatTicketId);
+  const activeId = ticketId ?? miniChatTicketId;
+  const active = tickets.find((t) => t.id === activeId);
+  const openCount = tickets.filter((t) => !t.resolved && t.category !== 'Direct message').length;
 
   useEffect(() => {
-    if (active?.unread) markRead(active.id);
+    if (!active) return;
+    const markFocusedConversationRead = () => {
+      if (active.unread && document.visibilityState === 'visible' && document.hasFocus()) {
+        markRead(active.id);
+      }
+    };
+    markFocusedConversationRead();
+    window.addEventListener('focus', markFocusedConversationRead);
+    document.addEventListener('visibilitychange', markFocusedConversationRead);
+    return () => {
+      window.removeEventListener('focus', markFocusedConversationRead);
+      document.removeEventListener('visibilitychange', markFocusedConversationRead);
+    };
   }, [active, markRead]);
+
+  useEffect(() => {
+    if (active) setMiniChatTicketId(active.id);
+  }, [active?.id, setMiniChatTicketId]);
 
   return (
     <div>
@@ -120,7 +148,7 @@ export default function InboxPage() {
               onClick={() => navigate(`/inbox/${t.id}`)}
               className={cx(
                 'block w-full border-b border-outline-variant/40 px-5 py-4 text-left transition',
-                t.id === ticketId ? 'bg-secondary-fixed/50' : 'hover:bg-surface-container-low',
+                t.id === activeId ? 'bg-secondary-fixed/50' : 'hover:bg-surface-container-low',
               )}
             >
               <div className="flex items-center gap-2">

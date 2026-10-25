@@ -1,7 +1,10 @@
 import type { AuthenticatedUser } from './store';
 
 type AuthMode = 'login' | 'register';
-type ProfileChanges = Partial<Pick<AuthenticatedUser, 'name' | 'photo' | 'biography' | 'interests' | 'purpose' | 'location' | 'university' | 'major' | 'role'>> & {
+type ProfileChanges = Partial<Pick<AuthenticatedUser, 'name' | 'photo' | 'biography' | 'interests' | 'purpose' | 'location' | 'university' | 'major' | 'role' | 'bannerBackground'>> & {
+  bannerImage?: string | null;
+  bannerImagePosition?: string | null;
+  bannerImageZoom?: number | null;
   graduationYear?: number | null;
   requestGoldVerification?: boolean;
   verificationMethod?: 'identity_document' | 'edu_email';
@@ -72,6 +75,7 @@ function testAuthenticate(mode: AuthMode, input: Record<string, unknown>): AuthR
         biography: savedUser?.biography ?? '',
         interests: savedUser?.interests ?? [],
         purpose: savedUser?.purpose ?? '',
+        ...(savedUser?.bannerBackground ? { bannerBackground: savedUser.bannerBackground } : {}),
         ...(savedUser?.location ? { location: savedUser.location } : {}),
       }
     : savedUser;
@@ -173,6 +177,11 @@ export async function saveProfile(changes: ProfileChanges): Promise<AuthResult> 
     }
     if (graduationYear === null || (changes.role !== undefined && changes.role !== 'scholar')) delete updated.graduationYear;
     else if (graduationYear !== undefined) updated.graduationYear = graduationYear;
+    if (changes.bannerImage === null || changes.bannerImage === '') delete updated.bannerImage;
+    if (changes.bannerImage === null || changes.bannerImage === '') {
+      delete updated.bannerImagePosition;
+      delete updated.bannerImageZoom;
+    }
     writeTestUser(updated);
     return { ok: true, user: updated };
   }
