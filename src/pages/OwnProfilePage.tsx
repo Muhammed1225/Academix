@@ -4,6 +4,14 @@ import { Link, Navigate } from 'react-router-dom';
 import PostCard from '../components/PostCard';
 import RichText, { sanitizeRichText } from '../components/RichText';
 import { Avatar, Icon, Tag, VerificationBadge } from '../components/ui';
+import SearchableSelect from '../components/SearchableSelect';
+import GoldVerificationSection from '../components/GoldVerificationSection';
+import {
+  readIdentityDocument,
+  validateGoldVerification,
+  type GoldVerificationErrors,
+  type VerificationMethod,
+} from '../components/goldVerification';
 import { saveProfile } from '../authService';
 import { majors as majorOptions, universities } from '../data/educationOptions';
 import { defaultInterestEmoji, interestEmojis, interests as interestOptions } from '../data/interestOptions';
@@ -323,6 +331,14 @@ function BackgroundPickerPanel({
   );
 }
 
+type Role = AuthenticatedUser['role'];
+
+const roles: { id: Role; label: string; icon: string }[] = [
+  { id: 'scholar', label: 'Student / Scholar', icon: 'school' },
+  { id: 'prospective', label: 'Prospective', icon: 'person_search' },
+  { id: 'faculty', label: 'Faculty Representative', icon: 'account_balance' },
+];
+
 function readImage(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -359,8 +375,203 @@ function biographyForEditor(biography: string) {
   return document.body.textContent ?? '';
 }
 
+function roleLabel(role: Role) {
+  return roles.find((item) => item.id === role)?.label ?? role;
+}
+
+export function RoleChangePage() {
+  const user = useApp((state) => state.user);
+  const authChecked = useApp((state) => state.authChecked);
+  const setAuthenticatedUser = useApp((state) => state.setAuthenticatedUser);
+  const showToast = useApp((state) => state.showToast);
+  const navigate = useNavigate();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [university, setUniversity] = useState(user?.university ?? '');
+  const [major, setMajor] = useState(user?.major ?? '');
+  const [graduationYear, setGraduationYear] = useState(user?.graduationYear?.toString() ?? '');
+  const [requestGold, setRequestGold] = useState(false);
+  const [verificationMethod, setVerificationMethod] = useState<VerificationMethod>('identity_document');
+  const [identityDocument, setIdentityDocument] = useState<File | null>(null);
+  const [eduEmail, setEduEmail] = useState('');
+  const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<GoldVerificationErrors>({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+
+  const needsEducation = selectedRole === 'scholar' || selectedRole === 'faculty';
+  const validGraduationYear = Number.isInteger(Number(graduationYear)) &&
+    Number(graduationYear) >= 2000 && Number(graduationYear) <= 2100;
+  const formValid = Boolean(selectedRole) &&
+    (!needsEducation || Boolean(university.trim() && major.trim())) &&
+    (selectedRole !== 'scholar' || validGraduationYear) &&
+    (!requestGold || Object.keys(validateGoldVerification({
+      role: selectedRole === 'faculty' ? 'faculty' : 'scholar',
+      requestGold,
+      method: verificationMethod,
+      eduEmail,
+      document: identityDocument,
+    })).length === 0);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedRole || !formValid || !user) return;
+    setSaving(true);
+    setError('');
+    try {
+      const encodedDocument = requestGold && verificationMethod === 'identity_document' && identityDocument
+        ? await readIdentityDocument(identityDocument)
+        : undefined;
+      const result = await saveProfile({
+        role: selectedRole,
+        university,
+        major,
+        graduationYear: selectedRole === 'scholar' ? Number(graduationYear) : null,
+        requestGoldVerification: requestGold,
+        ...(requestGold ? {
+          verificationMethod,
+          ...(verificationMethod === 'edu_email' ? { eduEmail: eduEmail.trim().toLowerCase() } : {}),
+          ...(encodedDocument && identityDocument ? {
+            identityDocument: {
+              type: selectedRole === 'faculty' ? 'work_card' : 'student_card',
+              mimeType: identityDocument.type,
+              base64: encodedDocument,
+            },
+          } : {}),
+        } : {}),
+      });
+      if (!result.ok || !result.user) {
+        setError(result.error ?? 'Unable to change your role. Please try again.');
+        return;
+      }
+      setAuthenticatedUser(result.user);
+      showToast(result.user.verificationStatus === 'pending'
+        ? 'Your role has been updated; verification review is pending'
+        : 'Your role has been updated');
+      navigate('/', { replace: true });
+    } catch {
+      setError('Unable to reach the profile service. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!authChecked) return <div role="status" className="card mx-auto max-w-3xl p-8 text-center text-on-surface-variant">Loading your account…</div>;
+  if (!user) return <Navigate to="/auth" replace />;
+
+  return (
+    <div className="mx-auto max-w-4xl">
+      <button type="button" onClick={() => navigate('/profile?edit=true')} className="btn-ghost mb-5">
+        <Icon name="arrow_back" /> Back to Edit Profile
+      </button>
+      <section className="card p-5 sm:p-8">
+        <div>
+          <p className="eyebrow text-secondary">Account details</p>
+          <h1 ref={headingRef} tabIndex={-1} id="change-role-title" className="mt-1 font-headline text-2xl font-semibold text-primary sm:text-3xl">Change my role</h1>
+          <p className="mt-2 text-sm text-on-surface-variant">Choose how you participate in the Academix community.</p>
+        </div>
+        <p className="mt-5 rounded-xl bg-surface-container-low px-3.5 py-3 text-sm font-medium text-on-surface">
+          Current role: <span className="font-semibold">{roleLabel(user.role)}</span>
+        </p>
+        <form onSubmit={(event) => void submit(event)} className="mt-6 space-y-6">
+          <fieldset>
+            <legend className="mb-3 text-sm font-semibold">Select a new role</legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {roles.filter((role) => role.id !== user.role).map((role) => (
+                <button
+                  key={role.id}
+                  type="button"
+                  aria-pressed={selectedRole === role.id}
+                  onClick={() => {
+                    setSelectedRole(role.id);
+                    setRequestGold(false);
+                    setVerificationMethod('identity_document');
+                    setIdentityDocument(null);
+                    setEduEmail('');
+                    setFieldErrors({});
+                    setError('');
+                  }}
+                  className={`flex min-h-16 items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm font-semibold transition ${
+                    selectedRole === role.id
+                      ? 'border-secondary bg-secondary-fixed text-secondary'
+                      : 'border-outline-variant text-on-surface-variant hover:bg-surface-container-low'
+                  }`}
+                >
+                  <Icon name={role.icon} />
+                  {role.label}
+                  {selectedRole === role.id && <Icon name="check" className="ml-auto" />}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          {selectedRole && (
+            <div className="space-y-4">
+              <p className="text-sm text-on-surface-variant">Update the details required for your new role. Your name, email, and password will remain unchanged.</p>
+              {selectedRole === 'prospective' ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <SearchableSelect label="Dream University" value={university} onChange={setUniversity} options={universities} optional />
+                  <SearchableSelect label="Dream Major" value={major} onChange={setMajor} options={majorOptions} optional />
+                </div>
+              ) : (
+                <>
+                  <div className={`grid gap-4 ${selectedRole === 'scholar' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+                    <SearchableSelect label="University" value={university} onChange={setUniversity} options={universities} />
+                    <SearchableSelect label={selectedRole === 'faculty' ? 'Major / Subject taught' : 'Major'} value={major} onChange={setMajor} options={majorOptions} />
+                    {selectedRole === 'scholar' && (
+                      <label className="block text-sm font-semibold">
+                        Graduation year
+                        <select value={graduationYear} onChange={(event) => setGraduationYear(event.target.value)} className="input mt-2">
+                          <option value="">Select graduation year</option>
+                          {Array.from({ length: 32 }, (_, index) => String(2000 + index)).map((year) => <option key={year} value={year}>{year}</option>)}
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                  <GoldVerificationSection
+                    role={selectedRole}
+                    requestGold={requestGold}
+                    setRequestGold={setRequestGold}
+                    method={verificationMethod}
+                    setMethod={setVerificationMethod}
+                    document={identityDocument}
+                    setDocument={setIdentityDocument}
+                    eduEmail={eduEmail}
+                    setEduEmail={setEduEmail}
+                    errors={{
+                      ...fieldErrors,
+                      ...(requestGold ? validateGoldVerification({
+                        role: selectedRole,
+                        requestGold,
+                        method: verificationMethod,
+                        eduEmail,
+                        document: identityDocument,
+                      }) : {}),
+                    }}
+                    setErrors={setFieldErrors}
+                  />
+                </>
+              )}
+            </div>
+          )}
+          {error && <p role="alert" className="text-sm font-medium text-error">{error}</p>}
+          <div className="flex flex-col-reverse justify-end gap-2 border-t border-outline-variant/50 pt-5 sm:flex-row">
+            <button type="button" onClick={() => navigate('/profile?edit=true')} className="btn-ghost">Cancel</button>
+            <button type="submit" disabled={!formValid || saving} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
+              {saving ? 'Saving…' : 'Save'} <Icon name="check" />
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: () => void }) {
   const setAuthenticatedUser = useApp((state) => state.setAuthenticatedUser);
+  const navigate = useNavigate();
   const [name, setName] = useState(user.name);
   const [photo, setPhoto] = useState(user.photo);
   const [biography, setBiography] = useState(() => biographyForEditor(user.biography));
@@ -599,14 +810,12 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
             <label className="block text-sm font-semibold">Location<input maxLength={200} value={location} onChange={(event) => setLocation(event.target.value)} className="input mt-1.5" placeholder="City, region" /></label>
             <label className="block text-sm font-semibold">Email address<input readOnly value={user.email} className="input mt-1.5 bg-surface-container-low text-on-surface-variant" /></label>
           </div>
-          {user.role === 'prospective' && (
-            <div className="flex justify-end">
-              <Link to="/profile/university-joined" onClick={onClose} className="btn-outline border-secondary text-secondary hover:bg-secondary-fixed">
-                <Icon name="account_balance" />
-                I have entered a university
-              </Link>
-            </div>
-          )}
+          <div className="flex justify-end">
+            <button type="button" onClick={() => navigate('/change-role')} className="btn-outline border-secondary text-secondary hover:bg-secondary-fixed">
+                  <Icon name="manage_accounts" />
+                  Change my role
+            </button>
+          </div>
           {error && <p role="alert" className="text-sm font-medium text-error">{error}</p>}
           <div className="flex justify-end gap-2 border-t border-outline-variant/50 pt-4">
             <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
@@ -619,6 +828,7 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
 }
 
 export default function OwnProfilePage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const user = useApp((state) => state.user);
   const authChecked = useApp((state) => state.authChecked);
   const posts = useApp((state) => state.posts);
