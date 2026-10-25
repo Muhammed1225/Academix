@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 
 import PostCard from '../components/PostCard';
 import RichText, { sanitizeRichText } from '../components/RichText';
@@ -838,7 +838,7 @@ export default function OwnProfilePage() {
   const savedBannerImage = user?.bannerImage ?? '';
   const savedImagePosition = user?.bannerImagePosition ?? '50% 50%';
   const savedImageZoom = user?.bannerImageZoom ?? 1;
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(() => searchParams.get('edit') === 'true');
   const [backgroundPickerOpen, setBackgroundPickerOpen] = useState(false);
   const [backgroundSaving, setBackgroundSaving] = useState(false);
   const [backgroundError, setBackgroundError] = useState('');
@@ -850,6 +850,19 @@ export default function OwnProfilePage() {
   const previousBannerBackground = useRef(bannerBackground);
   const desktopPickerRef = useRef<HTMLDivElement>(null);
   const [requestedProfiles, setRequestedProfiles] = useState<string[]>([]);
+
+  useEffect(() => {
+    setEditing(searchParams.get('edit') === 'true');
+  }, [searchParams]);
+
+  const closeEditor = () => {
+    setEditing(false);
+    if (searchParams.has('edit')) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('edit');
+      setSearchParams(nextParams, { replace: true });
+    }
+  };
 
   useEffect(() => {
     setBannerBackground(savedBannerBackground);
@@ -1245,7 +1258,7 @@ export default function OwnProfilePage() {
           <p className="px-2 text-xs leading-relaxed text-on-surface-variant">Academix profiles help students and educators find people with shared academic interests.</p>
         </aside>
       </div>
-      {editing && <ProfileEditor user={user} onClose={() => setEditing(false)} />}
+      {editing && <ProfileEditor user={user} onClose={closeEditor} />}
     </>
   );
 }
