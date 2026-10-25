@@ -260,7 +260,7 @@ function CommunityLauncher() {
       className="fixed bottom-24 left-4 z-40 flex items-center gap-2 rounded-2xl bg-secondary px-4 py-3.5 font-semibold text-white shadow-float transition hover:bg-secondary/90 lg:bottom-8 lg:left-8"
     >
       <Icon name="forum" />
-      <span className="hidden sm:inline">Ask community</span>
+      <span className="hidden sm:inline">Join the discussion</span>
     </Link>
   );
 }

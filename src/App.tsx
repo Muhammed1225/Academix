@@ -18,6 +18,7 @@ import OwnProfilePage from './pages/OwnProfilePage';
 import UniversityJoinedPage from './pages/UniversityJoinedPage';
 import { loadAuthSession } from './authService';
 import { useApp } from './store';
+import AdmissionResultsPage from './pages/AdmissionResultsPage';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -51,6 +52,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<FeedPage />} />
           <Route path="colleges" element={<CollegesPage />} />
+          <Route path="admission-results" element={<AdmissionResultsPage />} />
           <Route path="colleges/:collegeId" element={<CollegeHubPage />} />
           <Route path="colleges/:collegeId/majors" element={<MajorsPage />} />
           <Route path="colleges/:collegeId/majors/:majorId" element={<MajorsPage />} />

@@ -1,7 +1,9 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 import { Icon, MetricTile } from '../components/ui';
+import UniversityAdmissionCalculator from '../components/UniversityAdmissionCalculator';
+import { isAdmissionPredictionRequest } from '../data/admission';
 import { colleges } from '../data/mock';
 import { universities } from '../data/educationOptions';
 import type { College } from '../data/types';
@@ -232,7 +234,16 @@ function UniversitySections({ university, college }: { university: string; colle
 }
 
 export default function CollegesPage() {
+  const location = useLocation();
+  const routeState: unknown = location.state;
+  const routeRequest = routeState && typeof routeState === 'object' && 'admissionCalculatorRequest' in routeState
+    ? routeState.admissionCalculatorRequest
+    : undefined;
+  const initialAdmissionRequest = isAdmissionPredictionRequest(routeRequest)
+    ? routeRequest
+    : undefined;
   const defaultUniversity = universities.find((name) => normalizeName(name) === normalizeName('Baku Higher Oil School'));
+  const [admissionCalculatorOpen, setAdmissionCalculatorOpen] = useState(Boolean(initialAdmissionRequest));
   const [query, setQuery] = useState(defaultUniversity ?? 'Baku Higher Oil School (BHOS)');
   const [selectedUniversity, setSelectedUniversity] = useState(defaultUniversity ?? 'Baku Higher Oil School (BHOS)');
   const [searchMessage, setSearchMessage] = useState('');
@@ -269,32 +280,48 @@ export default function CollegesPage() {
             Find university hubs, explore academic programs, and connect with current students and mentors.
           </p>
         </div>
-        <form onSubmit={submitSearch} className="w-full lg:max-w-md">
-          <label htmlFor="university-search" className="sr-only">Search universities</label>
-          <div className="relative">
-            <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
-            <input
-              id="university-search"
-              list="university-options"
-              value={query}
-              onChange={(event) => {
-                const value = event.target.value;
-                setQuery(value);
-                setSearchMessage('');
-                const exactMatch = universities.find((university) => university.toLocaleLowerCase('en') === value.trim().toLocaleLowerCase('en'));
-                if (exactMatch) setSelectedUniversity(exactMatch);
-              }}
-              placeholder="Search universities..."
-              autoComplete="off"
-              className="input rounded-full pl-10 pr-24"
-            />
-            <datalist id="university-options">
-              {universities.map((university) => <option key={university} value={university} />)}
-            </datalist>
-            <button type="submit" className="btn-primary absolute right-1 top-1 h-10 !px-4">Search</button>
-          </div>
-          {searchMessage && <p role="status" className="mt-2 text-sm text-on-surface-variant">{searchMessage}</p>}
-        </form>
+        <div className="w-full space-y-3 lg:max-w-md">
+          <button
+            type="button"
+            onClick={() => setAdmissionCalculatorOpen(true)}
+            className="card group flex w-full items-center gap-3 border-secondary/20 bg-gradient-to-r from-secondary-fixed/70 to-white p-4 text-left transition hover:-translate-y-0.5 hover:border-secondary/40 hover:shadow-float"
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-secondary shadow-sm">
+              <Icon name="query_stats" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold text-primary">Which universities can I get into?</span>
+              <span className="mt-1 block text-xs text-on-surface-variant">Explore admission possibilities based on your exam results.</span>
+            </span>
+            <Icon name="arrow_forward" className="shrink-0 text-secondary transition group-hover:translate-x-1" />
+          </button>
+          <form onSubmit={submitSearch} className="w-full">
+            <label htmlFor="university-search" className="sr-only">Search universities</label>
+            <div className="relative">
+              <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
+              <input
+                id="university-search"
+                list="university-options"
+                value={query}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setQuery(value);
+                  setSearchMessage('');
+                  const exactMatch = universities.find((university) => university.toLocaleLowerCase('en') === value.trim().toLocaleLowerCase('en'));
+                  if (exactMatch) setSelectedUniversity(exactMatch);
+                }}
+                placeholder="Search universities..."
+                autoComplete="off"
+                className="input rounded-full pl-10 pr-24"
+              />
+              <datalist id="university-options">
+                {universities.map((university) => <option key={university} value={university} />)}
+              </datalist>
+              <button type="submit" className="btn-primary absolute right-1 top-1 h-10 !px-4">Search</button>
+            </div>
+            {searchMessage && <p role="status" className="mt-2 text-sm text-on-surface-variant">{searchMessage}</p>}
+          </form>
+        </div>
       </div>
 
       <div className="grid items-stretch gap-3 lg:grid-cols-[minmax(0,0.9fr)_auto_minmax(0,1.5fr)]">
@@ -366,6 +393,11 @@ export default function CollegesPage() {
           </div>
         )}
       </section>
+      <UniversityAdmissionCalculator
+        open={admissionCalculatorOpen}
+        onClose={() => setAdmissionCalculatorOpen(false)}
+        initialRequest={initialAdmissionRequest}
+      />
     </div>
   );
 }

@@ -31,6 +31,7 @@ export default function OnboardingPage() {
   const [photo, setPhoto] = useState('');
   const [biography, setBiography] = useState('');
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+  const [interestSearch, setInterestSearch] = useState('');
   const [purpose, setPurpose] = useState('');
   const [photoError, setPhotoError] = useState('');
   const [saveError, setSaveError] = useState('');
@@ -96,6 +97,10 @@ export default function OnboardingPage() {
     document.execCommand(format);
     updateBiography();
   };
+
+  const filteredInterests = interests.filter((interest) =>
+    interest.toLocaleLowerCase().includes(interestSearch.trim().toLocaleLowerCase()),
+  );
 
   const toggleInterest = (interest: string) => {
     setSelectedInterests((selected) => selected.includes(interest)
@@ -176,11 +181,24 @@ export default function OnboardingPage() {
         {step === 2 && <>
           <div className="mb-7">
             <p className="eyebrow text-secondary">Step 2 of 3</p>
-            <h1 className="mt-2 font-headline text-3xl font-semibold text-primary">What are you interested in?</h1>
+            <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h1 className="font-headline text-3xl font-semibold text-primary">What are you interested in?</h1>
+              <label className="relative w-full sm:w-64 sm:shrink-0">
+                <span className="sr-only">Search interests</span>
+                <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 !text-[18px] text-on-surface-variant" />
+                <input
+                  type="search"
+                  value={interestSearch}
+                  onChange={(event) => setInterestSearch(event.target.value)}
+                  placeholder="Search interests"
+                  className="input !py-2 pl-9 text-sm"
+                />
+              </label>
+            </div>
             <p className="mt-2 text-sm text-on-surface-variant">Select at least 2 to help us tailor your experience.</p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {interests.map((interest) => {
+            {filteredInterests.map((interest) => {
               const selected = selectedInterests.includes(interest);
               return <button key={interest} type="button" aria-pressed={selected} onClick={() => toggleInterest(interest)} className={cx('flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left text-sm font-semibold transition sm:p-4', selected ? 'border-secondary bg-secondary-fixed text-secondary ring-2 ring-secondary/15' : 'border-outline-variant/70 bg-white text-on-surface hover:border-secondary/40 hover:bg-surface-container-low')}>
                 <span className="text-xl" aria-hidden="true">{interestEmojis[interest] ?? defaultInterestEmoji}</span>
@@ -188,6 +206,9 @@ export default function OnboardingPage() {
               </button>;
             })}
           </div>
+          {filteredInterests.length === 0 && (
+            <p className="mt-4 text-center text-sm text-on-surface-variant">No interests match “{interestSearch}”.</p>
+          )}
           <p className="mt-4 text-xs text-on-surface-variant" aria-live="polite">{selectedInterests.length} selected</p>
           <div className="mt-8 flex flex-col-reverse justify-between gap-3 border-t border-outline-variant/50 pt-5 sm:flex-row">
             <button type="button" onClick={() => setStep(1)} className="btn-ghost"><Icon name="arrow_back" /> Back</button>

@@ -337,6 +337,7 @@ export const colleges: College[] = [
       {
         id: 'evelyn',
         name: 'Evelyn Chen',
+        role: 'scholar',
         avatar: img('avatar_evelyn_chen.jpg'),
         rating: 4.9,
         reviews: 42,
@@ -350,6 +351,7 @@ export const colleges: College[] = [
       {
         id: 'marcus',
         name: 'Marcus Vance',
+        role: 'scholar',
         avatar: img('avatar_marcus_vance.jpg'),
         rating: 5.0,
         reviews: 28,
@@ -363,6 +365,7 @@ export const colleges: College[] = [
       {
         id: 'aarohi',
         name: 'Aarohi Nair',
+        role: 'scholar',
         avatar: img('avatar_aarohi_nair.jpg'),
         rating: 4.9,
         reviews: 64,
@@ -376,6 +379,7 @@ export const colleges: College[] = [
       {
         id: 'julian',
         name: 'Julian Rossi',
+        role: 'scholar',
         avatar: img('avatar_julian_rossi.jpg'),
         rating: 4.8,
         reviews: 19,

@@ -77,9 +77,12 @@ export interface Stat {
   icon: string;
 }
 
+export type ConnectionRole = 'prospective' | 'scholar' | 'faculty';
+
 export interface Mentor {
   id: string;
   name: string;
+  role: ConnectionRole;
   avatar: string;
   rating: number;
   reviews: number;
