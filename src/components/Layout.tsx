@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { BRAND } from '../data/mock';
+import { createSearchCatalog, getRecentSearches, matchesSearch, rememberSearch, relevanceScore } from '../data/search';
 import { signOut as signOutAuth } from '../authService';
 import { useApp, useUnreadCount } from '../store';
 import AdvisorDrawer from './AdvisorDrawer';
@@ -21,13 +22,50 @@ function Header() {
   const authChecked = useApp((s) => s.authChecked);
   const setSignedIn = useApp((s) => s.setSignedIn);
   const showToast = useApp((s) => s.showToast);
+  const posts = useApp((s) => s.posts);
   const navigate = useNavigate();
+  const location = useLocation();
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const searchCatalog = useMemo(() => createSearchCatalog(posts), [posts]);
+  const suggestions = useMemo(() => {
+    if (!debouncedQuery.trim()) return [];
+    const perCategory = new Map<string, number>();
+    return searchCatalog
+      .filter((item) => matchesSearch(`${item.title} ${item.subtitle} ${item.content}`, debouncedQuery))
+      .sort((first, second) => relevanceScore(second, debouncedQuery) - relevanceScore(first, debouncedQuery))
+      .filter((item) => {
+        const count = perCategory.get(item.category) ?? 0;
+        if (count >= 2) return false;
+        perCategory.set(item.category, count + 1);
+        return true;
+      })
+      .slice(0, 8);
+  }, [debouncedQuery, searchCatalog]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedQuery(query.trim()), 150);
+    return () => window.clearTimeout(timeout);
+  }, [query]);
+
+  useEffect(() => {
+    setQuery(new URLSearchParams(location.search).get('q') ?? '');
+  }, [location.pathname, location.search]);
 
   const onSearch = (e: FormEvent) => {
     e.preventDefault();
-    navigate(`/search?q=${encodeURIComponent(query.trim())}`);
+    const trimmed = query.trim().replace(/\s+/g, ' ');
+    if (trimmed) rememberSearch(trimmed);
+    setSearchFocused(false);
+    navigate(trimmed ? `/search?q=${encodeURIComponent(trimmed)}` : '/search');
+  };
+
+  const openSuggestion = (href: string, title: string) => {
+    rememberSearch(title);
+    setSearchFocused(false);
+    navigate(href);
   };
 
   const signOut = async () => {
@@ -48,15 +86,75 @@ function Header() {
           <Link to="/" className="shrink-0" aria-label={`${BRAND} feed`}>
             <BrandMark />
           </Link>
-          <form onSubmit={onSearch} className="relative hidden w-full md:block">
+          <form
+            onSubmit={onSearch}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setSearchFocused(false);
+            }}
+            className="relative hidden w-full md:block"
+          >
             <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search university, major, mentor, or question..."
+              aria-label="Search Academix"
+              aria-autocomplete="list"
+              aria-expanded={searchFocused}
               className="input rounded-full !py-2 pl-10"
             />
+            {searchFocused && (query.trim() ? (
+              <div role="group" aria-label="Search suggestions" className="absolute left-0 right-0 top-full z-[60] mt-2 overflow-hidden rounded-xl border border-outline-variant/60 bg-white py-2 shadow-float">
+                {suggestions.length ? suggestions.map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => openSuggestion(item.href, item.title)}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-container-low"
+                  >
+                    {item.image
+                      ? <Avatar src={item.image} name={item.title} size={34} rounded="rounded-full" />
+                      : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-secondary-fixed text-secondary"><Icon name={item.category === 'universities' ? 'account_balance' : item.category === 'programmes' ? 'school' : item.category === 'people' ? 'person' : 'forum'} /></span>}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-primary">{item.title}</span>
+                      <span className="block truncate text-xs text-on-surface-variant">{item.subtitle}</span>
+                    </span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-secondary">{item.category}</span>
+                  </button>
+                )) : <p className="px-4 py-3 text-sm text-on-surface-variant">No suggestions found.</p>}
+                <button
+                  type="submit"
+                  className="flex w-full items-center gap-2 border-t border-outline-variant/40 px-4 py-3 text-left text-sm font-semibold text-secondary hover:bg-surface-container-low"
+                >
+                  <Icon name="search" />Search all results for “{query.trim()}”
+                </button>
+              </div>
+            ) : (
+              <div role="group" aria-label="Recent searches" className="absolute left-0 right-0 top-full z-[60] mt-2 overflow-hidden rounded-xl border border-outline-variant/60 bg-white py-2 shadow-float">
+                {getRecentSearches().length ? getRecentSearches().map((recent) => (
+                  <button
+                    type="button"
+                    key={recent}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setQuery(recent);
+                      rememberSearch(recent);
+                      setSearchFocused(false);
+                      navigate(`/search?q=${encodeURIComponent(recent)}`);
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-surface-container-low"
+                  >
+                    <Icon name="history" className="text-outline" />{recent}
+                  </button>
+                )) : <p className="px-4 py-3 text-sm text-on-surface-variant">Start typing to find people, universities, programmes, and discussions.</p>}
+              </div>
+            ))}
           </form>
+          <button type="button" onClick={() => navigate('/search')} aria-label="Open search" className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-low md:hidden">
+            <Icon name="search" />
+          </button>
         </div>
 
         <nav className="hidden h-full items-center gap-1 lg:flex">

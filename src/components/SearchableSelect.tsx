@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useState, type KeyboardEvent } from 'react';
 
 import { cx } from './ui';
 
@@ -22,6 +22,10 @@ export default function SearchableSelect({ label, value, onChange, options, opti
   const [activeIndex, setActiveIndex] = useState(0);
   const filteredOptions = options.filter((option) => normalizeSearch(option).includes(normalizeSearch(query)));
   const placeholder = `Select ${label.toLowerCase()}${optional ? ' (optional)' : ''}`;
+
+  useEffect(() => {
+    if (!isOpen) setQuery(value);
+  }, [isOpen, value]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown') {

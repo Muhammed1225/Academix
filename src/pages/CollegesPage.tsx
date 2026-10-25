@@ -243,9 +243,13 @@ export default function CollegesPage() {
     ? routeRequest
     : undefined;
   const defaultUniversity = universities.find((name) => normalizeName(name) === normalizeName('Baku Higher Oil School'));
+  const requestedUniversity = new URLSearchParams(location.search).get('university');
+  const initialUniversity = universities.find((name) => normalizeName(name) === normalizeName(requestedUniversity ?? ''))
+    ?? defaultUniversity
+    ?? 'Baku Higher Oil School (BHOS)';
   const [admissionCalculatorOpen, setAdmissionCalculatorOpen] = useState(Boolean(initialAdmissionRequest));
-  const [query, setQuery] = useState(defaultUniversity ?? 'Baku Higher Oil School (BHOS)');
-  const [selectedUniversity, setSelectedUniversity] = useState(defaultUniversity ?? 'Baku Higher Oil School (BHOS)');
+  const [query, setQuery] = useState(initialUniversity);
+  const [selectedUniversity, setSelectedUniversity] = useState(initialUniversity);
   const [searchMessage, setSearchMessage] = useState('');
   const [browseQuery, setBrowseQuery] = useState('');
   const [visibleCount, setVisibleCount] = useState(12);
