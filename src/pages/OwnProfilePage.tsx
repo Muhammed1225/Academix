@@ -16,6 +16,7 @@ import { saveProfile } from '../authService';
 import { majors as majorOptions, universities } from '../data/educationOptions';
 import { defaultInterestEmoji, interestEmojis, interests as interestOptions } from '../data/interestOptions';
 import { people } from '../data/mock';
+import { displayName } from '../data/userIdentity';
 import { useApp, type AuthenticatedUser, type ProfileBannerBackground } from '../store';
 
 const bannerBackgrounds: { id: ProfileBannerBackground; label: string; background: string }[] = [
@@ -572,7 +573,7 @@ export function RoleChangePage() {
 function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: () => void }) {
   const setAuthenticatedUser = useApp((state) => state.setAuthenticatedUser);
   const navigate = useNavigate();
-  const [name, setName] = useState(user.name);
+  const [name, setName] = useState(displayName(user.name, user.email));
   const [photo, setPhoto] = useState(user.photo);
   const [biography, setBiography] = useState(() => biographyForEditor(user.biography));
   const [selectedInterests, setSelectedInterests] = useState(user.interests);
@@ -1006,6 +1007,7 @@ export default function OwnProfilePage() {
 
   if (!authChecked) return <div role="status" className="card mx-auto max-w-3xl p-8 text-center text-on-surface-variant">Loading your profile…</div>;
   if (!user) return <Navigate to="/auth?mode=create" replace />;
+  const userDisplayName = displayName(user.name, user.email);
 
   const recommendations = Object.values(people)
     .filter((candidate) => candidate.id !== 'anon' && candidate.id !== 'anon-ivy')
@@ -1130,7 +1132,7 @@ export default function OwnProfilePage() {
             )}
             <div className="px-5 pb-5 sm:px-8 sm:pb-7">
               <div className="-mt-12 flex flex-wrap items-end justify-between gap-4 sm:-mt-14">
-                <Avatar src={user.photo || undefined} name={user.name} size={112} rounded="rounded-2xl ring-4 ring-white shadow-float" />
+                <Avatar src={user.photo || undefined} name={userDisplayName} size={112} rounded="rounded-2xl ring-4 ring-white shadow-float" />
                 <div className="flex w-full gap-2 sm:w-auto">
                   <button type="button" onClick={() => setEditing(true)} className="btn-primary flex-1 sm:flex-none"><Icon name="edit" /> Edit profile</button>
                   <Link to="/inbox" className="btn-outline flex-1 sm:flex-none"><Icon name="mail" /> Message</Link>
@@ -1138,7 +1140,7 @@ export default function OwnProfilePage() {
               </div>
               <div className="mt-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="font-headline text-2xl font-semibold text-primary sm:text-3xl">{user.name}</h1>
+                  <h1 className="font-headline text-2xl font-semibold text-primary sm:text-3xl">{userDisplayName}</h1>
                   <Tag tone="blue">Your profile</Tag>
                 </div>
                 <p className="mt-1 text-sm text-on-surface-variant sm:text-base">

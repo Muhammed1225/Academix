@@ -2,7 +2,7 @@ import { colleges, mentorProfiles } from './mock';
 import { universities } from './educationOptions';
 import type { Major, MentorProfile, Post } from './types';
 
-export type SearchCategory = 'universities' | 'programmes' | 'people' | 'posts';
+export type SearchCategory = 'universities' | 'programmes' | 'people' | 'discussions';
 
 export interface SearchItem {
   id: string;
@@ -75,6 +75,8 @@ export function createSearchCatalog(posts: Post[]): SearchItem[] {
       content: `${name} ${college?.shortName ?? ''}`,
       href: college ? `/colleges/${college.id}` : `/colleges?university=${encodeURIComponent(name)}`,
       university: name,
+      location: college?.location,
+      institutionType: college?.kind,
     };
   });
 
@@ -87,6 +89,8 @@ export function createSearchCatalog(posts: Post[]): SearchItem[] {
       content: `${major.name} ${major.school} ${major.category} ${major.summary} ${major.degree ?? ''}`,
       href: `/colleges/${college.id}/majors/${major.id}`,
       university: college.name,
+      location: college.location,
+      institutionType: college.kind,
       discipline: major.category,
       degree: major.degree,
       major,
@@ -112,12 +116,14 @@ export function createSearchCatalog(posts: Post[]): SearchItem[] {
     const query = post.title ?? post.body.slice(0, 100);
     return {
       id: `post:${post.id}`,
-      category: 'posts',
+      category: 'discussions',
       title: post.title ?? 'Community discussion',
       subtitle: `${post.author.name} · ${post.timeAgo}${university ? ` · ${university.name}` : ''}`,
       content: `${post.title ?? ''} ${post.body} ${post.author.name} ${post.author.subtitle} ${post.channelId} ${university?.name ?? ''} ${post.comments.map((comment) => comment.text).join(' ')}`,
-      href: `/search?q=${encodeURIComponent(query)}&type=posts`,
+      href: `/search?q=${encodeURIComponent(query)}&type=discussions`,
       university: university?.name,
+      location: university?.location,
+      institutionType: university?.kind,
       channelId: post.channelId,
       post,
     };
@@ -139,4 +145,13 @@ export function rememberSearch(query: string) {
 
 export function getRecentSearches() {
   return [...recentQueries];
+}
+
+export function removeRecentSearch(query: string) {
+  const index = recentQueries.findIndex((item) => normalize(item) === normalize(query));
+  if (index >= 0) recentQueries.splice(index, 1);
+}
+
+export function clearRecentSearches() {
+  recentQueries.length = 0;
 }

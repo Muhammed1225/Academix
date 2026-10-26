@@ -1,17 +1,34 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { Avatar, Icon, Tag, cx } from '../components/ui';
+import UserAvatar from '../components/UserAvatar';
+import { Icon, Tag, cx } from '../components/ui';
+import { displayName } from '../data/userIdentity';
 import type { Ticket } from '../data/types';
 import { useApp } from '../store';
+
+function accountRole(role?: string) {
+  if (role === 'faculty') return 'Faculty';
+  if (role === 'scholar') return 'Student';
+  return 'Applicant';
+}
 
 function TicketThread({ ticket }: { ticket: Ticket }) {
   const reply = useApp((s) => s.reply);
   const toggleResolved = useApp((s) => s.toggleResolved);
   const showToast = useApp((s) => s.showToast);
   const user = useApp((s) => s.user);
+  const ownName = displayName(user?.name, user?.email);
+  const contactName = displayName(ticket.from);
   const [draft, setDraft] = useState(ticket.suggestedReply ?? '');
   const directMessage = ticket.category === 'Direct message';
+  const contactHref = ticket.contactId ? `/people/${ticket.contactId}` : undefined;
+  const messagePerson = ticket.contactId ? {
+    id: ticket.contactId,
+    name: contactName,
+    subtitle: ticket.contactProfileSubtitle ?? ticket.fromMeta,
+    ...(ticket.contactAvatar ? { avatar: ticket.contactAvatar } : {}),
+  } : undefined;
 
   useEffect(() => {
     setDraft(ticket.suggestedReply ?? '');
@@ -27,17 +44,28 @@ function TicketThread({ ticket }: { ticket: Ticket }) {
 
   return (
     <div className="flex h-full min-h-[560px] flex-col">
-      <div className="flex flex-wrap items-start gap-3 border-b border-outline-variant/50 p-5">
+      <div className="flex flex-wrap items-center gap-3 border-b border-outline-variant/50 p-5">
         <Link to="/inbox" className="rounded-full p-1.5 hover:bg-surface-container-low md:hidden" aria-label="Back to inbox">
           <Icon name="arrow_back" />
         </Link>
         <div className="min-w-0 flex-1">
-          <h2 className="font-headline text-xl font-semibold text-primary">
-            {directMessage ? `Conversation with ${ticket.from}` : ticket.title}
-          </h2>
+          <UserAvatar
+            src={ticket.contactAvatar}
+            name={contactName}
+            size={48}
+            showStatus
+            profileHref={contactHref}
+            subtitle={ticket.fromMeta}
+            profileSubtitle={ticket.contactProfileSubtitle}
+            role={ticket.contactRole}
+            messagePerson={messagePerson}
+            showName
+            nameClassName="text-base"
+            className="max-w-full"
+          />
+          <p className="truncate text-sm font-medium text-on-surface-variant">{ticket.title}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
             {!directMessage && <Tag tone={ticket.resolved ? 'green' : 'blue'}>{ticket.resolved ? 'Resolved' : 'Active Ticket'}</Tag>}
-            {directMessage ? ticket.fromMeta : `Submitted by ${ticket.from} • ${ticket.fromMeta}`}
           </div>
         </div>
         {!directMessage && <button
@@ -53,24 +81,60 @@ function TicketThread({ ticket }: { ticket: Ticket }) {
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto bg-surface p-5">
-        {ticket.messages.map((m, i) => (
-          <div key={i} className={cx('flex gap-3', m.isMe && 'flex-row-reverse')}>
-            <Avatar src={m.isMe ? user?.photo || undefined : ticket.contactAvatar} name={m.author} size={36} rounded="rounded-full" />
-            <div className={cx('max-w-[80%] rounded-2xl p-4', m.isMe ? 'rounded-tr-md bg-secondary-fixed' : 'rounded-tl-md border border-outline-variant/50 bg-white')}>
-              <div className="flex items-center gap-2 text-sm">
-                <span className="font-semibold">{m.author}</span>
-                <span className="text-xs text-on-surface-variant">{m.time}</span>
+        {ticket.messages.map((m, i) => {
+          const firstInGroup = i === 0 || ticket.messages[i - 1].isMe !== m.isMe;
+          const senderName = m.isMe ? ownName : contactName;
+          const senderHref = m.isMe ? '/profile' : contactHref;
+          const senderRole = m.isMe ? accountRole(user?.role) : ticket.contactRole;
+          return (
+            <div key={`${ticket.id}-${i}`} className={cx('flex items-start gap-3', m.isMe && 'flex-row-reverse')}>
+              {firstInGroup ? (
+                <UserAvatar
+                  src={m.isMe ? user?.photo || undefined : ticket.contactAvatar}
+                  name={senderName}
+                  size={36}
+                  profileHref={senderHref}
+                  subtitle={m.isMe
+                    ? [user?.major, user?.university].filter(Boolean).join(' • ') || 'Academix community member'
+                    : ticket.fromMeta}
+                  profileSubtitle={m.isMe ? undefined : ticket.contactProfileSubtitle}
+                  role={senderRole}
+                  messagePerson={m.isMe ? undefined : messagePerson}
+                  showName
+                  nameClassName="max-w-[90px] text-xs"
+                  className="w-[36%] max-w-[170px] shrink-0 items-start"
+                />
+              ) : <span aria-hidden="true" className="w-[36%] max-w-[170px] shrink-0" />}
+              <div className={cx('min-w-0 flex-1 rounded-2xl p-4', m.isMe ? 'rounded-tr-md bg-secondary-fixed' : 'rounded-tl-md border border-outline-variant/50 bg-white')}>
+                <div className="flex flex-wrap items-center gap-2">
+                  {senderRole && <Tag tone="neutral" className="!px-1.5 !py-0 text-[10px]">{senderRole}</Tag>}
+                  <span className="ml-auto text-xs text-on-surface-variant">{m.time}</span>
+                </div>
+                <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-on-surface">{m.text}</p>
               </div>
-              <p className="mt-1.5 text-sm leading-relaxed text-on-surface">{m.text}</p>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {!ticket.resolved && (
         <form onSubmit={send} className="border-t border-outline-variant/50 p-4">
           {ticket.suggestedReply && draft === ticket.suggestedReply && (
-            <p className="mb-2 text-xs font-semibold text-on-surface-variant">{user?.name ?? 'You'} • Drafted 2m ago</p>
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-on-surface-variant">
+              <UserAvatar
+                src={user?.photo || undefined}
+                name={ownName}
+                email={user?.email}
+                size={32}
+                profileHref="/profile"
+                subtitle={[user?.major, user?.university].filter(Boolean).join(' • ') || 'Academix community member'}
+                role={accountRole(user?.role)}
+                showName
+                nameClassName="text-xs"
+                trailing={<Tag tone="neutral" className="text-[10px]">{accountRole(user?.role)}</Tag>}
+              />
+              <span>Drafted 2m ago</span>
+            </div>
           )}
           <textarea
             value={draft}
@@ -142,27 +206,45 @@ export default function InboxPage() {
             </Tag>
           </div>
           {tickets.map((t) => (
-            <button
+            <div
               key={t.id}
-              type="button"
-              onClick={() => navigate(`/inbox/${t.id}`)}
               className={cx(
-                'block w-full border-b border-outline-variant/40 px-5 py-4 text-left transition',
+                'flex items-start gap-3 border-b border-outline-variant/40 px-5 py-4 transition',
                 t.id === activeId ? 'bg-secondary-fixed/50' : 'hover:bg-surface-container-low',
               )}
             >
-              <div className="flex items-center gap-2">
-                <Tag tone={t.resolved ? 'green' : 'blue'}>{t.resolved ? 'Resolved' : t.category}</Tag>
-                <span className="flex-1" />
-                {t.unread && !t.resolved && <span className="h-2 w-2 rounded-full bg-secondary" />}
-                <span className="text-xs text-on-surface-variant">{t.timeAgo}</span>
+              <div className="min-w-0 flex-1">
+                <UserAvatar
+                  src={t.contactAvatar}
+                  name={displayName(t.from)}
+                  size={40}
+                  showStatus
+                  profileHref={t.contactId ? `/people/${t.contactId}` : undefined}
+                  subtitle={t.fromMeta}
+                  profileSubtitle={t.contactProfileSubtitle}
+                  role={t.contactRole}
+                  messagePerson={t.contactId ? {
+                    id: t.contactId,
+                    name: displayName(t.from),
+                    subtitle: t.contactProfileSubtitle ?? t.fromMeta,
+                    ...(t.contactAvatar ? { avatar: t.contactAvatar } : {}),
+                  } : undefined}
+                  showName
+                  nameClassName={cx('text-sm', t.unread && !t.resolved ? 'font-bold' : 'font-semibold')}
+                  className="w-full"
+                />
+                <button type="button" onClick={() => navigate(`/inbox/${t.id}`)} className="mt-2 block w-full text-left">
+                  <span className="flex items-center gap-2">
+                    <Tag tone={t.resolved ? 'green' : 'blue'}>{t.resolved ? 'Resolved' : t.category}</Tag>
+                    <span className="flex-1" />
+                    {t.unread && !t.resolved && <span className="h-2 w-2 shrink-0 rounded-full bg-secondary" aria-label="Unread" />}
+                    <span className="shrink-0 text-xs text-on-surface-variant">{t.timeAgo}</span>
+                  </span>
+                  <span className={cx('mt-2 block truncate text-sm', t.unread && !t.resolved ? 'font-bold text-primary' : 'font-semibold text-on-surface')}>{t.title}</span>
+                  <span className="mt-1 line-clamp-2 block text-xs text-on-surface-variant">"{t.preview}"</span>
+                </button>
               </div>
-              <div className={cx('mt-2 text-sm', t.unread && !t.resolved ? 'font-bold' : 'font-semibold')}>{t.title}</div>
-              <p className="mt-1 line-clamp-2 text-xs text-on-surface-variant">"{t.preview}"</p>
-              <p className="mt-1.5 text-xs font-semibold text-on-surface-variant">
-                From: {t.from} • {t.fromMeta}
-              </p>
-            </button>
+            </div>
           ))}
         </aside>
         <section className={cx(!active && 'hidden md:block')}>

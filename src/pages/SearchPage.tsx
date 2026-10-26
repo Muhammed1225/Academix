@@ -9,11 +9,11 @@ import { matchesSearch, relevanceScore, rememberSearch, createSearchCatalog, typ
 import { useApp } from '../store';
 
 const categories: { id: SearchCategory | 'all'; label: string; icon: string }[] = [
-  { id: 'all', label: 'All results', icon: 'search' },
-  { id: 'people', label: 'People', icon: 'people' },
+  { id: 'all', label: 'All', icon: 'search' },
   { id: 'universities', label: 'Universities', icon: 'account_balance' },
   { id: 'programmes', label: 'Programmes', icon: 'school' },
-  { id: 'posts', label: 'Posts & discussions', icon: 'forum' },
+  { id: 'people', label: 'People', icon: 'people' },
+  { id: 'discussions', label: 'Discussions', icon: 'forum' },
 ];
 
 const categoryIds = new Set(categories.map(({ id }) => id));
@@ -21,6 +21,7 @@ const pageSize = 12;
 type SortOrder = 'relevance' | 'recent' | 'discussed' | 'alphabetical';
 
 function safeCategory(value: string | null): SearchCategory | 'all' {
+  if (value === 'posts') return 'discussions';
   return value && categoryIds.has(value as SearchCategory | 'all')
     ? value as SearchCategory | 'all'
     : 'all';
@@ -125,7 +126,7 @@ function FilterPanel({
   const disciplines = uniqueOptions(selectedCategoryItems.map((item) => item.discipline));
   const degrees = uniqueOptions(selectedCategoryItems.map((item) => item.degree));
   const channelOptions = channels.map((channel) => channel.id);
-  const showUniversity = ['all', 'programmes', 'people', 'posts'].includes(category);
+  const showUniversity = ['all', 'programmes', 'people', 'discussions'].includes(category);
   const activeCount = ['university', 'location', 'institutionType', 'discipline', 'degree', 'channel']
     .filter((key) => params.has(key)).length;
 
@@ -136,7 +137,7 @@ function FilterPanel({
         <button type="button" onClick={reset} className="text-xs font-semibold text-secondary hover:underline">Reset</button>
       </div>
       {showUniversity && <FilterSelect label="University" value={params.get('university') ?? ''} options={universityOptions} onChange={(value) => setFilter('university', value)} />}
-      {category === 'universities' && (
+      {(category === 'all' || category === 'universities') && (
         <>
           <FilterSelect label="Location" value={params.get('location') ?? ''} options={locations} onChange={(value) => setFilter('location', value)} />
           <FilterSelect label="Institution type" value={params.get('institutionType') ?? ''} options={institutionTypes} onChange={(value) => setFilter('institutionType', value)} />
@@ -148,7 +149,7 @@ function FilterPanel({
           <FilterSelect label="Degree level" value={params.get('degree') ?? ''} options={degrees} onChange={(value) => setFilter('degree', value)} />
         </>
       )}
-      {category === 'posts' && (
+      {category === 'discussions' && (
         <label className="block text-sm font-semibold text-primary">
           Discussion topic
           <select
@@ -173,8 +174,8 @@ function FilterPanel({
         >
           <option value="relevance">Most relevant</option>
           <option value="alphabetical">Alphabetical</option>
-          {category === 'all' || category === 'posts' ? <option value="recent">Most recent</option> : null}
-          {category === 'all' || category === 'posts' ? <option value="discussed">Most discussed</option> : null}
+          {category === 'all' || category === 'discussions' ? <option value="recent">Most recent</option> : null}
+          {category === 'all' || category === 'discussions' ? <option value="discussed">Most discussed</option> : null}
         </select>
       </label>
     </div>
@@ -198,10 +199,10 @@ export default function SearchPage() {
   const query = (params.get('q') ?? '').trim();
   const requestedUniversity = params.get('university') ?? '';
   const legacyCollege = colleges.find((college) => college.id === requestedUniversity);
-  const category = params.get('type') ? safeCategory(params.get('type')) : legacyCollege ? 'posts' : 'all';
+  const category = params.get('type') ? safeCategory(params.get('type')) : legacyCollege ? 'discussions' : 'all';
   const universityFilter = legacyCollege?.name ?? requestedUniversity;
   const catalog = useMemo(() => createSearchCatalog(posts), [posts]);
-  const defaultSort: SortOrder = category === 'posts' && !query ? 'recent' : query ? 'relevance' : 'alphabetical';
+  const defaultSort: SortOrder = category === 'discussions' && !query ? 'recent' : query ? 'relevance' : 'alphabetical';
   const filterParams = new URLSearchParams(params);
   if (legacyCollege) filterParams.set('university', legacyCollege.name);
 
@@ -211,7 +212,7 @@ export default function SearchPage() {
 
   const queryMatches = catalog.filter((item) => matchesSearch(`${item.title} ${item.content} ${item.subtitle}`, query));
   const passesFilters = (item: SearchItem) => {
-    if (legacyCollege && item.category !== 'posts') return false;
+    if (legacyCollege && item.category !== 'discussions') return false;
     if (universityFilter && item.university !== universityFilter
       && !(item.category === 'universities' && item.title === universityFilter)) return false;
     if (params.get('location') && item.location !== params.get('location')) return false;
@@ -272,7 +273,7 @@ export default function SearchPage() {
         ? ['location', 'institutionType', 'channel']
         : nextCategory === 'people'
           ? ['institutionType', 'discipline', 'degree', 'channel']
-          : nextCategory === 'posts'
+          : nextCategory === 'discussions'
             ? ['location', 'institutionType', 'discipline', 'degree']
             : ['institutionType', 'channel'];
     updateParams({ type: nextCategory === 'all' ? '' : nextCategory }, remove);
@@ -308,6 +309,11 @@ export default function SearchPage() {
       reset={resetFilters}
     />
   );
+  const allGroups = categories.slice(1).map((entry) => ({
+    ...entry,
+    items: sortedItems.filter((item) => item.category === entry.id).slice(0, 3),
+    count: categoryCounts.get(entry.id) ?? 0,
+  })).filter((group) => group.items.length > 0);
 
   return (
     <div className="mx-auto max-w-content space-y-6">
@@ -315,10 +321,10 @@ export default function SearchPage() {
         <div>
           <p className="eyebrow text-secondary">Academix discovery</p>
           <h1 className="mt-1 font-headline text-3xl font-semibold text-primary">
-            {legacyCollege ? `Posts about ${legacyCollege.shortName}` : query ? <>Results for “{query}”</> : 'Search Academix'}
+            {legacyCollege ? `Discussions about ${legacyCollege.shortName}` : query ? <>Results for “{query}”</> : 'Search Academix'}
           </h1>
           <p className="mt-1 text-sm text-on-surface-variant">
-            {sortedItems.length} {sortedItems.length === 1 ? 'result' : 'results'} across people, universities, programmes, and discussions.
+            {sortedItems.length} {sortedItems.length === 1 ? 'result' : 'results'} across universities, programmes, people, and discussions.
           </p>
         </div>
         <form onSubmit={submitSearch} className="flex gap-2">
@@ -397,7 +403,26 @@ export default function SearchPage() {
         </aside>}
 
         <section aria-live="polite" className="min-w-0 space-y-3">
-          {pageItems.length ? pageItems.map((item) => item.post
+          {sortedItems.length ? category === 'all' ? (
+            <div className="space-y-8">
+              {allGroups.map((group) => (
+                <section key={group.id} aria-label={`${group.label} results`} className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="flex items-center gap-2 font-headline text-xl font-semibold text-primary">
+                      <Icon name={group.icon} className="text-secondary" />{group.label}
+                      <span className="rounded-full bg-surface-container-low px-2 py-0.5 text-xs font-semibold text-on-surface-variant">{group.count}</span>
+                    </h2>
+                    <button type="button" onClick={() => setCategory(group.id)} className="text-sm font-semibold text-secondary hover:underline">
+                      View all
+                    </button>
+                  </div>
+                  {group.items.map((item) => item.post
+                    ? <PostCard key={item.id} post={item.post} />
+                    : <SearchResultCard key={item.id} item={item} query={query} />)}
+                </section>
+              ))}
+            </div>
+          ) : pageItems.map((item) => item.post
             ? <PostCard key={item.id} post={item.post} />
             : <SearchResultCard key={item.id} item={item} query={query} />) : (
             <div className="card p-8 text-center sm:p-12">
@@ -409,7 +434,7 @@ export default function SearchPage() {
               )}
             </div>
           )}
-          {sortedItems.length > pageSize && (
+          {category !== 'all' && sortedItems.length > pageSize && (
             <nav aria-label="Search result pages" className="flex items-center justify-center gap-3 pt-4">
               <button type="button" disabled={page <= 1} onClick={() => updateParams({ page: String(page - 1) })} className="btn-outline !py-2 disabled:cursor-not-allowed disabled:opacity-50">
                 <Icon name="chevron_left" />Previous

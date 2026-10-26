@@ -211,6 +211,8 @@ export interface Ticket {
   id: string;
   contactId?: string;
   contactAvatar?: string;
+  contactRole?: string;
+  contactProfileSubtitle?: string;
   category: string;
   timeAgo: string;
   title: string;

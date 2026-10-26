@@ -19,6 +19,7 @@ import UniversityJoinedPage from './pages/UniversityJoinedPage';
 import { loadAuthSession } from './authService';
 import { useApp } from './store';
 import AdmissionResultsPage from './pages/AdmissionResultsPage';
+import NotificationsPage from './pages/NotificationsPage';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="inbox/:ticketId" element={<InboxPage />} />
           <Route path="compose" element={<ComposePage />} />
           <Route path="search" element={<SearchPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

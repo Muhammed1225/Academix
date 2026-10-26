@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api/auth': 'http://localhost:3001',
+      '/api/notifications': 'http://localhost:3001',
     },
   },
 })

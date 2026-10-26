@@ -2,6 +2,8 @@ import { create } from 'zustand';
 
 import { people, posts as initialPosts, tickets as initialTickets } from './data/mock';
 import type { Post, Ticket } from './data/types';
+import { displayName } from './data/userIdentity';
+import { createNotification, markTicketNotificationsRead } from './notificationsService';
 
 interface Toast {
   id: number;
@@ -155,7 +157,7 @@ export const useApp = create<AppState>((set, get) => ({
         ...p,
         comments: [...p.comments, { author: s.user ? {
           id: s.user.id,
-          name: s.user.name,
+          name: displayName(s.user.name, s.user.email),
           subtitle: s.user.university && s.user.major ? `${s.user.major} • ${s.user.university}` : 'Academix community member',
           verification: s.user.verificationStatus === 'verified' ? 'edu' : s.user.role === 'prospective' ? 'prospective' : 'unverified',
           ...(s.user.photo ? { avatar: s.user.photo } : {}),
@@ -176,7 +178,7 @@ export const useApp = create<AppState>((set, get) => ({
           id: `local-${Date.now()}`,
           author: anonymous || !s.user ? people.anonymous : {
             id: s.user.id,
-            name: s.user.name,
+            name: displayName(s.user.name, s.user.email),
             subtitle: s.user.university && s.user.major ? `${s.user.major} • ${s.user.university}` : 'Academix community member',
             verification: s.user.verificationStatus === 'verified' ? 'edu' : s.user.role === 'prospective' ? 'prospective' : 'unverified',
             ...(s.user.photo ? { avatar: s.user.photo } : {}),
@@ -206,13 +208,21 @@ export const useApp = create<AppState>((set, get) => ({
     })),
 
   markRead: (ticketId) =>
-    set((s) => ({ tickets: updateTicket(s.tickets, ticketId, (t) => ({ ...t, unread: false })) })),
+    set((s) => {
+      const ticket = s.tickets.find((item) => item.id === ticketId);
+      if (ticket?.unread && s.user) {
+        void markTicketNotificationsRead(s.user, ticketId).catch(() =>
+          get().showToast('Unable to sync notification status', 'error'),
+        );
+      }
+      return { tickets: updateTicket(s.tickets, ticketId, (t) => ({ ...t, unread: false })) };
+    }),
 
   reply: (ticketId, text) =>
     set((s) => ({
       tickets: updateTicket(s.tickets, ticketId, (t) => ({
         ...t,
-        messages: [...t.messages, { author: s.user?.name ?? 'You', time: 'Just now', text, isMe: true }],
+        messages: [...t.messages, { author: displayName(s.user?.name, s.user?.email), time: 'Just now', text, isMe: true }],
         suggestedReply: undefined,
       })),
     })),
@@ -316,6 +326,19 @@ export const useApp = create<AppState>((set, get) => ({
           }
           : {}),
       }));
+    if (!message.isMe && state.user) {
+      const ticket = state.tickets.find((item) => item.id === ticketId);
+      const id = `message-${ticketId}-${Date.now()}-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`;
+      void createNotification(state.user, {
+        id,
+        type: 'message',
+        senderName: displayName(message.author),
+        ...(ticket?.contactAvatar ? { senderAvatar: ticket.contactAvatar } : {}),
+        text: 'sent you a message',
+        href: `/inbox/${ticketId}`,
+        ticketId,
+      }).catch(() => get().showToast('Unable to save the new notification', 'error'));
+    }
     if (shouldNotify && typeof window !== 'undefined' && 'AudioContext' in window) {
       try {
         playMessageNotification();

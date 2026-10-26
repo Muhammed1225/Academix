@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Avatar, Icon, Modal, cx } from '../components/ui';
 import { sanitizeRichText } from '../components/RichText';
 import { colleges, composerForums } from '../data/mock';
+import { displayName } from '../data/userIdentity';
 import { useApp } from '../store';
 
 const MAX = 4000;
@@ -294,7 +295,7 @@ export default function ComposePage() {
     }
   };
 
-  const authorName = anonymous ? 'Anonymous Scholar' : user?.name ?? 'Sign in to post';
+  const authorName = anonymous ? 'Anonymous Scholar' : user ? displayName(user.name, user.email) : 'Sign in to post';
 
   return (
     <div className="mx-auto max-w-6xl">

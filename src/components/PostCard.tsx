@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 
 import { colleges } from '../data/mock';
 import type { Post } from '../data/types';
+import { displayName } from '../data/userIdentity';
 import { useApp } from '../store';
 import RichText from './RichText';
 import { Avatar, Icon, PersonAvatar, VerificationBadge, cx } from './ui';
@@ -217,7 +218,7 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
           )}
           {threadOpen && (
             <form onSubmit={submitComment} className="flex items-center gap-2">
-              <Avatar src={user?.photo || undefined} name={user?.name ?? 'You'} size={32} rounded="rounded-lg" />
+              <Avatar src={user?.photo || undefined} name={displayName(user?.name, user?.email)} size={32} rounded="rounded-lg" />
               <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add a verified response..." className="input !bg-white" />
               <button type="submit" className="btn-primary !h-9">
                 Post

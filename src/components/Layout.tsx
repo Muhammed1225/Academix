@@ -2,11 +2,15 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { BRAND } from '../data/mock';
-import { createSearchCatalog, getRecentSearches, matchesSearch, rememberSearch, relevanceScore } from '../data/search';
+import { clearRecentSearches, createSearchCatalog, getRecentSearches, matchesSearch, rememberSearch, relevanceScore, removeRecentSearch, type SearchCategory } from '../data/search';
 import { signOut as signOutAuth } from '../authService';
-import { useApp, useUnreadCount } from '../store';
+import { displayName } from '../data/userIdentity';
+import { useApp } from '../store';
+import { useNotifications } from '../notificationsStore';
 import AdvisorDrawer from './AdvisorDrawer';
-import { Avatar, BrandMark, Icon, cx } from './ui';
+import NotificationsPanel from './NotificationsPanel';
+import UserAvatar from './UserAvatar';
+import { BrandMark, Icon, Tag, cx } from './ui';
 
 const navItems = [
   { to: '/', label: 'Feed', icon: 'dynamic_feed', end: true },
@@ -16,9 +20,11 @@ const navItems = [
 ];
 
 function Header() {
-  const unread = useUnreadCount();
   const signedIn = useApp((s) => s.signedIn);
   const user = useApp((s) => s.user);
+  const unreadMessages = useNotifications((s) => s.unreadMessageCount);
+  const unreadNotifications = useNotifications((s) => s.unreadCount);
+  const refreshNotifications = useNotifications((s) => s.refresh);
   const authChecked = useApp((s) => s.authChecked);
   const setSignedIn = useApp((s) => s.setSignedIn);
   const messageSoundsEnabled = useApp((s) => s.messageSoundsEnabled);
@@ -30,21 +36,25 @@ function Header() {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [searchType, setSearchType] = useState<SearchCategory | 'all'>('all');
+  const [recentSearches, setRecentSearches] = useState(getRecentSearches);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const searchCatalog = useMemo(() => createSearchCatalog(posts), [posts]);
-  const suggestions = useMemo(() => {
+  const suggestionGroups = useMemo(() => {
     if (!debouncedQuery.trim()) return [];
-    const perCategory = new Map<string, number>();
-    return searchCatalog
+    const matched = searchCatalog
       .filter((item) => matchesSearch(`${item.title} ${item.subtitle} ${item.content}`, debouncedQuery))
-      .sort((first, second) => relevanceScore(second, debouncedQuery) - relevanceScore(first, debouncedQuery))
-      .filter((item) => {
-        const count = perCategory.get(item.category) ?? 0;
-        if (count >= 2) return false;
-        perCategory.set(item.category, count + 1);
-        return true;
-      })
-      .slice(0, 8);
+      .sort((first, second) => relevanceScore(second, debouncedQuery) - relevanceScore(first, debouncedQuery));
+    return [
+      { id: 'people' as const, label: 'People', icon: 'person' },
+      { id: 'universities' as const, label: 'Universities', icon: 'account_balance' },
+      { id: 'programmes' as const, label: 'Programmes', icon: 'school' },
+      { id: 'discussions' as const, label: 'Discussions', icon: 'forum' },
+    ].map((category) => ({
+      ...category,
+      items: matched.filter((item) => item.category === category.id).slice(0, 3),
+    })).filter((group) => group.items.length > 0);
   }, [debouncedQuery, searchCatalog]);
 
   useEffect(() => {
@@ -53,19 +63,54 @@ function Header() {
   }, [query]);
 
   useEffect(() => {
-    setQuery(new URLSearchParams(location.search).get('q') ?? '');
+    const params = new URLSearchParams(location.search);
+    setQuery(params.get('q') ?? '');
+    const routeType = params.get('type');
+    const availableTypes: (SearchCategory | 'all')[] = ['all', 'universities', 'programmes', 'people', 'discussions'];
+    setSearchType(availableTypes.find((type) => type === routeType) ?? 'all');
+    setRecentSearches(getRecentSearches());
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    void refreshNotifications(signedIn ? user : null);
+    if (!signedIn || !user) return;
+    const refresh = () => void refreshNotifications(user);
+    const interval = window.setInterval(refresh, 30_000);
+    window.addEventListener('academix:notifications-changed', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('academix:notifications-changed', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [refreshNotifications, signedIn, user]);
+
+  useEffect(() => {
+    setNotificationsOpen(false);
+  }, [location.pathname]);
+
+  const openSearchResults = (selectedType = searchType) => {
+    const trimmed = query.trim().replace(/\s+/g, ' ');
+    if (trimmed) {
+      rememberSearch(trimmed);
+      setRecentSearches(getRecentSearches());
+    }
+    const params = new URLSearchParams();
+    if (trimmed) params.set('q', trimmed);
+    if (selectedType !== 'all') params.set('type', selectedType);
+    setSearchFocused(false);
+    const search = params.toString();
+    navigate(search ? `/search?${search}` : '/search');
+  };
 
   const onSearch = (e: FormEvent) => {
     e.preventDefault();
-    const trimmed = query.trim().replace(/\s+/g, ' ');
-    if (trimmed) rememberSearch(trimmed);
-    setSearchFocused(false);
-    navigate(trimmed ? `/search?q=${encodeURIComponent(trimmed)}` : '/search');
+    openSearchResults();
   };
 
   const openSuggestion = (href: string, title: string) => {
     rememberSearch(title);
+    setRecentSearches(getRecentSearches());
     setSearchFocused(false);
     navigate(href);
   };
@@ -107,50 +152,112 @@ function Header() {
               className="input rounded-full !py-2 pl-10"
             />
             {searchFocused && (query.trim() ? (
-              <div role="group" aria-label="Search suggestions" className="absolute left-0 right-0 top-full z-[60] mt-2 overflow-hidden rounded-xl border border-outline-variant/60 bg-white py-2 shadow-float">
-                {suggestions.length ? suggestions.map((item) => (
-                  <button
-                    type="button"
-                    key={item.id}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => openSuggestion(item.href, item.title)}
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-container-low"
-                  >
-                    {item.image
-                      ? <Avatar src={item.image} name={item.title} size={34} rounded="rounded-full" />
-                      : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-secondary-fixed text-secondary"><Icon name={item.category === 'universities' ? 'account_balance' : item.category === 'programmes' ? 'school' : item.category === 'people' ? 'person' : 'forum'} /></span>}
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-primary">{item.title}</span>
-                      <span className="block truncate text-xs text-on-surface-variant">{item.subtitle}</span>
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-secondary">{item.category}</span>
-                  </button>
+              <div role="group" aria-label="Search suggestions" className="absolute left-0 right-0 top-full z-[60] mt-2 max-h-[70vh] overflow-y-auto rounded-xl border border-outline-variant/60 bg-white py-2 shadow-float">
+                {suggestionGroups.length ? suggestionGroups.map((group) => (
+                  <section key={group.id} aria-label={group.label}>
+                    <h2 className="px-4 pt-2 text-[10px] font-bold uppercase tracking-wider text-outline">{group.label}</h2>
+                    {group.items.map((item) => (
+                      <button
+                        type="button"
+                        key={item.id}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => openSuggestion(item.href, item.title)}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-surface-container-low"
+                      >
+                        {item.image
+                          ? <UserAvatar src={item.image} name={item.title} size={34} />
+                          : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-secondary-fixed text-secondary"><Icon name={group.icon} /></span>}
+                        <span className="min-w-0 flex-1">
+                        <span title={displayName(item.title)} className="block truncate text-sm font-semibold text-primary">{displayName(item.title)}</span>
+                          <span className="block truncate text-xs text-on-surface-variant">{item.subtitle}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </section>
                 )) : <p className="px-4 py-3 text-sm text-on-surface-variant">No suggestions found.</p>}
+                <div className="flex gap-1 overflow-x-auto border-t border-outline-variant/40 px-3 py-2">
+                  {[
+                    { id: 'all' as const, label: 'All' },
+                    { id: 'universities' as const, label: 'Universities' },
+                    { id: 'programmes' as const, label: 'Programmes' },
+                    { id: 'people' as const, label: 'People' },
+                    { id: 'discussions' as const, label: 'Discussions' },
+                  ].map((type) => (
+                    <button
+                      type="button"
+                      key={type.id}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => setSearchType(type.id)}
+                      aria-pressed={searchType === type.id}
+                      className={cx(
+                        'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
+                        searchType === type.id ? 'bg-secondary text-white' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container',
+                      )}
+                    >
+                      {type.label}
+                    </button>
+                  ))}
+                </div>
                 <button
-                  type="submit"
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => openSearchResults()}
                   className="flex w-full items-center gap-2 border-t border-outline-variant/40 px-4 py-3 text-left text-sm font-semibold text-secondary hover:bg-surface-container-low"
                 >
-                  <Icon name="search" />Search all results for “{query.trim()}”
+                  <Icon name="search" />See all results for '{query.trim()}'
                 </button>
               </div>
             ) : (
-              <div role="group" aria-label="Recent searches" className="absolute left-0 right-0 top-full z-[60] mt-2 overflow-hidden rounded-xl border border-outline-variant/60 bg-white py-2 shadow-float">
-                {getRecentSearches().length ? getRecentSearches().map((recent) => (
-                  <button
-                    type="button"
-                    key={recent}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => {
-                      setQuery(recent);
-                      rememberSearch(recent);
-                      setSearchFocused(false);
-                      navigate(`/search?q=${encodeURIComponent(recent)}`);
-                    }}
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-surface-container-low"
-                  >
-                    <Icon name="history" className="text-outline" />{recent}
-                  </button>
-                )) : <p className="px-4 py-3 text-sm text-on-surface-variant">Start typing to find people, universities, programmes, and discussions.</p>}
+              <div role="group" aria-label="Recent searches" className="absolute left-0 right-0 top-full z-[60] mt-2 max-h-[70vh] overflow-y-auto rounded-xl border border-outline-variant/60 bg-white py-2 shadow-float">
+                {recentSearches.length ? (
+                  <>
+                    <div className="flex items-center justify-between px-4 pb-1">
+                      <h2 className="text-xs font-semibold text-on-surface-variant">Recent searches</h2>
+                      <button
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          clearRecentSearches();
+                          setRecentSearches([]);
+                        }}
+                        className="text-xs font-semibold text-secondary hover:underline"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                    {recentSearches.map((recent) => (
+                      <div key={recent} className="flex items-center gap-2 px-3 hover:bg-surface-container-low">
+                        <button
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            setQuery(recent);
+                            rememberSearch(recent);
+                            setRecentSearches(getRecentSearches());
+                            setSearchFocused(false);
+                            navigate(`/search?q=${encodeURIComponent(recent)}`);
+                          }}
+                          className="flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left text-sm"
+                        >
+                          <Icon name="history" className="text-outline" />
+                          <span className="truncate">{recent}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            removeRecentSearch(recent);
+                            setRecentSearches(getRecentSearches());
+                          }}
+                          aria-label={`Remove recent search ${recent}`}
+                          className="rounded-full p-1 text-outline hover:bg-white hover:text-primary"
+                        >
+                          <Icon name="close" className="!text-[16px]" />
+                        </button>
+                      </div>
+                    ))}
+                  </>
+                ) : <p className="px-4 py-3 text-sm text-on-surface-variant">Start typing to find people, universities, programmes, and discussions.</p>}
               </div>
             ))}
           </form>
@@ -175,9 +282,9 @@ function Header() {
               }
             >
               {item.label}
-              {item.to === '/inbox' && unread > 0 && (
+              {item.to === '/inbox' && unreadMessages > 0 && (
                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary-fixed px-1.5 text-[11px] font-bold text-secondary">
-                  {unread}
+                  {unreadMessages}
                 </span>
               )}
             </NavLink>
@@ -195,7 +302,7 @@ function Header() {
               aria-expanded={menuOpen}
               className="group relative inline-flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-none"
             >
-              <Avatar src={user?.photo || undefined} name={user?.name ?? 'Account'} size={44} rounded="rounded-full" />
+              <UserAvatar src={user?.photo || undefined} name={displayName(user?.name, user?.email)} email={user?.email} size={44} />
               <span className="pointer-events-none absolute inset-0 rounded-full border-2 border-transparent transition-colors group-hover:border-secondary group-focus-visible:border-secondary" />
             </button>
             {menuOpen && (
@@ -245,15 +352,24 @@ function Header() {
             )}
           </div>
           )}
-          <button
-            type="button"
-            className="relative rounded-full p-2 text-on-surface-variant hover:bg-surface-container-low"
-            aria-label="Notifications"
-            onClick={() => showToast('You are all caught up', 'notifications')}
-          >
-            <Icon name="notifications" />
-            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-error" />
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              className="relative rounded-full p-2 text-on-surface-variant hover:bg-surface-container-low"
+              aria-label={unreadNotifications ? `Notifications, ${unreadNotifications} unread` : 'Notifications'}
+              aria-haspopup="dialog"
+              aria-expanded={notificationsOpen}
+              onClick={() => setNotificationsOpen((open) => !open)}
+            >
+              <Icon name="notifications" />
+              {unreadNotifications > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-error px-1 text-[10px] font-bold leading-none text-white">
+                  {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                </span>
+              )}
+            </button>
+            {notificationsOpen && <NotificationsPanel onClose={() => setNotificationsOpen(false)} />}
+          </div>
           {!signedIn && authChecked && (
             <Link to="/auth" className="btn-primary">Sign up / Log in</Link>
           )}
@@ -264,7 +380,7 @@ function Header() {
 }
 
 function MobileNav() {
-  const unread = useUnreadCount();
+  const unread = useNotifications((s) => s.unreadMessageCount);
   const items = [
     { to: '/', label: 'Feed', icon: 'dynamic_feed', end: true },
     { to: '/colleges', label: 'Universities', icon: 'account_balance' },
@@ -461,7 +577,14 @@ function MiniChatDock() {
 
   if (!signedIn || !ticket || hidden || pathname.startsWith('/inbox')) return null;
 
-  const otherUser = [...ticket.messages].reverse().find((message) => !message.isMe)?.author ?? ticket.from;
+  const otherUser = displayName([...ticket.messages].reverse().find((message) => !message.isMe)?.author ?? ticket.from);
+  const contactProfile = ticket.contactId ? `/people/${ticket.contactId}` : undefined;
+  const messagePerson = ticket.contactId ? {
+    id: ticket.contactId,
+    name: otherUser,
+    subtitle: ticket.contactProfileSubtitle ?? ticket.fromMeta,
+    ...(ticket.contactAvatar ? { avatar: ticket.contactAvatar } : {}),
+  } : undefined;
 
   const expandConversation = () => {
     setMinimized(false);
@@ -470,7 +593,7 @@ function MiniChatDock() {
 
   const startDrag = (event: PointerEvent<HTMLElement>) => {
     if (event.button !== 0 || resizeRef.current || dragRef.current) return;
-    if (event.target instanceof Element && event.target.closest('button, textarea, form, [role="menu"]')) return;
+    if (event.target instanceof Element && event.target.closest('a, button, textarea, form, [role="menu"]')) return;
     const bounds = dockRef.current?.getBoundingClientRect();
     if (!bounds) return;
     event.preventDefault();
@@ -643,23 +766,26 @@ function MiniChatDock() {
 
   if (minimized) {
     return (
-      <button
-        type="button"
-        onClick={() => setMinimized(false)}
-        aria-label={`Restore conversation with ${otherUser}`}
-        className="fixed bottom-20 right-3 z-40 flex max-w-[calc(100vw-1.5rem)] items-center gap-3 rounded-full border border-outline-variant/60 bg-white py-2 pl-2 pr-4 text-left shadow-float transition hover:-translate-y-0.5 hover:shadow-lg sm:bottom-4 sm:right-4"
+      <section
+        aria-label={`Conversation with ${otherUser}`}
+        className="fixed bottom-20 right-3 z-40 flex max-w-[calc(100vw-1.5rem)] items-center gap-3 rounded-full border border-outline-variant/60 bg-white py-2 pl-2 pr-4 text-left shadow-float transition sm:bottom-4 sm:right-4"
       >
-        <span className="relative">
-          <Avatar src={ticket.contactAvatar} name={otherUser} size={40} rounded="rounded-full" />
-          <span role="img" aria-label="Presence unavailable" title="Presence unavailable" className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-slate-400" />
-          {ticket.unread && <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-white bg-error" />}
-        </span>
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-semibold text-primary">{otherUser}</span>
-          <span className="block text-xs text-on-surface-variant">Conversation minimized</span>
-        </span>
-        <Icon name="chat" className="text-secondary" />
-      </button>
+        <UserAvatar
+          src={ticket.contactAvatar}
+          name={otherUser}
+          size={40}
+          showStatus
+          profileHref={contactProfile}
+          subtitle={ticket.fromMeta}
+          profileSubtitle={ticket.contactProfileSubtitle}
+          role={ticket.contactRole}
+          messagePerson={messagePerson}
+        />
+        {ticket.unread && <span className="h-2 w-2 shrink-0 rounded-full bg-error" aria-label="Unread" />}
+        <button type="button" onClick={() => setMinimized(false)} className="flex items-center gap-2 text-xs text-on-surface-variant hover:text-secondary">
+          Conversation minimized<Icon name="chat" className="text-secondary" />
+        </button>
+      </section>
     );
   }
 
@@ -733,14 +859,21 @@ function MiniChatDock() {
           aria-label={`Conversation with ${otherUser}. Drag to move, click to ${minimized ? 'restore' : 'minimize'}.`}
           className="flex min-w-0 flex-1 touch-none items-center gap-2.5 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
         >
-          <span className="relative">
-            <Avatar src={ticket.contactAvatar} name={otherUser} size={38} rounded="rounded-full" />
-            <span role="img" aria-label="Presence unavailable" title="Presence unavailable" className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#0B5BD3] bg-slate-300" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-semibold">{otherUser}</span>
-            <span className="block truncate text-xs text-white/80">{ticket.title}</span>
-          </span>
+          <UserAvatar
+            src={ticket.contactAvatar}
+            name={otherUser}
+            size={38}
+            showStatus
+            profileHref={contactProfile}
+            subtitle={ticket.fromMeta}
+            profileSubtitle={ticket.contactProfileSubtitle}
+            subtitleClassName="text-white/80"
+            role={ticket.contactRole}
+            messagePerson={messagePerson}
+            showName
+            nameClassName="text-sm text-white"
+            className="min-w-0 flex-1"
+          />
           <span aria-hidden="true" className="flex shrink-0 gap-0.5 opacity-60">
             <span className="h-1 w-1 rounded-full bg-white" />
             <span className="h-1 w-1 rounded-full bg-white" />
@@ -778,15 +911,43 @@ function MiniChatDock() {
         </div>
       </header>
       <div role="log" aria-label="Conversation messages" aria-live="polite" className="flex-1 space-y-3 overflow-y-auto bg-surface p-3">
-        {ticket.messages.map((message, index) => (
-          <div key={`${ticket.id}-${index}`} className={`flex ${message.isMe ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[88%] rounded-2xl px-3 py-2 ${message.isMe ? 'rounded-br-md bg-secondary text-white' : 'rounded-bl-md border border-outline-variant/50 bg-white text-on-surface'}`}>
-              {!message.isMe && <p className="mb-0.5 text-[11px] font-semibold text-on-surface-variant">{message.author}</p>}
-              <p className="whitespace-pre-wrap break-words text-sm">{message.text}</p>
-              <p className={`mt-1 text-right text-[10px] ${message.isMe ? 'text-white/75' : 'text-on-surface-variant'}`}>{message.time}</p>
+        {ticket.messages.map((message, index) => {
+          const firstInGroup = index === 0 || ticket.messages[index - 1].isMe !== message.isMe;
+          const senderName = message.isMe ? displayName(user?.name, user?.email) : otherUser;
+          const profileHref = message.isMe ? '/profile' : contactProfile;
+          const role = message.isMe
+            ? user?.role === 'faculty' ? 'Faculty' : user?.role === 'scholar' ? 'Student' : 'Applicant'
+            : ticket.contactRole;
+          return (
+            <div key={`${ticket.id}-${index}`} className={`flex items-start gap-2 ${message.isMe ? 'flex-row-reverse' : 'justify-start'}`}>
+              {firstInGroup ? (
+                <UserAvatar
+                  src={message.isMe ? user?.photo || undefined : ticket.contactAvatar}
+                  name={senderName}
+                  size={28}
+                  email={message.isMe ? user?.email : undefined}
+                  profileHref={profileHref}
+                  subtitle={message.isMe
+                    ? [user?.major, user?.university].filter(Boolean).join(' • ') || 'Academix community member'
+                    : ticket.fromMeta}
+                  profileSubtitle={message.isMe ? undefined : ticket.contactProfileSubtitle}
+                  role={role}
+                  messagePerson={message.isMe ? undefined : messagePerson}
+                  showName
+                  nameClassName="max-w-[90px] text-[11px]"
+                  className="max-w-[42%] shrink-0 items-start"
+                />
+              ) : <span aria-hidden="true" className="w-7 shrink-0" />}
+              <div className={`min-w-0 max-w-[88%] rounded-2xl px-3 py-2 ${message.isMe ? 'rounded-br-md bg-secondary text-white' : 'rounded-bl-md border border-outline-variant/50 bg-white text-on-surface'}`}>
+                <div className="flex items-center gap-2">
+                  {firstInGroup && role && <Tag tone={message.isMe ? 'neutral' : 'blue'} className="!px-1.5 !py-0 text-[10px]">{role}</Tag>}
+                  <span className={`ml-auto text-[10px] ${message.isMe ? 'text-white/75' : 'text-on-surface-variant'}`}>{message.time}</span>
+                </div>
+                <p className="whitespace-pre-wrap break-words text-sm">{message.text}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <div ref={messageEndRef} />
       </div>
       {ticket.resolved ? (
@@ -836,7 +997,7 @@ function MiniChatDock() {
               aria-label="Write a reply"
               className="input min-h-10 resize-none !rounded-2xl !px-3 !py-2 text-sm"
             />
-            <button type="submit" disabled={!draft.trim()} className="mb-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary text-white transition hover:bg-secondary/90 disabled:cursor-not-allowed disabled:opacity-50" aria-label={`Send reply as ${user?.name ?? 'you'}`}>
+            <button type="submit" disabled={!draft.trim()} className="mb-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary text-white transition hover:bg-secondary/90 disabled:cursor-not-allowed disabled:opacity-50" aria-label={`Send reply as ${displayName(user?.name, user?.email)}`}>
               <Icon name="send" className="!text-[18px]" />
             </button>
           </form>

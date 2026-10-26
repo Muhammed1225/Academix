@@ -45,12 +45,8 @@ function writeTestUser(user: AuthenticatedUser) {
   localStorage.setItem(sessionKey, user.email);
 }
 
-function displayNameFromEmail(email: string) {
-  return email.split('@')[0]
-    .split(/[._+-]+/)
-    .filter(Boolean)
-    .map((part) => part[0].toLocaleUpperCase() + part.slice(1))
-    .join(' ') || 'Test User';
+function fallbackDisplayName() {
+  return 'Academix member';
 }
 
 function testAuthenticate(mode: AuthMode, input: Record<string, unknown>): AuthResult {
@@ -65,7 +61,7 @@ function testAuthenticate(mode: AuthMode, input: Record<string, unknown>): AuthR
     ? {
         id: savedUser?.id ?? `test-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
         email,
-        name: typeof input.name === 'string' && input.name.trim() ? input.name.trim() : displayNameFromEmail(email),
+        name: typeof input.name === 'string' && input.name.trim() ? input.name.trim() : fallbackDisplayName(),
         role,
         ...(typeof input.university === 'string' && input.university ? { university: input.university } : {}),
         ...(typeof input.major === 'string' && input.major ? { major: input.major } : {}),

@@ -7,9 +7,12 @@ import { fileURLToPath } from 'node:url';
 
 const scrypt = promisify(scryptCallback);
 const dataFile = resolve(process.env.AUTH_DATA_FILE || resolve(dirname(fileURLToPath(import.meta.url)), 'data', 'users.json'));
+const notificationsFile = resolve(dirname(dataFile), 'notifications.json');
 const verificationDirectory = resolve(dirname(dataFile), 'verification-documents');
 const sessions = new Map();
 const users = new Map();
+let notificationData = { items: [], preferences: {}, readTickets: {} };
+let notificationSaveQueue = Promise.resolve();
 const profileBannerBackgrounds = new Set([
   'academix',
   'deep-blue',
@@ -61,11 +64,37 @@ try {
   if (error.code !== 'ENOENT') throw error;
 }
 
+try {
+  const saved = JSON.parse(await readFile(notificationsFile, 'utf8'));
+  if (saved && Array.isArray(saved.items) && saved.preferences && typeof saved.preferences === 'object') {
+    notificationData = {
+      ...saved,
+      readTickets: saved.readTickets && typeof saved.readTickets === 'object' && !Array.isArray(saved.readTickets)
+        ? saved.readTickets
+        : {},
+    };
+  }
+} catch (error) {
+  if (error.code !== 'ENOENT') throw error;
+}
+
 async function saveUsers() {
   const tempFile = `${dataFile}.tmp`;
   await mkdir(dirname(dataFile), { recursive: true, mode: 0o700 });
   await writeFile(tempFile, JSON.stringify([...users.values()]), { mode: 0o600 });
   await rename(tempFile, dataFile);
+}
+
+function saveNotifications() {
+  const snapshot = JSON.stringify(notificationData);
+  const save = notificationSaveQueue.then(async () => {
+    const tempFile = `${notificationsFile}.${randomUUID()}.tmp`;
+    await mkdir(dirname(notificationsFile), { recursive: true, mode: 0o700 });
+    await writeFile(tempFile, snapshot, { mode: 0o600 });
+    await rename(tempFile, notificationsFile);
+  });
+  notificationSaveQueue = save.catch(() => {});
+  return save;
 }
 
 function sendJson(res, status, body, headers = {}) {
@@ -104,6 +133,206 @@ function authenticatedSession(req) {
     return { session: null, user: null };
   }
   return { session, user: session.user || users.get(session.email) || null };
+}
+
+function notificationUser(req) {
+  const { user } = authenticatedSession(req);
+  if (user) return user;
+  const testUserId = req.headers['x-academix-test-user'];
+  if (allowTestLogin && typeof testUserId === 'string' && /^test-[\w-]{1,100}$/.test(testUserId)) {
+    return { id: testUserId };
+  }
+  return null;
+}
+
+function notificationSummary(userId) {
+  const userItems = notificationData.items.filter((item) => item.userId === userId);
+  return {
+    totalCount: userItems.length,
+    unreadCount: userItems.filter((item) => !item.readAt).length,
+    unreadMessageCount: userItems.filter((item) => item.type === 'message' && !item.readAt).length,
+  };
+}
+
+async function handleNotifications(req, res, url) {
+  const user = notificationUser(req);
+  if (!user) {
+    sendJson(res, 401, { error: 'Sign in to view notifications.' });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/notifications') {
+    const limit = Math.min(50, Math.max(1, Number.parseInt(url.searchParams.get('limit') || '20', 10) || 20));
+    const offset = Math.max(0, Number.parseInt(url.searchParams.get('offset') || '0', 10) || 0);
+    const unreadOnly = url.searchParams.get('unread') === 'true';
+    const items = notificationData.items
+      .filter((item) => item.userId === user.id && (!unreadOnly || !item.readAt))
+      .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
+    sendJson(res, 200, {
+      items: items.slice(offset, offset + limit).map(({ userId, ...item }) => item),
+      hasMore: offset + limit < items.length,
+      ...notificationSummary(user.id),
+    });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/notifications/preferences') {
+    sendJson(res, 200, {
+      preferences: notificationData.preferences[user.id] ?? { messages: true, mentions: true, updates: true },
+    });
+    return true;
+  }
+
+  if (req.method === 'PUT' && url.pathname === '/api/notifications/preferences') {
+    try {
+      const input = await readBody(req, 4096);
+      if (!input || typeof input !== 'object' || Array.isArray(input) ||
+          ['messages', 'mentions', 'updates'].some((key) => typeof input[key] !== 'boolean')) {
+        sendJson(res, 400, { error: 'Choose valid notification preferences.' });
+        return true;
+      }
+      notificationData.preferences[user.id] = {
+        messages: input.messages,
+        mentions: input.mentions,
+        updates: input.updates,
+      };
+      await saveNotifications();
+      sendJson(res, 200, { preferences: notificationData.preferences[user.id] });
+    } catch (error) {
+      if (error instanceof SyntaxError || error.message === 'Request too large') {
+        sendJson(res, 400, { error: 'Invalid notification preferences.' });
+      } else {
+        console.error('Unable to save notification preferences:', error);
+        sendJson(res, 500, { error: 'Unable to save notification preferences.' });
+      }
+    }
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/notifications') {
+    try {
+      const input = await readBody(req, 8192);
+      if (!input || typeof input !== 'object' || Array.isArray(input)) {
+        sendJson(res, 400, { error: 'Invalid notification.' });
+        return true;
+      }
+      const id = typeof input.id === 'string' && /^[\w-]{1,120}$/.test(input.id) ? input.id : '';
+      const senderName = typeof input.senderName === 'string' ? input.senderName.trim() : '';
+      const text = typeof input.text === 'string' ? input.text.trim() : '';
+      const type = input.type === 'message' || input.type === 'system' ? input.type : '';
+      const href = typeof input.href === 'string' && /^\/(inbox|people|notifications)(\/[\w-]+)?$/.test(input.href) ? input.href : '';
+      if (!id || !senderName || senderName.length > 100 || senderName.includes('@') ||
+          !text || text.length > 240 || !type || !href ||
+          (input.senderAvatar !== undefined && (typeof input.senderAvatar !== 'string' || input.senderAvatar.length > 2048)) ||
+          (input.ticketId !== undefined && (typeof input.ticketId !== 'string' || input.ticketId.length > 120))) {
+        sendJson(res, 400, { error: 'Invalid notification.' });
+        return true;
+      }
+      const existing = notificationData.items.find((item) => item.id === id && item.userId === user.id);
+      const preferences = notificationData.preferences[user.id] ?? { messages: true, mentions: true, updates: true };
+      if ((type === 'message' && !preferences.messages) || (type === 'system' && !preferences.updates)) {
+        sendJson(res, 202, { notification: null, ...notificationSummary(user.id) });
+        return true;
+      }
+      const notification = existing ?? {
+        id,
+        type,
+        senderName,
+        ...(input.senderAvatar ? { senderAvatar: input.senderAvatar } : {}),
+        text,
+        href,
+        ...(input.ticketId ? { ticketId: input.ticketId } : {}),
+        createdAt: new Date().toISOString(),
+        readAt: input.ticketId && id === `seed-${input.ticketId}` &&
+          notificationData.readTickets[user.id]?.includes(input.ticketId)
+          ? new Date().toISOString()
+          : null,
+      };
+      if (!existing) {
+        notificationData.items.push({
+          userId: user.id,
+          ...notification,
+        });
+        await saveNotifications();
+      }
+      sendJson(res, 201, { notification, ...notificationSummary(user.id) });
+    } catch (error) {
+      if (error instanceof SyntaxError || error.message === 'Request too large') {
+        sendJson(res, 400, { error: 'Invalid notification.' });
+      } else {
+        console.error('Unable to create notification:', error);
+        sendJson(res, 500, { error: 'Unable to create notification.' });
+      }
+    }
+    return true;
+  }
+
+  if (req.method === 'PATCH' && url.pathname === '/api/notifications/read-all') {
+    const now = new Date().toISOString();
+    notificationData.items = notificationData.items.map((item) =>
+      item.userId === user.id && !item.readAt ? { ...item, readAt: now } : item,
+    );
+    notificationData.readTickets[user.id] = [
+      ...new Set([
+        ...(notificationData.readTickets[user.id] ?? []),
+        ...notificationData.items.filter((item) => item.userId === user.id && item.ticketId).map((item) => item.ticketId),
+      ]),
+    ];
+    try {
+      await saveNotifications();
+      sendJson(res, 200, notificationSummary(user.id));
+    } catch (error) {
+      console.error('Unable to mark notifications read:', error);
+      sendJson(res, 500, { error: 'Unable to update notifications.' });
+    }
+    return true;
+  }
+
+  const ticketReadMatch = url.pathname.match(/^\/api\/notifications\/ticket\/([\w-]+)\/read$/);
+  if (req.method === 'PATCH' && ticketReadMatch) {
+    notificationData.readTickets[user.id] = [
+      ...new Set([...(notificationData.readTickets[user.id] ?? []), ticketReadMatch[1]]),
+    ];
+    notificationData.items = notificationData.items.map((item) =>
+      item.userId === user.id && item.ticketId === ticketReadMatch[1] && !item.readAt
+        ? { ...item, readAt: new Date().toISOString() }
+        : item,
+    );
+    try {
+      await saveNotifications();
+      sendJson(res, 200, notificationSummary(user.id));
+    } catch (error) {
+      console.error('Unable to mark ticket notifications read:', error);
+      sendJson(res, 500, { error: 'Unable to update notifications.' });
+    }
+    return true;
+  }
+
+  const readMatch = url.pathname.match(/^\/api\/notifications\/([\w-]+)\/read$/);
+  if (req.method === 'PATCH' && readMatch) {
+    const item = notificationData.items.find((entry) => entry.id === readMatch[1] && entry.userId === user.id);
+    if (!item) {
+      sendJson(res, 404, { error: 'Notification not found.' });
+      return true;
+    }
+    item.readAt = item.readAt || new Date().toISOString();
+    if (item.ticketId) {
+      notificationData.readTickets[user.id] = [
+        ...new Set([...(notificationData.readTickets[user.id] ?? []), item.ticketId]),
+      ];
+    }
+    try {
+      await saveNotifications();
+      sendJson(res, 200, { ...notificationSummary(user.id), ticketId: item.ticketId ?? null });
+    } catch (error) {
+      console.error('Unable to mark notification read:', error);
+      sendJson(res, 500, { error: 'Unable to update notification.' });
+    }
+    return true;
+  }
+
+  sendJson(res, 404, { error: 'Not found.' });
+  return true;
 }
 
 async function readBody(req, maxBytes = 16_384) {
@@ -145,6 +374,10 @@ function decodeIdentityDocument(document) {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  if (url.pathname.startsWith('/api/notifications')) {
+    await handleNotifications(req, res, url);
+    return;
+  }
   if (req.method === 'GET' && url.pathname === '/api/auth/session') {
     const { user } = authenticatedSession(req);
     sendJson(res, 200, user ? { authenticated: true, user: publicUser(user) } : { authenticated: false });

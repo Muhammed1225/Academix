@@ -5,6 +5,7 @@ import PostCard from '../components/PostCard';
 import { Avatar, MetricTile, Tag, cx } from '../components/ui';
 import { amas, channels } from '../data/mock';
 import type { Ama } from '../data/types';
+import { displayName } from '../data/userIdentity';
 import { useApp } from '../store';
 
 const protocol = [
@@ -37,10 +38,10 @@ function ProfileSummary() {
           aria-label="View your profile"
           className="-mt-8 flex w-fit rounded-full ring-4 ring-white transition hover:opacity-90"
         >
-          <Avatar src={user.photo || undefined} name={user.name} size={64} rounded="rounded-full" />
+          <Avatar src={user.photo || undefined} name={displayName(user.name, user.email)} size={64} rounded="rounded-full" />
         </Link>
         <Link to="/profile" className="mt-2 block font-semibold text-primary hover:text-secondary hover:underline">
-          {user.name}
+          {displayName(user.name, user.email)}
         </Link>
         <p className="mt-0.5 text-xs leading-relaxed text-on-surface-variant">{subtitle}</p>
         <div className="mt-3 border-t border-outline-variant/50 pt-3">
