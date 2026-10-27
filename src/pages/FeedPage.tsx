@@ -1,12 +1,29 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useOutletContext, useSearchParams } from 'react-router-dom';
 
 import PostCard from '../components/PostCard';
-import { Avatar, MetricTile, Tag, cx } from '../components/ui';
-import { amas, channels } from '../data/mock';
-import type { Ama } from '../data/types';
+import { Avatar, Icon, MetricTile, Tag, cx } from '../components/ui';
+import { amas, channels, colleges } from '../data/mock';
+import type { Ama, PostAuthorType } from '../data/types';
 import { displayName } from '../data/userIdentity';
 import { useApp } from '../store';
+import type { FeedSearchContext } from '../components/Layout';
+
+function normalized(value: string) {
+  return value.normalize('NFC').toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+const authorTypes: PostAuthorType[] = ['Prospective', 'Student Scholar', 'Faculty Representative'];
+const authorTypeSlugs: Record<PostAuthorType, string> = {
+  Prospective: 'prospective',
+  'Student Scholar': 'student-scholar',
+  'Faculty Representative': 'faculty-representative',
+};
+
+function authorTypesFromSearch(searchParams: URLSearchParams): PostAuthorType[] {
+  const slugs = searchParams.getAll('postsFrom');
+  return authorTypes.filter((type) => slugs.includes(authorTypeSlugs[type]));
+}
 
 const protocol = [
   ['bg-amber-500', 'Gold Verified', 'Faculty / Admissions Dean'],
@@ -122,8 +139,61 @@ export function InstitutionSpotlight() {
 export default function FeedPage() {
   const posts = useApp((s) => s.posts);
   const [channel, setChannel] = useState('all');
+  const [selectedAuthorTypes, setSelectedAuthorTypes] = useState<PostAuthorType[]>([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const [authorFilterOpen, setAuthorFilterOpen] = useState(false);
+  const { query, selectedUniversities, removeUniversity } = useOutletContext<FeedSearchContext>();
+  const authorFilterRef = useRef<HTMLDivElement>(null);
 
-  const visible = posts.filter((p) => channel === 'all' || p.channelId === channel);
+  useEffect(() => {
+    setSelectedAuthorTypes(authorTypesFromSearch(new URLSearchParams(location.search)));
+  }, [location.search]);
+
+  const updateAuthorTypes = (update: (current: PostAuthorType[]) => PostAuthorType[]) => {
+    const next = update(selectedAuthorTypes);
+    setSelectedAuthorTypes(next);
+    const params = new URLSearchParams(searchParams);
+    params.delete('postsFrom');
+    next.forEach((type) => params.append('postsFrom', authorTypeSlugs[type]));
+    setSearchParams(params, { replace: true });
+  };
+
+  useEffect(() => {
+    if (!authorFilterOpen) return;
+    const closeOnOutsidePointer = (event: Event) => {
+      if (!(event.target instanceof Node) || !authorFilterRef.current?.contains(event.target)) setAuthorFilterOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAuthorFilterOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [authorFilterOpen]);
+
+  const normalizedQuery = normalized(query);
+  const visible = posts.filter((post) => {
+    if (channel !== 'all' && post.channelId !== channel) return false;
+    if (selectedAuthorTypes.length && (!post.authorType || !selectedAuthorTypes.some((type) => type === post.authorType))) return false;
+    const searchableText = normalized(`${post.title ?? ''} ${post.body} ${post.insight ?? ''} ${post.author.name} ${post.author.subtitle}`);
+    if (normalizedQuery && !normalizedQuery.split(/\s+/).every((term) => searchableText.includes(term))) return false;
+    if (selectedUniversities.length) {
+      const college = colleges.find((item) => item.id === post.universityId);
+      const affiliation = normalized([
+        post.universityId,
+        college?.name,
+        college?.shortName,
+        college?.id,
+        post.author.subtitle,
+      ].filter(Boolean).join(' '));
+      if (!selectedUniversities.some((name) => affiliation.includes(normalized(name)))) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)_300px]">
@@ -147,6 +217,95 @@ export default function FeedPage() {
       </aside>
 
       <section className="min-w-0 space-y-4">
+        <div className="flex justify-end">
+          <div ref={authorFilterRef} className="relative flex max-w-full flex-col items-end gap-2">
+            <button
+              type="button"
+              onClick={() => setAuthorFilterOpen((open) => !open)}
+              aria-haspopup="dialog"
+              aria-expanded={authorFilterOpen}
+              className={cx(
+                'inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary',
+                selectedAuthorTypes.length
+                  ? 'border-secondary bg-secondary-fixed text-secondary'
+                  : 'border-outline-variant bg-white text-on-surface-variant hover:bg-surface-container-low',
+              )}
+            >
+              Posts from{selectedAuthorTypes.length > 0 && ` (${selectedAuthorTypes.length})`}
+              <Icon name="expand_more" className="!text-[18px]" />
+            </button>
+            {selectedAuthorTypes.length > 0 && (
+              <div className="flex max-w-full flex-wrap justify-end gap-1.5" aria-label="Selected post author filters">
+                {selectedAuthorTypes.map((type) => (
+                  <span key={type} className="inline-flex max-w-full items-center gap-1 rounded-full bg-secondary-fixed px-2.5 py-1 text-xs font-semibold text-on-secondary-fixed">
+                    <span className="truncate">{type}</span>
+                    <button
+                      type="button"
+                      onClick={() => updateAuthorTypes((current) => current.filter((item) => item !== type))}
+                      aria-label={`Remove ${type} filter`}
+                      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary"
+                    >
+                      <Icon name="close" className="!text-[13px]" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {authorFilterOpen && (
+              <div
+                role="dialog"
+                aria-label="Filter posts by author type"
+                className="absolute right-0 top-full z-30 mt-1 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-outline-variant/60 bg-white p-2 shadow-float"
+              >
+                <div className="space-y-0.5">
+                  {authorTypes.map((type) => {
+                    const checked = selectedAuthorTypes.includes(type);
+                    return (
+                      <label key={type} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-on-surface transition-colors hover:bg-surface-container-low focus-within:bg-surface-container-low">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => updateAuthorTypes((current) =>
+                            checked ? current.filter((item) => item !== type) : [...current, type],
+                          )}
+                          className="h-4 w-4 accent-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary"
+                        />
+                        <span>{type}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="mt-1 flex justify-end border-t border-outline-variant/40 pt-1">
+                  <button
+                    type="button"
+                    disabled={selectedAuthorTypes.length === 0}
+                    onClick={() => updateAuthorTypes(() => [])}
+                    className="rounded-lg px-3 py-2 text-sm font-semibold text-secondary transition-colors hover:bg-surface-container-low focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        {selectedUniversities.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2" aria-label="Selected university filters">
+            {selectedUniversities.map((name) => (
+              <span key={name} className="inline-flex max-w-full items-center gap-1 rounded-full bg-secondary-fixed px-3 py-1 text-xs font-semibold text-on-secondary-fixed">
+                <span className="truncate">{name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeUniversity(name)}
+                  aria-label={`Remove ${name} university filter`}
+                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary"
+                >
+                  <Icon name="close" className="!text-[14px]" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 lg:hidden">
           {channels.map((c) => (
             <button
@@ -161,7 +320,9 @@ export default function FeedPage() {
           ))}
         </div>
 
-        {visible.length === 0 && <div className="card p-10 text-center text-sm text-on-surface-variant">No dispatches in this channel yet.</div>}
+        {visible.length === 0 && (
+          <div className="card p-10 text-center text-sm text-on-surface-variant">No posts found for your selected filters.</div>
+        )}
         {visible.map((p, i) => (
           <div key={p.id} className="space-y-4">
             <PostCard post={p} />

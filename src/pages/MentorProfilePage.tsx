@@ -1,14 +1,55 @@
 import { useState } from 'react';
-import { Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 
 import { BookingPanel } from '../components/BookingModal';
 import PostCard from '../components/PostCard';
 import { Avatar, Icon, SectionHeader, Tag, cx } from '../components/ui';
 import { BRAND, mentorProfiles } from '../data/mock';
+import { mentorDirectory } from '../data/mentors';
 import type { MentorProfile, Review } from '../data/types';
 import { useApp } from '../store';
 
 type ProfileTab = 'posts' | 'journey' | 'sessions' | 'feedback';
+
+function DirectoryMentorProfile({ mentorId }: { mentorId: string }) {
+  const mentor = mentorDirectory.find((item) => item.id === mentorId);
+  const navigate = useNavigate();
+  const openMiniChatForPerson = useApp((state) => state.openMiniChatForPerson);
+  if (!mentor) return <Navigate to="/mentors" replace />;
+  const message = () => {
+    openMiniChatForPerson({
+      id: mentor.id,
+      name: mentor.name,
+      subtitle: `${mentor.field} • ${mentor.university}`,
+      ...(mentor.avatar ? { avatar: mentor.avatar } : {}),
+    });
+    const ticket = useApp.getState().tickets.find((item) => item.contactId === mentor.id || item.id === `direct-${mentor.id}`);
+    if (ticket) navigate(`/inbox/${ticket.id}`);
+  };
+  return (
+    <div className="mx-auto max-w-3xl space-y-5">
+      <Link to="/mentors" className="inline-flex items-center gap-1 text-sm font-semibold text-secondary hover:underline">
+        <Icon name="arrow_back" className="!text-[18px]" /> All mentors
+      </Link>
+      <section className="card p-6 sm:p-8">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+          <Avatar src={mentor.avatar || undefined} name={mentor.name || 'Mentor'} size={96} rounded="rounded-full" />
+          <div className="min-w-0 flex-1">
+            <h1 className="font-headline text-3xl font-semibold text-primary">{mentor.name || 'Verified mentor'}</h1>
+            {mentor.verified && <Tag tone="green" icon="verified" className="mt-2">Verified</Tag>}
+            <p className="mt-3 text-sm font-semibold text-on-surface">{mentor.university || 'University not listed'}</p>
+            <p className="mt-1 text-sm text-on-surface-variant">{mentor.field || 'Academic mentor'}</p>
+          </div>
+          <button type="button" onClick={message} className="btn-primary shrink-0"><Icon name="mail" /> Message</button>
+        </div>
+        <div className="mt-6 border-t border-outline-variant/50 pt-5">
+          <h2 className="font-semibold text-primary">About</h2>
+          <p className="mt-2 leading-relaxed text-on-surface-variant">{mentor.bio || 'A verified mentor ready to share their academic experience.'}</p>
+        </div>
+      </section>
+    </div>
+  );
+}
 
 function Stars({ size = 16 }: { size?: number }) {
   return (
@@ -255,7 +296,7 @@ export default function MentorProfilePage() {
   const [tab, setTab] = useState<ProfileTab>('posts');
   const [following, setFollowing] = useState(false);
 
-  if (!profile) return <Navigate to="/" replace />;
+  if (!profile) return <DirectoryMentorProfile mentorId={mentorId} />;
 
   const tabs: { id: ProfileTab; label: string; icon: string; meta: string }[] = [
     { id: 'posts', label: 'Posts', icon: 'dynamic_feed', meta: String(profile.posts.length) },

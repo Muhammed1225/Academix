@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 
 import { BRAND } from '../data/mock';
 import { clearRecentSearches, createSearchCatalog, getRecentSearches, matchesSearch, rememberSearch, relevanceScore, removeRecentSearch, type SearchCategory } from '../data/search';
+import { universities } from '../data/educationOptions';
 import { signOut as signOutAuth } from '../authService';
 import { displayName } from '../data/userIdentity';
 import { useApp } from '../store';
@@ -11,6 +12,7 @@ import AdvisorDrawer from './AdvisorDrawer';
 import NotificationsPanel from './NotificationsPanel';
 import UserAvatar from './UserAvatar';
 import { BrandMark, Icon, Tag, cx } from './ui';
+import AskMentorModal from './AskMentorModal';
 
 const navItems = [
   { to: '/', label: 'Feed', icon: 'dynamic_feed', end: true },
@@ -19,7 +21,23 @@ const navItems = [
   { to: '/inbox', label: 'Messages', icon: 'mail' },
 ];
 
-function Header() {
+export interface FeedSearchContext {
+  query: string;
+  selectedUniversities: string[];
+  removeUniversity: (name: string) => void;
+}
+
+function Header({
+  query,
+  setQuery,
+  selectedUniversities,
+  setSelectedUniversities,
+}: {
+  query: string;
+  setQuery: (value: string) => void;
+  selectedUniversities: string[];
+  setSelectedUniversities: (value: string[]) => void;
+}) {
   const signedIn = useApp((s) => s.signedIn);
   const user = useApp((s) => s.user);
   const unreadMessages = useNotifications((s) => s.unreadMessageCount);
@@ -33,14 +51,21 @@ function Header() {
   const posts = useApp((s) => s.posts);
   const navigate = useNavigate();
   const location = useLocation();
-  const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchType, setSearchType] = useState<SearchCategory | 'all'>('all');
   const [recentSearches, setRecentSearches] = useState(getRecentSearches);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [universityQuery, setUniversityQuery] = useState('');
+  const [draftUniversities, setDraftUniversities] = useState<string[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const searchCatalog = useMemo(() => createSearchCatalog(posts), [posts]);
+  const filterRootRef = useRef<HTMLDivElement>(null);
+  const filteredUniversities = useMemo(
+    () => universities.filter((name) => name.toLocaleLowerCase().includes(universityQuery.trim().toLocaleLowerCase())),
+    [universityQuery],
+  );
   const suggestionGroups = useMemo(() => {
     if (!debouncedQuery.trim()) return [];
     const matched = searchCatalog
@@ -69,7 +94,23 @@ function Header() {
     const availableTypes: (SearchCategory | 'all')[] = ['all', 'universities', 'programmes', 'people', 'discussions'];
     setSearchType(availableTypes.find((type) => type === routeType) ?? 'all');
     setRecentSearches(getRecentSearches());
-  }, [location.pathname, location.search]);
+  }, [location.pathname, location.search, setQuery]);
+
+  useEffect(() => {
+    if (!filterOpen) return;
+    const closeOnOutsidePointer = (event: Event) => {
+      if (!(event.target instanceof Node) || !filterRootRef.current?.contains(event.target)) setFilterOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFilterOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [filterOpen]);
 
   useEffect(() => {
     void refreshNotifications(signedIn ? user : null);
@@ -105,6 +146,13 @@ function Header() {
 
   const onSearch = (e: FormEvent) => {
     e.preventDefault();
+    if (location.pathname === '/' || selectedUniversities.length > 0) {
+      const trimmed = query.trim().replace(/\s+/g, ' ');
+      if (trimmed) rememberSearch(trimmed);
+      setSearchFocused(false);
+      if (location.pathname !== '/') navigate(trimmed ? `/?q=${encodeURIComponent(trimmed)}` : '/');
+      return;
+    }
     openSearchResults();
   };
 
@@ -129,7 +177,7 @@ function Header() {
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-outline-variant/40 bg-white shadow-header">
       <div className="mx-auto flex h-16 max-w-content items-center justify-between gap-4 px-4">
-        <div className="flex max-w-md flex-1 items-center gap-4">
+        <div className="flex min-w-0 max-w-md flex-1 items-center gap-2">
           <Link to="/" className="shrink-0" aria-label={`${BRAND} feed`}>
             <BrandMark />
           </Link>
@@ -139,7 +187,7 @@ function Header() {
             onBlur={(event) => {
               if (!event.currentTarget.contains(event.relatedTarget)) setSearchFocused(false);
             }}
-            className="relative hidden w-full md:block"
+            className="relative hidden min-w-0 flex-1 md:block"
           >
             <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
             <input
@@ -264,6 +312,97 @@ function Header() {
           <button type="button" onClick={() => navigate('/search')} aria-label="Open search" className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-low md:hidden">
             <Icon name="search" />
           </button>
+          <div ref={filterRootRef} className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                if (!filterOpen) setDraftUniversities(selectedUniversities);
+                setFilterOpen((open) => !open);
+              }}
+              aria-label="Filter universities"
+              aria-haspopup="dialog"
+              aria-expanded={filterOpen}
+              className={cx(
+                'relative inline-flex h-10 items-center gap-1.5 rounded-full border px-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary sm:px-3',
+                selectedUniversities.length ? 'border-secondary bg-secondary-fixed text-secondary' : 'border-outline-variant bg-white text-on-surface-variant hover:bg-surface-container-low',
+              )}
+            >
+              <Icon name="filter_list" className="!text-[18px]" />
+              <span className="hidden sm:inline">Filter</span>
+              {selectedUniversities.length > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary px-1 text-[11px] font-bold leading-none text-white">
+                  {selectedUniversities.length}
+                </span>
+              )}
+            </button>
+            {filterOpen && (
+              <div
+                role="dialog"
+                aria-label="Filter by university"
+                className="absolute right-0 top-full z-[70] mt-2 flex max-h-[min(70vh,34rem)] w-[min(22rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-outline-variant/60 bg-white shadow-float"
+              >
+                <div className="border-b border-outline-variant/40 p-3">
+                  <label className="relative block">
+                    <span className="sr-only">Search universities</span>
+                    <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-outline !text-[18px]" />
+                    <input
+                      value={universityQuery}
+                      onChange={(event) => setUniversityQuery(event.target.value)}
+                      placeholder="Search universities..."
+                      className="input !py-2 pl-9"
+                    />
+                  </label>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-2" role="group" aria-label="Universities">
+                  {filteredUniversities.length ? filteredUniversities.map((name) => {
+                    const checked = draftUniversities.includes(name);
+                    return (
+                      <label
+                        key={name}
+                        className="flex cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-on-surface transition-colors hover:bg-surface-container-low focus-within:bg-surface-container-low"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => setDraftUniversities((current) =>
+                            checked ? current.filter((item) => item !== name) : [...current, name],
+                          )}
+                          className="h-4 w-4 shrink-0 accent-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary"
+                        />
+                        <span>{name}</span>
+                      </label>
+                    );
+                  }) : (
+                    <p className="px-2.5 py-4 text-center text-sm text-on-surface-variant">No universities found</p>
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-3 border-t border-outline-variant/40 p-3">
+                  <button
+                    type="button"
+                    onClick={() => setDraftUniversities([])}
+                    disabled={draftUniversities.length === 0}
+                    className="rounded-lg px-3 py-2 text-sm font-semibold text-secondary transition-colors hover:bg-surface-container-low focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Clear all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedUniversities(draftUniversities);
+                      setFilterOpen(false);
+                      if (location.pathname !== '/') {
+                        const trimmed = query.trim().replace(/\s+/g, ' ');
+                        navigate(trimmed ? `/?q=${encodeURIComponent(trimmed)}` : '/');
+                      }
+                    }}
+                    className="btn-primary !h-9 !px-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary"
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <nav className="hidden h-full items-center gap-1 lg:flex">
@@ -425,7 +564,17 @@ function MobileNav() {
   );
 }
 
-function Footer() {
+function Footer({ onAskMentor }: { onAskMentor: () => void }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const openCollegeDirectories = () => {
+    navigate('/colleges#browse-universities');
+    if (location.pathname === '/colleges') {
+      window.requestAnimationFrame(() => {
+        document.getElementById('browse-universities')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  };
   const columns = [
     { title: 'Network', links: ['Scholars Feed', 'College Directories', 'Verified Mentors', 'Academic Q&A'] },
     { title: 'Institutions', links: ['Carnegie Mellon University', 'Admissions Portals', 'Research Labs', 'Department Chairs'] },
@@ -448,8 +597,28 @@ function Footer() {
           <div key={col.title}>
             <h3 className="eyebrow">{col.title}</h3>
             <ul className="mt-3 space-y-2 text-sm text-on-surface-variant">
-              {col.links.map((l) => (
-                <li key={l}>{l}</li>
+              {col.links.map((label) => (
+                <li key={label}>
+                  {col.title === 'Network' ? (
+                    label === 'Scholars Feed' ? (
+                      <button type="button" onClick={() => navigate('/?postsFrom=student-scholar')} className="text-left transition-colors hover:text-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary">
+                        {label}
+                      </button>
+                    ) : label === 'College Directories' ? (
+                      <button type="button" onClick={openCollegeDirectories} className="text-left transition-colors hover:text-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary">
+                        {label}
+                      </button>
+                    ) : label === 'Verified Mentors' ? (
+                      <Link to="/mentors" className="transition-colors hover:text-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary">
+                        {label}
+                      </Link>
+                    ) : (
+                      <button type="button" onClick={onAskMentor} className="text-left transition-colors hover:text-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary">
+                        {label}
+                      </button>
+                    )
+                  ) : label}
+                </li>
               ))}
             </ul>
           </div>
@@ -1041,19 +1210,34 @@ function AdvisorLauncher() {
 }
 
 export default function Layout() {
+  const [query, setQuery] = useState('');
+  const [selectedUniversities, setSelectedUniversities] = useState<string[]>([]);
+  const [askMentorOpen, setAskMentorOpen] = useState(false);
+  const feedSearchContext = useMemo<FeedSearchContext>(() => ({
+    query,
+    selectedUniversities,
+    removeUniversity: (name) => setSelectedUniversities((current) => current.filter((university) => university !== name)),
+  }), [query, selectedUniversities]);
+
   return (
     <div className="min-h-screen">
-      <Header />
+      <Header
+        query={query}
+        setQuery={setQuery}
+        selectedUniversities={selectedUniversities}
+        setSelectedUniversities={setSelectedUniversities}
+      />
       <main className="mx-auto max-w-content px-4 pb-24 pt-24 lg:pb-8">
-        <Outlet />
+        <Outlet context={feedSearchContext} />
       </main>
-      <Footer />
+      <Footer onAskMentor={() => setAskMentorOpen(true)} />
       <MobileNav />
       <CommunityLauncher />
       <AdvisorLauncher />
       <AdvisorDrawer />
       <MiniChatDock />
       <ToastHost />
+      {askMentorOpen && <AskMentorModal onClose={() => setAskMentorOpen(false)} />}
     </div>
   );
 }

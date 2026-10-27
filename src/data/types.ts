@@ -29,10 +29,12 @@ export interface Comment {
 }
 
 export type FeedTab = 'trending' | 'latest' | 'essays';
+export type PostAuthorType = 'Prospective' | 'Student Scholar' | 'Faculty Representative';
 
 export interface Post {
   id: string;
   author: Person;
+  authorType?: PostAuthorType;
   timeAgo: string;
   title?: string;
   body: string;
@@ -207,8 +209,48 @@ export interface Message {
   isMe?: boolean;
 }
 
+export interface GroupMember {
+  id: string;
+  name: string;
+  avatar?: string;
+  universityOrRole: string;
+  isAdmin: boolean;
+  isCurrentUser: boolean;
+}
+
+export interface GroupSharedPost {
+  id: string;
+  title: string;
+  author: string;
+  time: string;
+  href: string;
+}
+
+export interface GroupSharedLink {
+  url: string;
+  sender: string;
+  date: string;
+}
+
+export interface GroupSharedDocument {
+  id: string;
+  fileName: string;
+  size: string;
+  sender: string;
+  date: string;
+  downloadUrl: string;
+}
+
 export interface Ticket {
   id: string;
+  groupBio?: string;
+  groupPicture?: string;
+  groupCreatedAt?: string;
+  groupAdminId?: string;
+  groupMembers?: GroupMember[];
+  groupSharedPosts?: GroupSharedPost[];
+  groupSharedLinks?: GroupSharedLink[];
+  groupSharedDocuments?: GroupSharedDocument[];
   contactId?: string;
   contactAvatar?: string;
   contactRole?: string;

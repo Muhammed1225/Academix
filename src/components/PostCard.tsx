@@ -6,10 +6,15 @@ import type { Post } from '../data/types';
 import { displayName } from '../data/userIdentity';
 import { useApp } from '../store';
 import RichText from './RichText';
-import { Avatar, Icon, PersonAvatar, VerificationBadge, cx } from './ui';
+import { Avatar, Icon, VerificationBadge, cx } from './ui';
+import UserAvatar from './UserAvatar';
 
 function FlaggedClaim({ post }: { post: Post }) {
   const showToast = useApp((s) => s.showToast);
+  const user = useApp((s) => s.user);
+  const profileHref = post.author.id === user?.id
+    ? '/profile'
+    : post.author.id === 'maya' ? '/mentors/maya' : `/people/${post.author.id}`;
   return (
     <article className="card overflow-hidden border-l-4 !border-l-error p-5">
       <div className="flex items-start gap-3">
@@ -17,11 +22,23 @@ function FlaggedClaim({ post }: { post: Post }) {
           <Icon name="person_off" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold">{post.author.name}</span>
-            <VerificationBadge verification="unverified" />
-          </div>
-          <p className="text-xs text-on-surface-variant">{post.author.subtitle}</p>
+          <UserAvatar
+            src={post.author.avatar}
+            name={post.author.name}
+            size={40}
+            profileHref={profileHref}
+            subtitle={post.author.subtitle}
+            verification={post.author.verification}
+            badge={post.author.badge}
+            messagePerson={post.author.id === user?.id ? undefined : {
+              id: post.author.id,
+              name: post.author.name,
+              subtitle: post.author.subtitle || 'Academix community member',
+              ...(post.author.avatar ? { avatar: post.author.avatar } : {}),
+            }}
+            showName
+            nameClassName="text-sm"
+          />
         </div>
         <span className="text-xs font-semibold text-error">Community Audit Active</span>
       </div>
@@ -53,6 +70,9 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
 
   const latest = post.comments[post.comments.length - 1];
   const visibleComments = threadOpen ? post.comments : latest ? [latest] : [];
+  const profileHref = post.author.id === user?.id
+    ? '/profile'
+    : post.author.id === 'maya' ? '/mentors/maya' : `/people/${post.author.id}`;
 
   const submitComment = (e: FormEvent) => {
     e.preventDefault();
@@ -64,14 +84,27 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
 
   const authorHeader = (
     <div className="flex items-start gap-3">
-      <PersonAvatar person={post.author} size={44} />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold text-on-surface">{post.author.name}</span>
-          <VerificationBadge verification={post.author.verification} label={post.author.badge} />
-        </div>
-        <p className="truncate text-xs text-on-surface-variant">{post.author.subtitle}</p>
-      </div>
+      <UserAvatar
+        src={post.author.avatar}
+        name={post.author.name}
+        size={44}
+        profileHref={profileHref}
+        subtitle={post.author.subtitle}
+        profileSubtitle={post.author.subtitle}
+        verification={post.author.verification}
+        badge={post.author.badge}
+        messagePerson={post.author.id === user?.id ? undefined : {
+          id: post.author.id,
+          name: post.author.name,
+          subtitle: post.author.subtitle || 'Academix community member',
+          ...(post.author.avatar ? { avatar: post.author.avatar } : {}),
+        }}
+        showName
+        nameClassName="text-sm"
+        subtitleClassName="text-xs"
+        className="min-w-0 flex-1"
+        trailing={<VerificationBadge verification={post.author.verification} label={post.author.badge} />}
+      />
       <span className="shrink-0 text-xs text-on-surface-variant">{post.timeAgo}</span>
     </div>
   );
@@ -79,23 +112,19 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
   return (
     <article className="card overflow-hidden">
       <div className="px-5 pt-5">
-        {user?.id === post.author.id ? (
-          <Link to="/profile" className="block rounded-lg hover:opacity-90">
-            {authorHeader}
-          </Link>
-        ) : post.author.id === 'maya' ? (
-          <Link to="/mentors/maya" className="block rounded-lg hover:opacity-90">
-            {authorHeader}
-          </Link>
-        ) : (
-          authorHeader
-        )}
+        {authorHeader}
         {post.title && <h3 className="mt-4 font-headline text-xl font-semibold leading-snug text-primary">{post.title}</h3>}
         {university && (
           <Link to={`/colleges/${university.id}`} className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-secondary-fixed px-3 py-1 text-xs font-semibold text-on-secondary-fixed hover:underline">
             <Icon name="account_balance" className="!text-[15px]" />
             About {university.name}
           </Link>
+        )}
+        {!university && post.universityId && (
+          <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-secondary-fixed px-3 py-1 text-xs font-semibold text-on-secondary-fixed">
+            <Icon name="account_balance" className="!text-[15px]" />
+            {post.universityId}
+          </span>
         )}
         <RichText text={post.body} className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-on-surface-variant" />
 
@@ -195,14 +224,26 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
         <div className="space-y-4 bg-surface-container-low/60 px-5 py-4">
           {visibleComments.map((c, i) => (
             <div key={i} className="flex gap-3">
-              <Link to={c.author.id === user?.id ? '/profile' : `/people/${c.author.id}`} className="shrink-0 rounded-lg hover:opacity-80" aria-label={`View ${c.author.name}'s profile`}>
-                <Avatar src={c.author.avatar} name={c.author.name} size={32} rounded="rounded-lg" />
-              </Link>
               <div className="min-w-0 flex-1 text-sm">
-                <div>
-                  <Link to={c.author.id === user?.id ? '/profile' : `/people/${c.author.id}`} className="font-semibold text-on-surface hover:text-secondary hover:underline">
-                    {c.author.name}
-                  </Link>{' '}
+                <div className="flex flex-wrap items-center gap-x-1">
+                  <UserAvatar
+                    src={c.author.avatar}
+                    name={c.author.name}
+                    size={32}
+                    profileHref={c.author.id === user?.id ? '/profile' : `/people/${c.author.id}`}
+                    subtitle={c.author.subtitle}
+                    verification={c.author.verification}
+                    badge={c.author.badge}
+                    messagePerson={c.author.id === user?.id ? undefined : {
+                      id: c.author.id,
+                      name: c.author.name,
+                      subtitle: c.author.subtitle || 'Academix community member',
+                      ...(c.author.avatar ? { avatar: c.author.avatar } : {}),
+                    }}
+                    showName
+                    nameClassName="text-sm text-on-surface hover:text-secondary hover:underline"
+                    className="shrink-0"
+                  />
                   <span className="text-xs text-on-surface-variant">
                     ({c.author.verification === 'edu' ? 'Verified CMU Scholar' : 'Prospective Scholar'}) • {c.timeAgo}
                   </span>

@@ -1,5 +1,5 @@
 import majorsText from '../../data/majors.txt?raw';
-import universitiesText from '../../data/universities (1).txt?raw';
+import universitiesText from '../../data/universities.txt?raw';
 
 function parseOptions(source: string) {
   const uniqueOptions = new Map<string, string>();

@@ -1,16 +1,19 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { avatarColor, displayName, initialsForName } from '../data/userIdentity';
+import type { Verification } from '../data/types';
 import { useApp } from '../store';
-import { cx, Icon } from './ui';
+import { cx, Icon, VerificationBadge } from './ui';
 
 interface MessagePerson {
   id: string;
   name: string;
   subtitle: string;
   avatar?: string;
+  verification?: Verification;
+  badge?: string;
 }
 
 interface UserAvatarProps {
@@ -24,6 +27,9 @@ interface UserAvatarProps {
   subtitle?: string;
   profileSubtitle?: string;
   role?: string;
+  verification?: Verification;
+  badge?: string;
+  showAvatar?: boolean;
   showName?: boolean;
   nameClassName?: string;
   subtitleClassName?: string;
@@ -43,44 +49,124 @@ export default function UserAvatar({
   subtitle,
   profileSubtitle,
   role,
+  showAvatar = true,
   showName = false,
   nameClassName,
   subtitleClassName,
   className,
   messagePerson,
   trailing,
+  verification,
+  badge,
 }: UserAvatarProps) {
   const safeName = displayName(name, email);
   const [imageFailed, setImageFailed] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState<{ left: number; top: number } | null>(null);
   const identityRef = useRef<HTMLSpanElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const openTimer = useRef<number | null>(null);
   const closeTimer = useRef<number | null>(null);
   const openMiniChatForPerson = useApp((state) => state.openMiniChatForPerson);
+  const signedIn = useApp((state) => state.signedIn);
+  const currentUser = useApp((state) => state.user);
+  const navigate = useNavigate();
+  const isCurrentUser = profileHref === '/profile' || Boolean(currentUser && messagePerson?.id === currentUser.id);
 
   useEffect(() => {
     setImageFailed(false);
   }, [src]);
 
   useEffect(() => () => {
+    if (openTimer.current !== null) window.clearTimeout(openTimer.current);
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
   }, []);
 
-  const openPopover = () => {
+  const openPopover = (immediate = false) => {
     if (!profileHref) return;
+    if (openTimer.current !== null) window.clearTimeout(openTimer.current);
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
-    const bounds = identityRef.current?.getBoundingClientRect();
-    if (!bounds) return;
-    const width = 264;
-    setPopoverPosition({
-      left: Math.max(8, Math.min(bounds.left, window.innerWidth - width - 8)),
-      top: Math.max(8, Math.min(bounds.bottom + 8, window.innerHeight - 220)),
-    });
+    const show = () => {
+      const bounds = identityRef.current?.getBoundingClientRect();
+      if (!bounds) return;
+      setPopoverPosition({ left: Math.max(12, Math.min(bounds.left, window.innerWidth - 300)), top: bounds.bottom + 8 });
+    };
+    if (immediate) show();
+    else openTimer.current = window.setTimeout(show, 200);
   };
 
   const scheduleClose = () => {
+    if (openTimer.current !== null) window.clearTimeout(openTimer.current);
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
-    closeTimer.current = window.setTimeout(() => setPopoverPosition(null), 160);
+    closeTimer.current = window.setTimeout(() => {
+      const activeElement = document.activeElement;
+      if (activeElement && (identityRef.current?.contains(activeElement) || popoverRef.current?.contains(activeElement))) return;
+      setPopoverPosition(null);
+    }, 150);
+  };
+
+  useLayoutEffect(() => {
+    if (!popoverPosition || !identityRef.current || !popoverRef.current) return;
+    const position = () => {
+      const anchor = identityRef.current?.getBoundingClientRect();
+      const card = popoverRef.current?.getBoundingClientRect();
+      if (!anchor || !card) return;
+      const margin = 12;
+      const left = Math.max(margin, Math.min(anchor.left, window.innerWidth - card.width - margin));
+      const below = window.innerHeight - anchor.bottom - margin;
+      const above = anchor.top - margin;
+      const top = below >= card.height + 8 || below >= above
+        ? Math.min(window.innerHeight - card.height - margin, anchor.bottom + 8)
+        : Math.max(margin, anchor.top - card.height - 8);
+      setPopoverPosition((current) => current && (current.left !== left || current.top !== top) ? { left, top } : current);
+    };
+    position();
+    window.addEventListener('resize', position);
+    window.addEventListener('scroll', position, true);
+    return () => {
+      window.removeEventListener('resize', position);
+      window.removeEventListener('scroll', position, true);
+    };
+  }, [popoverPosition]);
+
+  useEffect(() => {
+    if (!popoverPosition) return;
+    const closeOutside = (event: globalThis.PointerEvent) => {
+      if (!(event.target instanceof Node)) return;
+      if (!identityRef.current?.contains(event.target) && !popoverRef.current?.contains(event.target)) {
+        setPopoverPosition(null);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPopoverPosition(null);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [popoverPosition]);
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    if (event.pointerType !== 'touch' || !profileHref) return;
+    event.preventDefault();
+    if (popoverPosition) setPopoverPosition(null);
+    else openPopover(true);
+  };
+
+  const message = () => {
+    if (!messagePerson || isCurrentUser) return;
+    if (!signedIn) {
+      setPopoverPosition(null);
+      navigate('/auth');
+      return;
+    }
+    openMiniChatForPerson(messagePerson);
+    const ticket = useApp.getState().tickets.find((item) =>
+      item.contactId === messagePerson.id || item.id === `direct-${messagePerson.id}`,
+    );
+    setPopoverPosition(null);
+    if (ticket) navigate(`/inbox/${ticket.id}`);
   };
 
   const avatar = (
@@ -119,7 +205,7 @@ export default function UserAvatar({
 
   const identityContent = (
     <>
-      {avatar}
+      {showAvatar && avatar}
       {showName && (
         <span className="min-w-0 flex-1">
           <span title={safeName} className={cx('block truncate font-semibold text-primary', nameClassName)}>{safeName}</span>
@@ -134,9 +220,10 @@ export default function UserAvatar({
     <span
       ref={identityRef}
       className={cx('relative inline-flex min-w-0 items-center gap-2', className)}
-      onMouseEnter={openPopover}
+      onMouseEnter={() => openPopover()}
       onMouseLeave={scheduleClose}
-      onFocus={openPopover}
+      onFocus={() => openPopover(true)}
+      onPointerDown={handlePointerDown}
       onBlur={(event) => {
         const nextTarget = event.relatedTarget;
         if (!(nextTarget instanceof Node)
@@ -170,27 +257,25 @@ export default function UserAvatar({
           }}
           onMouseLeave={scheduleClose}
           style={{ left: popoverPosition.left, top: popoverPosition.top }}
-          className="fixed z-[100] w-64 rounded-xl border border-outline-variant/60 bg-white p-4 shadow-float"
+          className="fixed z-[100] w-[min(18rem,calc(100vw-1.5rem))] rounded-xl border border-outline-variant/60 bg-white p-4 shadow-float"
         >
           <div className="flex items-center gap-3">
             {avatar}
-            <span className="min-w-0">
+            <span className="min-w-0 flex-1">
               <span title={safeName} className="block truncate text-sm font-semibold text-primary">{safeName}</span>
-              {role && <span className="mt-1 inline-flex rounded-full bg-secondary-fixed px-2 py-0.5 text-[10px] font-semibold text-secondary">{role}</span>}
+              {verification && <VerificationBadge verification={verification} label={badge} />}
             </span>
           </div>
-          <p title={profileSubtitle ?? subtitle} className="mt-3 line-clamp-2 text-xs text-on-surface-variant">{profileSubtitle ?? subtitle ?? 'Academix community member'}</p>
+          {role && <p className="mt-2 text-xs font-medium text-on-surface">{role}</p>}
+          <p title={profileSubtitle ?? subtitle} className="mt-1 line-clamp-2 text-xs text-on-surface-variant">{profileSubtitle ?? subtitle ?? 'Academix community member'}</p>
           <div className="mt-3 flex gap-2">
             <Link to={profileHref} onClick={() => setPopoverPosition(null)} className="btn-outline flex-1 justify-center !px-2 !py-2 text-xs">
-              <Icon name="person" />View profile
+              <Icon name="person" />{isCurrentUser ? 'Edit Profile' : 'View Profile'}
             </Link>
-            {messagePerson && (
+            {messagePerson && !isCurrentUser && (
               <button
                 type="button"
-                onClick={() => {
-                  openMiniChatForPerson(messagePerson);
-                  setPopoverPosition(null);
-                }}
+                onClick={message}
                 className="btn-primary flex-1 justify-center !px-2 !py-2 text-xs"
               >
                 <Icon name="mail" />Message

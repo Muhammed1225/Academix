@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import { people, posts as initialPosts, tickets as initialTickets } from './data/mock';
-import type { Post, Ticket } from './data/types';
+import type { GroupMember, Post, Ticket } from './data/types';
 import { displayName } from './data/userIdentity';
 import { createNotification, markTicketNotificationsRead } from './notificationsService';
 
@@ -58,6 +58,7 @@ export interface AuthenticatedUser extends OnboardingProfile {
 interface AppState {
   posts: Post[];
   tickets: Ticket[];
+  mentorQuestions: { question: string; mentorId: string; createdAt: string }[];
   savedColleges: string[];
   signedIn: boolean;
   authChecked: boolean;
@@ -74,6 +75,8 @@ interface AppState {
   toggleBookmark: (postId: string) => void;
   addComment: (postId: string, text: string) => void;
   publish: (input: { title: string; body: string; forum: string; anonymous: boolean; image?: Post['image']; universityId?: string }) => void;
+  createGroup: (input: { name: string; bio: string; picture?: string; members: GroupMember[] }) => string | null;
+  saveMentorQuestion: (input: { question: string; mentorId: string }) => void;
 
   markRead: (ticketId: string) => void;
   reply: (ticketId: string, text: string) => void;
@@ -125,6 +128,7 @@ const playMessageNotification = () => {
 export const useApp = create<AppState>((set, get) => ({
   posts: initialPosts,
   tickets: initialTickets,
+  mentorQuestions: [],
   savedColleges: [],
   signedIn: false,
   authChecked: false,
@@ -188,6 +192,13 @@ export const useApp = create<AppState>((set, get) => ({
               ? `${s.user.university} • ${s.user.major}${s.user.graduationYear ? ` • Class of ${s.user.graduationYear}` : ''}`
               : undefined,
           },
+          authorType: anonymous || !s.user
+              ? 'Prospective'
+              : s.user.role === 'faculty'
+                ? 'Faculty Representative'
+                : s.user.role === 'scholar'
+                  ? 'Student Scholar'
+                  : 'Prospective',
           timeAgo: 'Just now',
           title,
           body,
@@ -207,6 +218,95 @@ export const useApp = create<AppState>((set, get) => ({
       ],
     })),
 
+  createGroup: ({ name, bio, picture, members }) => {
+    const state = get();
+    const selectedMembers = members.filter((member) => member.id !== state.user?.id);
+    const selectedIds = [...new Set(selectedMembers.map((member) => member.id))];
+    if (selectedIds.length < 2) {
+      get().showToast('A group needs at least 2 other members.', 'error');
+      return null;
+    }
+
+    const groupName = name.trim();
+    if (!groupName) {
+      get().showToast('Enter a group name.', 'error');
+      return null;
+    }
+
+    const currentUserName = state.user
+      ? displayName(state.user.name, state.user.email)
+      : 'You';
+    const currentUserId = state.user?.id ?? 'current-user';
+    const currentUser: GroupMember = {
+      id: currentUserId,
+      name: currentUserName,
+      ...(state.user?.photo ? { avatar: state.user.photo } : {}),
+      universityOrRole: [state.user?.university, state.user?.role === 'faculty' ? 'Faculty' : state.user?.role === 'scholar' ? 'Student' : 'Applicant']
+        .filter(Boolean)
+        .join(' · ') || 'Group admin',
+      isAdmin: true,
+      isCurrentUser: true,
+    };
+    const groupMembers = [
+      currentUser,
+      ...selectedMembers.map((member) => ({ ...member, isAdmin: false, isCurrentUser: false })),
+    ];
+    const createdAt = new Date().toISOString();
+    const ticketId = `group-${Date.now()}`;
+    const ticket: Ticket = {
+      id: ticketId,
+      groupBio: bio.trim(),
+      groupPicture: picture,
+      groupCreatedAt: createdAt,
+      groupAdminId: currentUserId,
+      groupMembers,
+      groupSharedPosts: [
+        {
+          id: 'p4',
+          title: 'ADA University to Host International Conference on Digital Innovation 2026',
+          author: 'Leyla Hasanli',
+          time: 'Today',
+          href: '/search?q=ADA%20University%20to%20Host%20International%20Conference%20on%20Digital%20Innovation%202026&type=discussions',
+        },
+      ],
+      groupSharedLinks: [
+        { url: 'https://www.ada.edu.az/en', sender: currentUserName, date: createdAt },
+      ],
+      groupSharedDocuments: [
+        {
+          id: 'welcome-note',
+          fileName: 'Group-welcome-note.txt',
+          size: '1 KB',
+          sender: currentUserName,
+          date: createdAt,
+          downloadUrl: `data:text/plain;charset=utf-8,${encodeURIComponent(`Welcome to ${groupName.trim()}!`)}`,
+        },
+      ],
+      category: 'Group',
+      timeAgo: 'Just now',
+      title: groupName,
+      preview: 'Group created',
+      from: groupName,
+      fromMeta: `${groupMembers.length} members`,
+      messages: [],
+      resolved: false,
+      unread: false,
+    };
+
+    set((current) => ({
+      tickets: [ticket, ...current.tickets],
+      miniChatTicketId: ticketId,
+      miniChatMinimized: false,
+      miniChatHidden: false,
+    }));
+    return ticketId;
+  },
+
+  saveMentorQuestion: (input) =>
+    set((state) => ({
+      mentorQuestions: [...state.mentorQuestions, { ...input, createdAt: new Date().toISOString() }],
+    })),
+
   markRead: (ticketId) =>
     set((s) => {
       const ticket = s.tickets.find((item) => item.id === ticketId);
@@ -218,14 +318,37 @@ export const useApp = create<AppState>((set, get) => ({
       return { tickets: updateTicket(s.tickets, ticketId, (t) => ({ ...t, unread: false })) };
     }),
 
-  reply: (ticketId, text) =>
+  reply: (ticketId, text) => {
+    const state = get();
+    const sender = displayName(state.user?.name, state.user?.email);
+    const sentAt = new Date().toISOString();
+    const links = [...text.matchAll(/https?:\/\/[^\s]+/gi)]
+      .map(([url]) => url.replace(/[.,!?;:)\]}]+$/, ''))
+      .filter((url): url is string => {
+        try {
+          const parsed = new URL(url);
+          return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        } catch {
+          return false;
+        }
+      });
+
     set((s) => ({
       tickets: updateTicket(s.tickets, ticketId, (t) => ({
         ...t,
-        messages: [...t.messages, { author: displayName(s.user?.name, s.user?.email), time: 'Just now', text, isMe: true }],
+        messages: [...t.messages, { author: sender, time: 'Just now', text, isMe: true }],
+        ...(t.category === 'Group' && links.length
+          ? {
+            groupSharedLinks: [
+              ...(t.groupSharedLinks ?? []),
+              ...links.map((url) => ({ url, sender, date: sentAt })),
+            ],
+          }
+          : {}),
         suggestedReply: undefined,
       })),
-    })),
+    }));
+  },
 
   toggleResolved: (ticketId) =>
     set((s) => ({ tickets: updateTicket(s.tickets, ticketId, (t) => ({ ...t, resolved: !t.resolved })) })),

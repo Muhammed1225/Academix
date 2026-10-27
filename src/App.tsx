@@ -20,12 +20,20 @@ import { loadAuthSession } from './authService';
 import { useApp } from './store';
 import AdmissionResultsPage from './pages/AdmissionResultsPage';
 import NotificationsPage from './pages/NotificationsPage';
+import MentorsPage from './pages/MentorsPage';
 
 function ScrollToTop() {
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [pathname]);
+    if (!hash) {
+      window.scrollTo(0, 0);
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [pathname, hash]);
   return null;
 }
 
@@ -68,6 +76,7 @@ export default function App() {
           <Route path="compose" element={<ComposePage />} />
           <Route path="search" element={<SearchPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="mentors" element={<MentorsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
