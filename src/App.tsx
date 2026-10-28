@@ -72,7 +72,7 @@ export default function App() {
           <Route path="change-role" element={<RoleChangePage />} />
           <Route path="profile/university-joined" element={<UniversityJoinedPage />} />
           <Route path="inbox" element={<InboxPage />} />
-          <Route path="inbox/:ticketId" element={<InboxPage />} />
+          <Route path="inbox/:conversationId" element={<InboxPage />} />
           <Route path="compose" element={<ComposePage />} />
           <Route path="search" element={<SearchPage />} />
           <Route path="notifications" element={<NotificationsPage />} />

@@ -23,8 +23,8 @@ function DirectoryMentorProfile({ mentorId }: { mentorId: string }) {
       subtitle: `${mentor.field} • ${mentor.university}`,
       ...(mentor.avatar ? { avatar: mentor.avatar } : {}),
     });
-    const ticket = useApp.getState().tickets.find((item) => item.contactId === mentor.id || item.id === `direct-${mentor.id}`);
-    if (ticket) navigate(`/inbox/${ticket.id}`);
+    const conversation = useApp.getState().conversations.find((item) => item.contactId === mentor.id || item.id === `direct-${mentor.id}`);
+    if (conversation) navigate(`/inbox/${conversation.id}`);
   };
   return (
     <div className="mx-auto max-w-3xl space-y-5">

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent, type RefObject } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
-import { BRAND } from '../data/mock';
+import { BRAND, colleges } from '../data/mock';
 import { clearRecentSearches, createSearchCatalog, getRecentSearches, matchesSearch, rememberSearch, relevanceScore, removeRecentSearch, type SearchCategory } from '../data/search';
-import { universities } from '../data/educationOptions';
+import { majors as majorOptions, universities } from '../data/educationOptions';
 import { signOut as signOutAuth } from '../authService';
 import { displayName } from '../data/userIdentity';
 import { useApp } from '../store';
@@ -24,7 +24,9 @@ const navItems = [
 export interface FeedSearchContext {
   query: string;
   selectedUniversities: string[];
+  selectedMajors: string[];
   removeUniversity: (name: string) => void;
+  removeMajor: (name: string) => void;
 }
 
 function Header({
@@ -32,11 +34,15 @@ function Header({
   setQuery,
   selectedUniversities,
   setSelectedUniversities,
+  selectedMajors,
+  setSelectedMajors,
 }: {
   query: string;
   setQuery: (value: string) => void;
   selectedUniversities: string[];
   setSelectedUniversities: (value: string[]) => void;
+  selectedMajors: string[];
+  setSelectedMajors: (value: string[]) => void;
 }) {
   const signedIn = useApp((s) => s.signedIn);
   const user = useApp((s) => s.user);
@@ -56,8 +62,11 @@ function Header({
   const [searchType, setSearchType] = useState<SearchCategory | 'all'>('all');
   const [recentSearches, setRecentSearches] = useState(getRecentSearches);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [filterSection, setFilterSection] = useState<'universities' | 'majors'>('universities');
   const [universityQuery, setUniversityQuery] = useState('');
+  const [majorQuery, setMajorQuery] = useState('');
   const [draftUniversities, setDraftUniversities] = useState<string[]>([]);
+  const [draftMajors, setDraftMajors] = useState<string[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const searchCatalog = useMemo(() => createSearchCatalog(posts), [posts]);
@@ -65,6 +74,17 @@ function Header({
   const filteredUniversities = useMemo(
     () => universities.filter((name) => name.toLocaleLowerCase().includes(universityQuery.trim().toLocaleLowerCase())),
     [universityQuery],
+  );
+  const availableMajors = useMemo(() => [...new Set([
+    ...majorOptions,
+    ...colleges.flatMap((college) => [
+      ...college.majorCategories.filter((category) => category !== 'All Disciplines'),
+      ...college.majors.map((major) => major.name),
+    ]),
+  ])].sort((first, second) => first.localeCompare(second)), []);
+  const filteredMajors = useMemo(
+    () => availableMajors.filter((name) => name.toLocaleLowerCase().includes(majorQuery.trim().toLocaleLowerCase())),
+    [availableMajors, majorQuery],
   );
   const suggestionGroups = useMemo(() => {
     if (!debouncedQuery.trim()) return [];
@@ -146,7 +166,7 @@ function Header({
 
   const onSearch = (e: FormEvent) => {
     e.preventDefault();
-    if (location.pathname === '/' || selectedUniversities.length > 0) {
+    if (location.pathname === '/' || selectedUniversities.length > 0 || selectedMajors.length > 0) {
       const trimmed = query.trim().replace(/\s+/g, ' ');
       if (trimmed) rememberSearch(trimmed);
       setSearchFocused(false);
@@ -316,71 +336,123 @@ function Header({
             <button
               type="button"
               onClick={() => {
-                if (!filterOpen) setDraftUniversities(selectedUniversities);
+                if (!filterOpen) {
+                  setDraftUniversities(selectedUniversities);
+                  setDraftMajors(selectedMajors);
+                }
                 setFilterOpen((open) => !open);
               }}
-              aria-label="Filter universities"
+              aria-label="Filter universities and majors"
               aria-haspopup="dialog"
               aria-expanded={filterOpen}
               className={cx(
                 'relative inline-flex h-10 items-center gap-1.5 rounded-full border px-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary sm:px-3',
-                selectedUniversities.length ? 'border-secondary bg-secondary-fixed text-secondary' : 'border-outline-variant bg-white text-on-surface-variant hover:bg-surface-container-low',
+                selectedUniversities.length + selectedMajors.length ? 'border-secondary bg-secondary-fixed text-secondary' : 'border-outline-variant bg-white text-on-surface-variant hover:bg-surface-container-low',
               )}
             >
               <Icon name="filter_list" className="!text-[18px]" />
               <span className="hidden sm:inline">Filter</span>
-              {selectedUniversities.length > 0 && (
+              {selectedUniversities.length + selectedMajors.length > 0 && (
                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary px-1 text-[11px] font-bold leading-none text-white">
-                  {selectedUniversities.length}
+                  {selectedUniversities.length + selectedMajors.length}
                 </span>
               )}
             </button>
             {filterOpen && (
               <div
                 role="dialog"
-                aria-label="Filter by university"
+                aria-label="Filter by university and major"
                 className="absolute right-0 top-full z-[70] mt-2 flex max-h-[min(70vh,34rem)] w-[min(22rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-outline-variant/60 bg-white shadow-float"
               >
-                <div className="border-b border-outline-variant/40 p-3">
-                  <label className="relative block">
-                    <span className="sr-only">Search universities</span>
-                    <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-outline !text-[18px]" />
-                    <input
-                      value={universityQuery}
-                      onChange={(event) => setUniversityQuery(event.target.value)}
-                      placeholder="Search universities..."
-                      className="input !py-2 pl-9"
-                    />
-                  </label>
+                <div className="grid grid-cols-2 border-b border-outline-variant/40 p-2" role="tablist" aria-label="Filter categories">
+                  <button
+                    type="button"
+                    role="tab"
+                    id="university-filter-tab"
+                    aria-selected={filterSection === 'universities'}
+                    aria-controls="university-filter-panel"
+                    onClick={() => setFilterSection('universities')}
+                    className={cx('flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold transition-colors', filterSection === 'universities' ? 'bg-secondary-fixed text-secondary' : 'text-on-surface-variant hover:bg-surface-container-low')}
+                  >
+                    Universities
+                    <span className="rounded-full bg-white px-1.5 py-0.5 text-xs">{draftUniversities.length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    id="major-filter-tab"
+                    aria-selected={filterSection === 'majors'}
+                    aria-controls="major-filter-panel"
+                    onClick={() => setFilterSection('majors')}
+                    className={cx('flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold transition-colors', filterSection === 'majors' ? 'bg-secondary-fixed text-secondary' : 'text-on-surface-variant hover:bg-surface-container-low')}
+                  >
+                    Majors
+                    <span className="rounded-full bg-white px-1.5 py-0.5 text-xs">{draftMajors.length}</span>
+                  </button>
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto p-2" role="group" aria-label="Universities">
-                  {filteredUniversities.length ? filteredUniversities.map((name) => {
-                    const checked = draftUniversities.includes(name);
-                    return (
-                      <label
-                        key={name}
-                        className="flex cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-on-surface transition-colors hover:bg-surface-container-low focus-within:bg-surface-container-low"
-                      >
+                {filterSection === 'universities' ? (
+                  <div id="university-filter-panel" role="tabpanel" aria-labelledby="university-filter-tab" className="flex min-h-0 flex-1 flex-col">
+                    <div className="flex items-center justify-between gap-2 border-b border-outline-variant/40 p-3">
+                      <label className="relative min-w-0 flex-1">
+                        <span className="sr-only">Search universities</span>
+                        <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-outline !text-[18px]" />
                         <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => setDraftUniversities((current) =>
-                            checked ? current.filter((item) => item !== name) : [...current, name],
-                          )}
-                          className="h-4 w-4 shrink-0 accent-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary"
+                          value={universityQuery}
+                          onChange={(event) => setUniversityQuery(event.target.value)}
+                          placeholder="Search universities..."
+                          className="input !py-2 pl-9"
                         />
-                        <span>{name}</span>
                       </label>
-                    );
-                  }) : (
-                    <p className="px-2.5 py-4 text-center text-sm text-on-surface-variant">No universities found</p>
-                  )}
-                </div>
+                      <button type="button" onClick={() => setDraftUniversities([])} disabled={draftUniversities.length === 0} className="shrink-0 rounded px-1 py-2 text-xs font-semibold text-secondary hover:bg-surface-container-low disabled:opacity-50">Clear</button>
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-y-auto p-2" role="group" aria-label="Universities">
+                      {filteredUniversities.length ? filteredUniversities.map((name) => {
+                        const checked = draftUniversities.includes(name);
+                        return (
+                          <label key={name} className="flex cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-on-surface transition-colors hover:bg-surface-container-low focus-within:bg-surface-container-low">
+                            <input type="checkbox" checked={checked} onChange={() => setDraftUniversities((current) => checked ? current.filter((item) => item !== name) : [...current, name])} className="h-4 w-4 shrink-0 accent-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary" />
+                            <span>{name}</span>
+                          </label>
+                        );
+                      }) : <p className="px-2.5 py-4 text-center text-sm text-on-surface-variant">No universities found</p>}
+                    </div>
+                  </div>
+                ) : (
+                  <div id="major-filter-panel" role="tabpanel" aria-labelledby="major-filter-tab" className="flex min-h-0 flex-1 flex-col">
+                    <div className="flex items-center justify-between gap-2 border-b border-outline-variant/40 p-3">
+                      <label className="relative min-w-0 flex-1">
+                        <span className="sr-only">Search majors and fields of study</span>
+                        <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-outline !text-[18px]" />
+                        <input
+                          value={majorQuery}
+                          onChange={(event) => setMajorQuery(event.target.value)}
+                          placeholder="Search majors..."
+                          className="input !py-2 pl-9"
+                        />
+                      </label>
+                      <button type="button" onClick={() => setDraftMajors([])} disabled={draftMajors.length === 0} className="shrink-0 rounded px-1 py-2 text-xs font-semibold text-secondary hover:bg-surface-container-low disabled:opacity-50">Clear</button>
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-y-auto p-2" role="group" aria-label="Majors and fields of study">
+                      {filteredMajors.length ? filteredMajors.map((name) => {
+                        const checked = draftMajors.includes(name);
+                        return (
+                          <label key={name} className="flex cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-on-surface transition-colors hover:bg-surface-container-low focus-within:bg-surface-container-low">
+                            <input type="checkbox" checked={checked} onChange={() => setDraftMajors((current) => checked ? current.filter((item) => item !== name) : [...current, name])} className="h-4 w-4 shrink-0 accent-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary" />
+                            <span>{name}</span>
+                          </label>
+                        );
+                      }) : <p className="px-2.5 py-4 text-center text-sm text-on-surface-variant">No majors found</p>}
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between gap-3 border-t border-outline-variant/40 p-3">
                   <button
                     type="button"
-                    onClick={() => setDraftUniversities([])}
-                    disabled={draftUniversities.length === 0}
+                    onClick={() => {
+                      setDraftUniversities([]);
+                      setDraftMajors([]);
+                    }}
+                    disabled={draftUniversities.length === 0 && draftMajors.length === 0}
                     className="rounded-lg px-3 py-2 text-sm font-semibold text-secondary transition-colors hover:bg-surface-container-low focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Clear all
@@ -389,6 +461,7 @@ function Header({
                     type="button"
                     onClick={() => {
                       setSelectedUniversities(draftUniversities);
+                      setSelectedMajors(draftMajors);
                       setFilterOpen(false);
                       if (location.pathname !== '/') {
                         const trimmed = query.trim().replace(/\s+/g, ' ');
@@ -653,8 +726,8 @@ function MiniChatDock() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const signedIn = useApp((state) => state.signedIn);
-  const ticketId = useApp((state) => state.miniChatTicketId);
-  const ticket = useApp((state) => state.tickets.find((item) => item.id === ticketId));
+  const conversationId = useApp((state) => state.miniChatConversationId);
+  const conversation = useApp((state) => state.conversations.find((item) => item.id === conversationId));
   const reply = useApp((state) => state.reply);
   const setHidden = useApp((state) => state.setMiniChatHidden);
   const hidden = useApp((state) => state.miniChatHidden);
@@ -666,8 +739,8 @@ function MiniChatDock() {
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [dockSize, setDockSize] = useState({ width: 340, height: 450 });
   const [dockPosition, setDockPosition] = useState<{ left: number; top: number } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const dockRef = useRef<HTMLElement>(null);
+  const suppressHeaderClickRef = useRef(false);
   const dragRef = useRef<{
     pointerId: number;
     pointerX: number;
@@ -676,8 +749,6 @@ function MiniChatDock() {
     top: number;
     moved: boolean;
   } | null>(null);
-  const pendingDragRef = useRef<{ x: number; y: number } | null>(null);
-  const dragFrameRef = useRef<number | null>(null);
   const resizeRef = useRef<{
     direction: 'top' | 'left' | 'corner';
     pointerId: number;
@@ -685,8 +756,8 @@ function MiniChatDock() {
     pointerY: number;
     width: number;
     height: number;
-    right: number;
-    bottom: number;
+    left: number;
+    top: number;
   } | null>(null);
   const pendingPointerRef = useRef<{ x: number; y: number } | null>(null);
   const resizeFrameRef = useRef<number | null>(null);
@@ -696,18 +767,17 @@ function MiniChatDock() {
   const emojis = ['😀', '😂', '😊', '😍', '🥳', '🤔', '👏', '🙌', '👍', '❤️', '🎓', '📚', '✨', '✅', '🎉', '🙏'];
 
   useEffect(() => {
-    setDraft(ticket?.suggestedReply ?? '');
+    setDraft(conversation?.suggestedReply ?? '');
     setEmojiOpen(false);
-  }, [ticket?.id, ticket?.suggestedReply]);
+  }, [conversation?.id, conversation?.suggestedReply]);
 
   useEffect(() => {
     if (!minimized) messageEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [ticket?.messages.length, minimized]);
+  }, [conversation?.messages.length, minimized]);
 
   useEffect(() => {
     return () => {
       if (resizeFrameRef.current !== null) window.cancelAnimationFrame(resizeFrameRef.current);
-      if (dragFrameRef.current !== null) window.cancelAnimationFrame(dragFrameRef.current);
       if (previousUserSelectRef.current !== null) {
         document.documentElement.style.userSelect = previousUserSelectRef.current;
       }
@@ -729,10 +799,10 @@ function MiniChatDock() {
   }, [hidden, minimized, pathname]);
 
   useEffect(() => {
-    if (!ticket || minimized || hidden || pathname.startsWith('/inbox')) return;
+    if (!conversation || minimized || hidden || pathname.startsWith('/inbox')) return;
     const markFocusedConversationRead = () => {
-      if (ticket.unread && document.visibilityState === 'visible' && document.hasFocus()) {
-        markRead(ticket.id);
+      if (conversation.unread && document.visibilityState === 'visible' && document.hasFocus()) {
+        markRead(conversation.id);
       }
     };
     markFocusedConversationRead();
@@ -742,22 +812,36 @@ function MiniChatDock() {
       window.removeEventListener('focus', markFocusedConversationRead);
       document.removeEventListener('visibilitychange', markFocusedConversationRead);
     };
-  }, [hidden, markRead, minimized, pathname, ticket]);
+  }, [hidden, markRead, minimized, pathname, conversation]);
 
-  if (!signedIn || !ticket || hidden || pathname.startsWith('/inbox')) return null;
+  useEffect(() => {
+    if (!dockPosition) return;
+    const keepDockInViewport = () => {
+      const bounds = dockRef.current?.getBoundingClientRect();
+      if (!bounds) return;
+      setDockPosition((position) => position ? {
+        left: Math.max(0, Math.min(window.innerWidth - bounds.width, position.left)),
+        top: Math.max(0, Math.min(window.innerHeight - bounds.height, position.top)),
+      } : null);
+    };
+    window.addEventListener('resize', keepDockInViewport);
+    return () => window.removeEventListener('resize', keepDockInViewport);
+  }, [dockPosition]);
 
-  const otherUser = displayName([...ticket.messages].reverse().find((message) => !message.isMe)?.author ?? ticket.from);
-  const contactProfile = ticket.contactId ? `/people/${ticket.contactId}` : undefined;
-  const messagePerson = ticket.contactId ? {
-    id: ticket.contactId,
+  if (!signedIn || !conversation || hidden || pathname.startsWith('/inbox')) return null;
+
+  const otherUser = displayName([...conversation.messages].reverse().find((message) => !message.isMe)?.author ?? conversation.from);
+  const contactProfile = conversation.contactId ? `/people/${conversation.contactId}` : undefined;
+  const messagePerson = conversation.contactId ? {
+    id: conversation.contactId,
     name: otherUser,
-    subtitle: ticket.contactProfileSubtitle ?? ticket.fromMeta,
-    ...(ticket.contactAvatar ? { avatar: ticket.contactAvatar } : {}),
+    subtitle: conversation.contactProfileSubtitle ?? conversation.fromMeta,
+    ...(conversation.contactAvatar ? { avatar: conversation.contactAvatar } : {}),
   } : undefined;
 
   const expandConversation = () => {
     setMinimized(false);
-    navigate(`/inbox/${ticket.id}`);
+    navigate(`/inbox/${conversation.id}`);
   };
 
   const startDrag = (event: PointerEvent<HTMLElement>) => {
@@ -765,7 +849,6 @@ function MiniChatDock() {
     if (event.target instanceof Element && event.target.closest('a, button, textarea, form, [role="menu"]')) return;
     const bounds = dockRef.current?.getBoundingClientRect();
     if (!bounds) return;
-    event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     previousUserSelectRef.current = document.documentElement.style.userSelect;
     document.documentElement.style.userSelect = 'none';
@@ -777,7 +860,6 @@ function MiniChatDock() {
       top: bounds.top,
       moved: false,
     };
-    setIsDragging(true);
   };
 
   const moveDrag = (event: PointerEvent<HTMLElement>) => {
@@ -788,44 +870,57 @@ function MiniChatDock() {
     if (!drag.moved && Math.hypot(deltaX, deltaY) <= 4) return;
     event.preventDefault();
     drag.moved = true;
-    pendingDragRef.current = { x: drag.left + deltaX, y: drag.top + deltaY };
-    if (dragFrameRef.current === null) {
-      dragFrameRef.current = window.requestAnimationFrame(() => {
-        dragFrameRef.current = null;
-        const next = pendingDragRef.current;
-        if (!next || !dockRef.current) return;
-        const bounds = dockRef.current.getBoundingClientRect();
-        setDockPosition({
-          left: Math.max(0, Math.min(window.innerWidth - bounds.width, next.x)),
-          top: Math.max(0, Math.min(window.innerHeight - bounds.height, next.y)),
-        });
-      });
-    }
+    const bounds = dockRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    setDockPosition({
+      left: Math.max(0, Math.min(window.innerWidth - bounds.width, drag.left + deltaX)),
+      top: Math.max(0, Math.min(window.innerHeight - bounds.height, drag.top + deltaY)),
+    });
   };
 
   const stopDrag = (event: PointerEvent<HTMLElement>) => {
     const drag = dragRef.current;
     if (drag?.pointerId !== event.pointerId) return;
     if (drag.moved) {
+      suppressHeaderClickRef.current = true;
+      window.setTimeout(() => {
+        suppressHeaderClickRef.current = false;
+      }, 0);
       const bounds = dockRef.current?.getBoundingClientRect();
       if (bounds) {
-        const deltaX = event.clientX - drag.pointerX;
-        const deltaY = event.clientY - drag.pointerY;
-        setDockPosition({
-          left: Math.max(0, Math.min(window.innerWidth - bounds.width, drag.left + deltaX)),
-          top: Math.max(0, Math.min(window.innerHeight - bounds.height, drag.top + deltaY)),
-        });
+        const left = Math.max(0, Math.min(window.innerWidth - bounds.width, drag.left + event.clientX - drag.pointerX));
+        const top = Math.max(0, Math.min(window.innerHeight - bounds.height, drag.top + event.clientY - drag.pointerY));
+        const dockBottom = window.matchMedia('(min-width: 1024px)').matches ? 32 : 96;
+        const dockRight = window.matchMedia('(min-width: 1024px)').matches ? 32 : 16;
+        const atDock = Math.abs(window.innerHeight - top - bounds.height - dockBottom) < 48
+          && Math.abs(window.innerWidth - left - bounds.width - dockRight) < 48;
+        if (atDock) {
+          setDockPosition(null);
+        } else {
+          const collisions = ['ai-college-match-launcher', 'community-launcher']
+            .map((id) => document.getElementById(id)?.getBoundingClientRect())
+            .filter((rect): rect is DOMRect => !!rect);
+          const overlaps = (x: number, y: number) => collisions.some((rect) =>
+            x < rect.right + 12 && x + bounds.width > rect.left - 12
+            && y < rect.bottom + 12 && y + bounds.height > rect.top - 12);
+          const candidates = [
+            { left: left, top: top - bounds.height - 12 },
+            { left: left, top: top + bounds.height + 12 },
+            { left: left - bounds.width - 12, top },
+            { left: left + bounds.width + 12, top },
+          ].map((candidate) => ({
+            left: Math.max(0, Math.min(window.innerWidth - bounds.width, candidate.left)),
+            top: Math.max(0, Math.min(window.innerHeight - bounds.height, candidate.top)),
+          }));
+          const safePosition = candidates
+            .filter((candidate) => !overlaps(candidate.left, candidate.top))
+            .sort((first, second) =>
+              Math.hypot(first.left - left, first.top - top) - Math.hypot(second.left - left, second.top - top))[0];
+          setDockPosition(overlaps(left, top) ? safePosition ?? null : { left, top });
+        }
       }
-    } else {
-      setMinimized(!minimized);
     }
     dragRef.current = null;
-    setIsDragging(false);
-    pendingDragRef.current = null;
-    if (dragFrameRef.current !== null) {
-      window.cancelAnimationFrame(dragFrameRef.current);
-      dragFrameRef.current = null;
-    }
     document.documentElement.style.userSelect = previousUserSelectRef.current ?? '';
     previousUserSelectRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -834,14 +929,10 @@ function MiniChatDock() {
   };
 
   const cancelDrag = (event: PointerEvent<HTMLElement>) => {
-    if (dragRef.current?.pointerId !== event.pointerId) return;
+    const drag = dragRef.current;
+    if (drag?.pointerId !== event.pointerId) return;
+    if (drag.moved) setDockPosition(null);
     dragRef.current = null;
-    setIsDragging(false);
-    pendingDragRef.current = null;
-    if (dragFrameRef.current !== null) {
-      window.cancelAnimationFrame(dragFrameRef.current);
-      dragFrameRef.current = null;
-    }
     document.documentElement.style.userSelect = previousUserSelectRef.current ?? '';
     previousUserSelectRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -864,8 +955,8 @@ function MiniChatDock() {
       pointerY: event.clientY,
       width: bounds.width,
       height: bounds.height,
-      right: bounds.right,
-      bottom: bounds.bottom,
+      left: bounds.left,
+      top: bounds.top,
     };
   };
 
@@ -873,14 +964,12 @@ function MiniChatDock() {
     const start = resizeRef.current;
     if (!start) return;
     const desktop = window.matchMedia('(min-width: 640px)').matches;
+    const largeDesktop = window.matchMedia('(min-width: 1024px)').matches;
     const maxWidth = Math.max(1, Math.min(
-      start.right,
+      window.innerWidth - (desktop ? 304 : 112),
       window.innerWidth - (desktop ? 32 : 24),
     ));
-    const maxHeight = Math.max(1, Math.min(
-      start.bottom,
-      window.innerHeight - (desktop ? 32 : 96),
-    ));
+    const maxHeight = Math.max(1, window.innerHeight - (largeDesktop ? 112 : 176));
     const minWidth = Math.min(280, maxWidth);
     const minHeight = Math.min(300, maxHeight);
     const width = start.direction === 'top'
@@ -890,10 +979,12 @@ function MiniChatDock() {
       ? start.height
       : Math.max(minHeight, Math.min(maxHeight, start.height - (pointerY - start.pointerY)));
     setDockSize({ width, height });
-    setDockPosition({
-      left: Math.max(0, Math.min(window.innerWidth - width, start.right - width)),
-      top: Math.max(0, Math.min(window.innerHeight - height, start.bottom - height)),
-    });
+    if (dockPosition) {
+      setDockPosition({
+        left: Math.max(0, Math.min(window.innerWidth - width, start.left + start.width - width)),
+        top: Math.max(0, Math.min(window.innerHeight - height, start.top + start.height - height)),
+      });
+    }
   };
 
   const moveResize = (event: PointerEvent<HTMLDivElement>) => {
@@ -927,8 +1018,8 @@ function MiniChatDock() {
 
   const sendReply = (event: FormEvent) => {
     event.preventDefault();
-    if (!draft.trim() || ticket.resolved) return;
-    reply(ticket.id, draft.trim());
+    if (!draft.trim()) return;
+    reply(conversation.id, draft.trim());
     setDraft('');
     setEmojiOpen(false);
   };
@@ -936,21 +1027,33 @@ function MiniChatDock() {
   if (minimized) {
     return (
       <section
+        ref={dockRef}
+        data-chat-dock={dockPosition ? 'floating' : 'docked'}
         aria-label={`Conversation with ${otherUser}`}
-        className="fixed bottom-20 right-3 z-40 flex max-w-[calc(100vw-1.5rem)] items-center gap-3 rounded-full border border-outline-variant/60 bg-white py-2 pl-2 pr-4 text-left shadow-float transition sm:bottom-4 sm:right-4"
+        onPointerDown={startDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={stopDrag}
+        onPointerCancel={cancelDrag}
+        onLostPointerCapture={cancelDrag}
+        style={dockPosition ? { left: dockPosition.left, top: dockPosition.top } : undefined}
+        className={`fixed z-40 flex max-w-[calc(100vw-7rem)] items-center gap-3 rounded-full border border-outline-variant/60 bg-white py-2 pl-2 pr-4 text-left shadow-float transition sm:max-w-[calc(100vw-19rem)] ${dockPosition ? '' : 'bottom-24 right-4 sm:bottom-24 sm:right-4 lg:bottom-8 lg:right-8'}`}
       >
+        <span aria-hidden="true" className="cursor-grab touch-none text-outline active:cursor-grabbing">
+          <Icon name="drag_indicator" className="!text-[18px]" />
+        </span>
         <UserAvatar
-          src={ticket.contactAvatar}
+          disableProfilePreview
+          src={conversation.contactAvatar}
           name={otherUser}
           size={40}
           showStatus
           profileHref={contactProfile}
-          subtitle={ticket.fromMeta}
-          profileSubtitle={ticket.contactProfileSubtitle}
-          role={ticket.contactRole}
+          subtitle={conversation.fromMeta}
+          profileSubtitle={conversation.contactProfileSubtitle}
+          role={conversation.contactRole}
           messagePerson={messagePerson}
         />
-        {ticket.unread && <span className="h-2 w-2 shrink-0 rounded-full bg-error" aria-label="Unread" />}
+        {conversation.unread && <span className="h-2 w-2 shrink-0 rounded-full bg-error" aria-label="Unread" />}
         <button type="button" onClick={() => setMinimized(false)} className="flex items-center gap-2 text-xs text-on-surface-variant hover:text-secondary">
           Conversation minimized<Icon name="chat" className="text-secondary" />
         </button>
@@ -961,13 +1064,14 @@ function MiniChatDock() {
   return (
     <section
       ref={dockRef}
+      data-chat-dock={dockPosition ? 'floating' : 'docked'}
       aria-label={`Conversation with ${otherUser}`}
       style={{
         width: dockSize.width,
         height: dockSize.height,
         ...(dockPosition ? { left: dockPosition.left, top: dockPosition.top } : {}),
       }}
-      className={`group fixed z-40 flex max-h-[calc(100dvh-6rem)] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-t-2xl rounded-b-xl border border-outline-variant/60 bg-white shadow-float sm:max-h-[calc(100dvh-2rem)] sm:max-w-[calc(100vw-2rem)] ${dockPosition ? '' : 'bottom-20 right-3 sm:bottom-4 sm:right-4'}`}
+      className={`group fixed z-40 flex max-h-[calc(100dvh-11rem)] max-w-[calc(100vw-7rem)] flex-col overflow-hidden rounded-t-2xl rounded-b-xl border border-outline-variant/60 bg-white shadow-float sm:max-h-[calc(100dvh-11rem)] sm:max-w-[calc(100vw-19rem)] lg:max-h-[calc(100dvh-7rem)] ${dockPosition ? '' : 'bottom-24 right-4 sm:bottom-24 sm:right-4 lg:bottom-8 lg:right-8'}`}
     >
       <div
         role="separator"
@@ -1014,30 +1118,39 @@ function MiniChatDock() {
         onPointerUp={stopDrag}
         onPointerCancel={cancelDrag}
         onLostPointerCapture={cancelDrag}
-        className={`flex touch-none items-center gap-2.5 border-b border-white/15 bg-[#0B5BD3] px-3.5 py-3 text-white ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        className="group/header flex touch-none items-center gap-2.5 border-b border-white/15 bg-[#0B5BD3] px-3.5 py-3 text-white"
       >
         <div
           role="button"
           tabIndex={0}
+          onClick={(event) => {
+            if (suppressHeaderClickRef.current) {
+              event.preventDefault();
+              return;
+            }
+            if (event.target instanceof Element && event.target.closest('a, button')) return;
+            setMinimized(!minimized);
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
               setMinimized(!minimized);
             }
           }}
-          aria-label={`Conversation with ${otherUser}. Drag to move, click to ${minimized ? 'restore' : 'minimize'}.`}
-          className="flex min-w-0 flex-1 touch-none items-center gap-2.5 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+          aria-label={`Conversation with ${otherUser}. Click to ${minimized ? 'restore' : 'minimize'}.`}
+          className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
         >
           <UserAvatar
-            src={ticket.contactAvatar}
+            disableProfilePreview
+            src={conversation.contactAvatar}
             name={otherUser}
             size={38}
             showStatus
             profileHref={contactProfile}
-            subtitle={ticket.fromMeta}
-            profileSubtitle={ticket.contactProfileSubtitle}
+            subtitle={conversation.fromMeta}
+            profileSubtitle={conversation.contactProfileSubtitle}
             subtitleClassName="text-white/80"
-            role={ticket.contactRole}
+            role={conversation.contactRole}
             messagePerson={messagePerson}
             showName
             nameClassName="text-sm text-white"
@@ -1078,28 +1191,32 @@ function MiniChatDock() {
             <Icon name="close" />
           </button>
         </div>
+        <span aria-hidden="true" className="cursor-grab touch-none text-white/70 active:cursor-grabbing">
+          <Icon name="drag_indicator" className="!text-[18px]" />
+        </span>
       </header>
       <div role="log" aria-label="Conversation messages" aria-live="polite" className="flex-1 space-y-3 overflow-y-auto bg-surface p-3">
-        {ticket.messages.map((message, index) => {
-          const firstInGroup = index === 0 || ticket.messages[index - 1].isMe !== message.isMe;
+        {conversation.messages.map((message, index) => {
+          const firstInGroup = index === 0 || conversation.messages[index - 1].isMe !== message.isMe;
           const senderName = message.isMe ? displayName(user?.name, user?.email) : otherUser;
           const profileHref = message.isMe ? '/profile' : contactProfile;
           const role = message.isMe
             ? user?.role === 'faculty' ? 'Faculty' : user?.role === 'scholar' ? 'Student' : 'Applicant'
-            : ticket.contactRole;
+            : conversation.contactRole;
           return (
-            <div key={`${ticket.id}-${index}`} className={`flex items-start gap-2 ${message.isMe ? 'flex-row-reverse' : 'justify-start'}`}>
+            <div key={`${conversation.id}-${index}`} className={`flex items-start gap-2 ${message.isMe ? 'flex-row-reverse' : 'justify-start'}`}>
               {firstInGroup ? (
                 <UserAvatar
-                  src={message.isMe ? user?.photo || undefined : ticket.contactAvatar}
+                  disableProfilePreview
+                  src={message.isMe ? user?.photo || undefined : conversation.contactAvatar}
                   name={senderName}
                   size={28}
                   email={message.isMe ? user?.email : undefined}
                   profileHref={profileHref}
                   subtitle={message.isMe
                     ? [user?.major, user?.university].filter(Boolean).join(' • ') || 'Academix community member'
-                    : ticket.fromMeta}
-                  profileSubtitle={message.isMe ? undefined : ticket.contactProfileSubtitle}
+                    : conversation.fromMeta}
+                  profileSubtitle={message.isMe ? undefined : conversation.contactProfileSubtitle}
                   role={role}
                   messagePerson={message.isMe ? undefined : messagePerson}
                   showName
@@ -1119,10 +1236,7 @@ function MiniChatDock() {
         })}
         <div ref={messageEndRef} />
       </div>
-      {ticket.resolved ? (
-        <p className="border-t border-outline-variant/50 px-4 py-3 text-center text-xs text-on-surface-variant">This conversation is resolved.</p>
-      ) : (
-        <div className="relative border-t border-outline-variant/50 bg-white p-2.5">
+      <div className="relative border-t border-outline-variant/50 bg-white p-2.5">
           {emojiOpen && (
             <div role="group" aria-label="Choose an emoji" className="absolute bottom-full left-2 right-2 mb-2 flex flex-wrap gap-1 rounded-xl border border-outline-variant/60 bg-white p-2 shadow-float">
               {emojis.map((emoji) => (
@@ -1170,8 +1284,7 @@ function MiniChatDock() {
               <Icon name="send" className="!text-[18px]" />
             </button>
           </form>
-        </div>
-      )}
+      </div>
     </section>
   );
 }
@@ -1182,6 +1295,7 @@ function CommunityLauncher() {
 
   return (
     <Link
+      id="community-launcher"
       to="/compose"
       className="fixed bottom-24 left-4 z-40 flex items-center gap-2 rounded-2xl bg-secondary px-4 py-3.5 font-semibold text-white shadow-float transition hover:bg-secondary/90 lg:bottom-8 lg:left-8"
     >
@@ -1191,33 +1305,321 @@ function CommunityLauncher() {
   );
 }
 
-function AdvisorLauncher() {
-  const setAdvisorOpen = useApp((s) => s.setAdvisorOpen);
+function AdvisorLauncher({
+  buttonRef,
+  position,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+  onOpen,
+  dragging,
+}: {
+  buttonRef: RefObject<HTMLButtonElement>;
+  position: { left: number; top: number } | null;
+  onPointerDown: (event: PointerEvent<HTMLButtonElement>) => void;
+  onPointerMove: (event: PointerEvent<HTMLButtonElement>) => void;
+  onPointerUp: (event: PointerEvent<HTMLButtonElement>) => void;
+  onPointerCancel: (event: PointerEvent<HTMLButtonElement>) => void;
+  onOpen: () => void;
+  dragging: boolean;
+}) {
   const { pathname } = useLocation();
   // Bölüm sayfasında kendi danışman paneli var; oluşturma ve mesaj ekranlarında yer kaplamasın.
   if (pathname.includes('/majors') || pathname.startsWith('/compose') || pathname.startsWith('/inbox/')) return null;
   return (
     <button
+      ref={buttonRef}
+      id="ai-college-match-launcher"
       type="button"
-      onClick={() => setAdvisorOpen(true)}
-      className="fixed bottom-24 right-4 z-40 flex items-center gap-2 rounded-2xl bg-secondary px-4 py-3.5 font-semibold text-white shadow-float transition hover:bg-secondary/90 lg:bottom-8 lg:right-8"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      onLostPointerCapture={onPointerCancel}
+      onClick={onOpen}
+      aria-label="AI College Match"
+      title="AI College Match"
+      style={position ? { left: position.left, top: position.top } : undefined}
+      className={`fixed z-50 flex items-center justify-center gap-2 rounded-2xl bg-secondary px-4 py-3.5 font-semibold text-white shadow-float ${dragging ? 'transition-none' : 'transition-all duration-[250ms] ease-in-out motion-reduce:transition-none'} hover:bg-secondary/90 ${position ? '' : 'bottom-[calc(96px_+_var(--chat-dock-height,0px)_+_var(--chat-dock-stack-gap,0px))] right-4 lg:bottom-[calc(32px_+_var(--chat-dock-height,0px)_+_var(--chat-dock-stack-gap,0px))] lg:right-8'}`}
     >
       <Icon name="smart_toy" />
       <span className="hidden sm:inline">AI College Match</span>
       <span className="h-2.5 w-2.5 rounded-full bg-tertiary-fixed" />
+      <Icon name="drag_indicator" className="!text-[16px] text-white/70" />
     </button>
+  );
+}
+
+function findFreePosition(
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+  blockers: DOMRect[],
+): { left: number; top: number } {
+  const maxLeft = Math.max(0, window.innerWidth - width);
+  const maxTop = Math.max(0, window.innerHeight - height);
+  const clamp = (x: number, y: number) => ({
+    left: Math.max(0, Math.min(maxLeft, x)),
+    top: Math.max(0, Math.min(maxTop, y)),
+  });
+  const overlaps = (x: number, y: number) => blockers.some((rect) =>
+    x < rect.right + 12 && x + width > rect.left - 12
+    && y < rect.bottom + 12 && y + height > rect.top - 12);
+  const candidates = [
+    { left, top },
+    ...blockers.flatMap((rect) => [
+      { left: rect.left, top: rect.top - height - 12 },
+      { left: rect.left, top: rect.bottom + 12 },
+      { left: rect.left - width - 12, top: rect.top },
+      { left: rect.right + 12, top: rect.top },
+    ]),
+    { left: 12, top: 12 },
+    { left: maxLeft - 12, top: 12 },
+    { left: 12, top: maxTop - 12 },
+    { left: maxLeft - 12, top: maxTop - 12 },
+    ...Array.from({ length: Math.ceil(maxTop / 32) + 1 }, (_, row) =>
+      Array.from({ length: Math.ceil(maxLeft / 32) + 1 }, (_, column) => ({
+        left: Math.min(maxLeft, column * 32),
+        top: Math.min(maxTop, row * 32),
+      }))).flat(),
+  ].map((candidate) => clamp(candidate.left, candidate.top));
+  const safe = candidates.filter((candidate) => !overlaps(candidate.left, candidate.top));
+  return safe.sort((first, second) =>
+    Math.hypot(first.left - left, first.top - top) - Math.hypot(second.left - left, second.top - top))[0]
+    ?? clamp(left, top);
+}
+
+function FloatingActionLayer() {
+  const layerRef = useRef<HTMLDivElement>(null);
+  const advisorButtonRef = useRef<HTMLButtonElement>(null);
+  const advisorPanelRef = useRef<HTMLDivElement>(null);
+  const advisorDragRef = useRef<{
+    target: 'button' | 'panel';
+    pointerId: number;
+    pointerX: number;
+    pointerY: number;
+    left: number;
+    top: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressAdvisorClickRef = useRef(false);
+  const [advisorPosition, setAdvisorPosition] = useState<{ left: number; top: number } | null>(null);
+  const [advisorPanelPosition, setAdvisorPanelPosition] = useState<{ left: number; top: number } | null>(null);
+  const [advisorDragging, setAdvisorDragging] = useState(false);
+  const advisorPositionRef = useRef(advisorPosition);
+  const advisorPanelPositionRef = useRef(advisorPanelPosition);
+  const [advisorOpen, setAdvisorOpen] = useState(false);
+  advisorPositionRef.current = advisorPosition;
+  advisorPanelPositionRef.current = advisorPanelPosition;
+  const signedIn = useApp((state) => state.signedIn);
+  const conversationId = useApp((state) => state.miniChatConversationId);
+  const hasConversation = useApp((state) => state.conversations.some((conversation) => conversation.id === state.miniChatConversationId));
+  const hidden = useApp((state) => state.miniChatHidden);
+  const { pathname } = useLocation();
+  const chatVisible = signedIn && !!conversationId && hasConversation && !hidden && !pathname.startsWith('/inbox');
+  const dockRects = () => [...document.querySelectorAll<HTMLElement>('[data-chat-dock]')]
+    .map((dock) => dock.getBoundingClientRect());
+
+  const beginAdvisorDrag = (
+    target: 'button' | 'panel',
+    event: PointerEvent<HTMLElement>,
+    element: HTMLElement | null,
+  ) => {
+    if (event.button !== 0 || !element || advisorDragRef.current) return;
+    if (target === 'panel' && event.target instanceof Element && event.target.closest('button, input, textarea, a')) return;
+    const bounds = element.getBoundingClientRect();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    document.documentElement.style.userSelect = 'none';
+    setAdvisorDragging(true);
+    advisorDragRef.current = {
+      target,
+      pointerId: event.pointerId,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      left: bounds.left,
+      top: bounds.top,
+      moved: false,
+    };
+  };
+
+  const moveAdvisorDrag = (target: 'button' | 'panel', event: PointerEvent<HTMLElement>) => {
+    const drag = advisorDragRef.current;
+    if (drag?.target !== target || drag.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - drag.pointerX;
+    const deltaY = event.clientY - drag.pointerY;
+    if (!drag.moved && Math.hypot(deltaX, deltaY) <= 4) return;
+    event.preventDefault();
+    drag.moved = true;
+    const element = target === 'button' ? advisorButtonRef.current : advisorPanelRef.current;
+    const bounds = element?.getBoundingClientRect();
+    if (!bounds) return;
+    const position = findFreePosition(
+      drag.left + deltaX,
+      drag.top + deltaY,
+      bounds.width,
+      bounds.height,
+      dockRects(),
+    );
+    if (target === 'button') setAdvisorPosition(position);
+    else setAdvisorPanelPosition(position);
+  };
+
+  const endAdvisorDrag = (target: 'button' | 'panel', event: PointerEvent<HTMLElement>) => {
+    const drag = advisorDragRef.current;
+    if (drag?.target !== target || drag.pointerId !== event.pointerId) return;
+    const element = target === 'button' ? advisorButtonRef.current : advisorPanelRef.current;
+    const bounds = element?.getBoundingClientRect();
+    if (drag.moved && bounds) {
+      const position = findFreePosition(
+        drag.left + event.clientX - drag.pointerX,
+        drag.top + event.clientY - drag.pointerY,
+        bounds.width,
+        bounds.height,
+        dockRects(),
+      );
+      if (target === 'button') setAdvisorPosition(position);
+      else setAdvisorPanelPosition(position);
+      suppressAdvisorClickRef.current = true;
+      window.setTimeout(() => { suppressAdvisorClickRef.current = false; }, 0);
+    } else if (target === 'button') {
+      setAdvisorOpen(true);
+    }
+    advisorDragRef.current = null;
+    setAdvisorDragging(false);
+    document.documentElement.style.userSelect = '';
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  const cancelAdvisorDrag = (target: 'button' | 'panel', event: PointerEvent<HTMLElement>) => {
+    if (advisorDragRef.current?.target !== target || advisorDragRef.current.pointerId !== event.pointerId) return;
+    advisorDragRef.current = null;
+    setAdvisorDragging(false);
+    document.documentElement.style.userSelect = '';
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  const advisorPanelDragHandlers = {
+    onPointerDown: (event: PointerEvent<HTMLDivElement>) => beginAdvisorDrag('panel', event, advisorPanelRef.current),
+    onPointerMove: (event: PointerEvent<HTMLDivElement>) => moveAdvisorDrag('panel', event),
+    onPointerUp: (event: PointerEvent<HTMLDivElement>) => endAdvisorDrag('panel', event),
+    onPointerCancel: (event: PointerEvent<HTMLDivElement>) => cancelAdvisorDrag('panel', event),
+    onLostPointerCapture: (event: PointerEvent<HTMLDivElement>) => cancelAdvisorDrag('panel', event),
+  };
+
+  useLayoutEffect(() => {
+    if (!advisorOpen || advisorPanelPosition || !advisorPanelRef.current) return;
+    const bounds = advisorPanelRef.current.getBoundingClientRect();
+    const position = findFreePosition(
+      bounds.left,
+      bounds.top,
+      bounds.width,
+      bounds.height,
+      dockRects(),
+    );
+    if (position.left !== bounds.left || position.top !== bounds.top) setAdvisorPanelPosition(position);
+  }, [advisorOpen, advisorPanelPosition]);
+
+  useLayoutEffect(() => {
+    const layer = layerRef.current;
+    if (!layer) return;
+    const updateDockHeight = () => {
+      const height = [...layer.querySelectorAll<HTMLElement>('[data-chat-dock="docked"]')]
+        .reduce((tallest, dock) => Math.max(tallest, dock.getBoundingClientRect().height), 0);
+      const advisorHeight = layer.querySelector<HTMLElement>('#ai-college-match-launcher')?.getBoundingClientRect().height ?? 0;
+      document.documentElement.style.setProperty('--chat-dock-height', `${height}px`);
+      document.documentElement.style.setProperty('--chat-dock-stack-gap', height ? `${12 + advisorHeight}px` : '0px');
+      const button = advisorButtonRef.current;
+      if (button && advisorPositionRef.current) {
+        const bounds = button.getBoundingClientRect();
+        const position = findFreePosition(bounds.left, bounds.top, bounds.width, bounds.height, dockRects());
+        if (position.left !== advisorPositionRef.current.left || position.top !== advisorPositionRef.current.top) {
+          setAdvisorPosition(position);
+        }
+      }
+      const panel = advisorPanelRef.current;
+      if (panel && advisorPanelPositionRef.current) {
+        const bounds = panel.getBoundingClientRect();
+        const position = findFreePosition(bounds.left, bounds.top, bounds.width, bounds.height, dockRects());
+        if (position.left !== advisorPanelPositionRef.current.left || position.top !== advisorPanelPositionRef.current.top) {
+          setAdvisorPanelPosition(position);
+        }
+      }
+    };
+    const resizeObserver = new ResizeObserver(updateDockHeight);
+    const observeDocks = () => {
+      resizeObserver.disconnect();
+      layer.querySelectorAll<HTMLElement>('[data-chat-dock="docked"]').forEach((dock) => resizeObserver.observe(dock));
+      const advisor = layer.querySelector<HTMLElement>('#ai-college-match-launcher');
+      if (advisor) resizeObserver.observe(advisor);
+      if (advisorPanelRef.current) resizeObserver.observe(advisorPanelRef.current);
+      updateDockHeight();
+    };
+    const mutationObserver = new MutationObserver(observeDocks);
+    mutationObserver.observe(layer, { attributes: true, attributeFilter: ['data-chat-dock'], childList: true, subtree: true });
+    observeDocks();
+    window.addEventListener('resize', updateDockHeight);
+    return () => {
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateDockHeight);
+      document.documentElement.style.setProperty('--chat-dock-height', '0px');
+      document.documentElement.style.setProperty('--chat-dock-stack-gap', '0px');
+    };
+  }, []);
+
+  return (
+    <div ref={layerRef} className="pointer-events-none fixed inset-0 z-40">
+      {chatVisible && <div className="pointer-events-auto"><MiniChatDock /></div>}
+      <div className="pointer-events-auto">
+        <AdvisorLauncher
+          buttonRef={advisorButtonRef}
+          position={advisorPosition}
+          onPointerDown={(event) => beginAdvisorDrag('button', event, advisorButtonRef.current)}
+          onPointerMove={(event) => moveAdvisorDrag('button', event)}
+          onPointerUp={(event) => endAdvisorDrag('button', event)}
+          onPointerCancel={(event) => cancelAdvisorDrag('button', event)}
+          dragging={advisorDragging}
+          onOpen={() => {
+            if (!suppressAdvisorClickRef.current) setAdvisorOpen(true);
+          }}
+        />
+      </div>
+      <div className="pointer-events-auto">
+        <AdvisorDrawer
+          open={advisorOpen}
+          onClose={() => {
+            setAdvisorOpen(false);
+            setAdvisorPanelPosition(null);
+          }}
+          dialogRef={advisorPanelRef}
+          dialogStyle={advisorPanelPosition ? {
+            position: 'fixed',
+            left: advisorPanelPosition.left,
+            top: advisorPanelPosition.top,
+            margin: 0,
+            transform: 'none',
+          } : undefined}
+          headerDragHandlers={advisorPanelDragHandlers}
+        />
+      </div>
+    </div>
   );
 }
 
 export default function Layout() {
   const [query, setQuery] = useState('');
   const [selectedUniversities, setSelectedUniversities] = useState<string[]>([]);
+  const [selectedMajors, setSelectedMajors] = useState<string[]>([]);
   const [askMentorOpen, setAskMentorOpen] = useState(false);
   const feedSearchContext = useMemo<FeedSearchContext>(() => ({
     query,
     selectedUniversities,
+    selectedMajors,
     removeUniversity: (name) => setSelectedUniversities((current) => current.filter((university) => university !== name)),
-  }), [query, selectedUniversities]);
+    removeMajor: (name) => setSelectedMajors((current) => current.filter((major) => major !== name)),
+  }), [query, selectedMajors, selectedUniversities]);
 
   return (
     <div className="min-h-screen">
@@ -1226,6 +1628,8 @@ export default function Layout() {
         setQuery={setQuery}
         selectedUniversities={selectedUniversities}
         setSelectedUniversities={setSelectedUniversities}
+        selectedMajors={selectedMajors}
+        setSelectedMajors={setSelectedMajors}
       />
       <main className="mx-auto max-w-content px-4 pb-24 pt-24 lg:pb-8">
         <Outlet context={feedSearchContext} />
@@ -1233,9 +1637,7 @@ export default function Layout() {
       <Footer onAskMentor={() => setAskMentorOpen(true)} />
       <MobileNav />
       <CommunityLauncher />
-      <AdvisorLauncher />
-      <AdvisorDrawer />
-      <MiniChatDock />
+      <FloatingActionLayer />
       <ToastHost />
       {askMentorOpen && <AskMentorModal onClose={() => setAskMentorOpen(false)} />}
     </div>

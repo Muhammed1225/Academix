@@ -11,7 +11,7 @@ const notificationsFile = resolve(dirname(dataFile), 'notifications.json');
 const verificationDirectory = resolve(dirname(dataFile), 'verification-documents');
 const sessions = new Map();
 const users = new Map();
-let notificationData = { items: [], preferences: {}, readTickets: {} };
+let notificationData = { items: [], preferences: {}, readConversations: {} };
 let notificationSaveQueue = Promise.resolve();
 const profileBannerBackgrounds = new Set([
   'academix',
@@ -69,9 +69,16 @@ try {
   if (saved && Array.isArray(saved.items) && saved.preferences && typeof saved.preferences === 'object') {
     notificationData = {
       ...saved,
-      readTickets: saved.readTickets && typeof saved.readTickets === 'object' && !Array.isArray(saved.readTickets)
-        ? saved.readTickets
-        : {},
+      items: saved.items.map((item) => {
+        if (item.conversationId || !item.ticketId) return item;
+        const { ticketId, ...notification } = item;
+        return { ...notification, conversationId: ticketId };
+      }),
+      readConversations: saved.readConversations && typeof saved.readConversations === 'object' && !Array.isArray(saved.readConversations)
+        ? saved.readConversations
+        : saved.readTickets && typeof saved.readTickets === 'object' && !Array.isArray(saved.readTickets)
+          ? saved.readTickets
+          : {},
     };
   }
 } catch (error) {
@@ -221,10 +228,11 @@ async function handleNotifications(req, res, url) {
       const text = typeof input.text === 'string' ? input.text.trim() : '';
       const type = input.type === 'message' || input.type === 'system' ? input.type : '';
       const href = typeof input.href === 'string' && /^\/(inbox|people|notifications)(\/[\w-]+)?$/.test(input.href) ? input.href : '';
+      const conversationId = input.conversationId ?? input.ticketId;
       if (!id || !senderName || senderName.length > 100 || senderName.includes('@') ||
           !text || text.length > 240 || !type || !href ||
           (input.senderAvatar !== undefined && (typeof input.senderAvatar !== 'string' || input.senderAvatar.length > 2048)) ||
-          (input.ticketId !== undefined && (typeof input.ticketId !== 'string' || input.ticketId.length > 120))) {
+          (conversationId !== undefined && (typeof conversationId !== 'string' || conversationId.length > 120))) {
         sendJson(res, 400, { error: 'Invalid notification.' });
         return true;
       }
@@ -241,10 +249,10 @@ async function handleNotifications(req, res, url) {
         ...(input.senderAvatar ? { senderAvatar: input.senderAvatar } : {}),
         text,
         href,
-        ...(input.ticketId ? { ticketId: input.ticketId } : {}),
+        ...(conversationId ? { conversationId } : {}),
         createdAt: new Date().toISOString(),
-        readAt: input.ticketId && id === `seed-${input.ticketId}` &&
-          notificationData.readTickets[user.id]?.includes(input.ticketId)
+        readAt: conversationId && id === `seed-${conversationId}` &&
+          notificationData.readConversations[user.id]?.includes(conversationId)
           ? new Date().toISOString()
           : null,
       };
@@ -272,10 +280,10 @@ async function handleNotifications(req, res, url) {
     notificationData.items = notificationData.items.map((item) =>
       item.userId === user.id && !item.readAt ? { ...item, readAt: now } : item,
     );
-    notificationData.readTickets[user.id] = [
+    notificationData.readConversations[user.id] = [
       ...new Set([
-        ...(notificationData.readTickets[user.id] ?? []),
-        ...notificationData.items.filter((item) => item.userId === user.id && item.ticketId).map((item) => item.ticketId),
+        ...(notificationData.readConversations[user.id] ?? []),
+        ...notificationData.items.filter((item) => item.userId === user.id && item.conversationId).map((item) => item.conversationId),
       ]),
     ];
     try {
@@ -288,13 +296,13 @@ async function handleNotifications(req, res, url) {
     return true;
   }
 
-  const ticketReadMatch = url.pathname.match(/^\/api\/notifications\/ticket\/([\w-]+)\/read$/);
-  if (req.method === 'PATCH' && ticketReadMatch) {
-    notificationData.readTickets[user.id] = [
-      ...new Set([...(notificationData.readTickets[user.id] ?? []), ticketReadMatch[1]]),
+  const conversationReadMatch = url.pathname.match(/^\/api\/notifications\/(?:conversation|ticket)\/([\w-]+)\/read$/);
+  if (req.method === 'PATCH' && conversationReadMatch) {
+    notificationData.readConversations[user.id] = [
+      ...new Set([...(notificationData.readConversations[user.id] ?? []), conversationReadMatch[1]]),
     ];
     notificationData.items = notificationData.items.map((item) =>
-      item.userId === user.id && item.ticketId === ticketReadMatch[1] && !item.readAt
+      item.userId === user.id && item.conversationId === conversationReadMatch[1] && !item.readAt
         ? { ...item, readAt: new Date().toISOString() }
         : item,
     );
@@ -302,7 +310,7 @@ async function handleNotifications(req, res, url) {
       await saveNotifications();
       sendJson(res, 200, notificationSummary(user.id));
     } catch (error) {
-      console.error('Unable to mark ticket notifications read:', error);
+      console.error('Unable to mark conversation notifications read:', error);
       sendJson(res, 500, { error: 'Unable to update notifications.' });
     }
     return true;
@@ -316,14 +324,14 @@ async function handleNotifications(req, res, url) {
       return true;
     }
     item.readAt = item.readAt || new Date().toISOString();
-    if (item.ticketId) {
-      notificationData.readTickets[user.id] = [
-        ...new Set([...(notificationData.readTickets[user.id] ?? []), item.ticketId]),
+    if (item.conversationId) {
+      notificationData.readConversations[user.id] = [
+        ...new Set([...(notificationData.readConversations[user.id] ?? []), item.conversationId]),
       ];
     }
     try {
       await saveNotifications();
-      sendJson(res, 200, { ...notificationSummary(user.id), ticketId: item.ticketId ?? null });
+      sendJson(res, 200, { ...notificationSummary(user.id), conversationId: item.conversationId ?? null });
     } catch (error) {
       console.error('Unable to mark notification read:', error);
       sendJson(res, 500, { error: 'Unable to update notification.' });

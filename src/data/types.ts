@@ -241,7 +241,7 @@ export interface GroupSharedDocument {
   downloadUrl: string;
 }
 
-export interface Ticket {
+export interface Conversation {
   id: string;
   groupBio?: string;
   groupPicture?: string;
@@ -262,7 +262,6 @@ export interface Ticket {
   from: string;
   fromMeta: string;
   messages: Message[];
-  resolved: boolean;
   unread: boolean;
   suggestedReply?: string;
 }

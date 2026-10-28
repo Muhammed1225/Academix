@@ -36,6 +36,7 @@ interface UserAvatarProps {
   className?: string;
   messagePerson?: MessagePerson;
   trailing?: ReactNode;
+  disableProfilePreview?: boolean;
 }
 
 export default function UserAvatar({
@@ -56,6 +57,7 @@ export default function UserAvatar({
   className,
   messagePerson,
   trailing,
+  disableProfilePreview = false,
   verification,
   badge,
 }: UserAvatarProps) {
@@ -148,7 +150,7 @@ export default function UserAvatar({
   }, [popoverPosition]);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLSpanElement>) => {
-    if (event.pointerType !== 'touch' || !profileHref) return;
+    if (disableProfilePreview || event.pointerType !== 'touch' || !profileHref) return;
     event.preventDefault();
     if (popoverPosition) setPopoverPosition(null);
     else openPopover(true);
@@ -162,11 +164,11 @@ export default function UserAvatar({
       return;
     }
     openMiniChatForPerson(messagePerson);
-    const ticket = useApp.getState().tickets.find((item) =>
+    const conversation = useApp.getState().conversations.find((item) =>
       item.contactId === messagePerson.id || item.id === `direct-${messagePerson.id}`,
     );
     setPopoverPosition(null);
-    if (ticket) navigate(`/inbox/${ticket.id}`);
+    if (conversation) navigate(`/inbox/${conversation.id}`);
   };
 
   const avatar = (
@@ -220,11 +222,11 @@ export default function UserAvatar({
     <span
       ref={identityRef}
       className={cx('relative inline-flex min-w-0 items-center gap-2', className)}
-      onMouseEnter={() => openPopover()}
-      onMouseLeave={scheduleClose}
-      onFocus={() => openPopover(true)}
+      onMouseEnter={disableProfilePreview ? undefined : () => openPopover()}
+      onMouseLeave={disableProfilePreview ? undefined : scheduleClose}
+      onFocus={disableProfilePreview ? undefined : () => openPopover(true)}
       onPointerDown={handlePointerDown}
-      onBlur={(event) => {
+      onBlur={disableProfilePreview ? undefined : (event) => {
         const nextTarget = event.relatedTarget;
         if (!(nextTarget instanceof Node)
           || (!event.currentTarget.contains(nextTarget) && !popoverRef.current?.contains(nextTarget))) scheduleClose();
@@ -236,7 +238,7 @@ export default function UserAvatar({
           aria-label={`View ${safeName}'s profile`}
           onClick={(event) => event.stopPropagation()}
           className={cx(
-            'inline-flex min-w-0 items-center gap-2 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary',
+            'inline-flex min-w-0 cursor-pointer items-center gap-2 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary',
             showName && 'flex-1',
           )}
         >
@@ -247,7 +249,7 @@ export default function UserAvatar({
           {identityContent}
         </span>
       )}
-      {popoverPosition && profileHref && createPortal(
+      {!disableProfilePreview && popoverPosition && profileHref && createPortal(
         <div
           ref={popoverRef}
           role="dialog"

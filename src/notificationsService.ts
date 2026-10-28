@@ -1,4 +1,4 @@
-import type { Ticket } from './data/types';
+import type { Conversation } from './data/types';
 import type { AuthenticatedUser } from './store';
 
 export interface NotificationItem {
@@ -8,7 +8,7 @@ export interface NotificationItem {
   senderAvatar?: string;
   text: string;
   href: string;
-  ticketId?: string;
+  conversationId?: string;
   createdAt: string;
   readAt: string | null;
 }
@@ -34,7 +34,7 @@ export interface NotificationInput {
   senderAvatar?: string;
   text: string;
   href: string;
-  ticketId?: string;
+  conversationId?: string;
 }
 
 function requestHeaders(user: AuthenticatedUser | null, json = false): HeadersInit {
@@ -92,22 +92,22 @@ export async function createNotification(
   return result.notification;
 }
 
-export async function seedUnreadTicketNotifications(user: AuthenticatedUser, tickets: Ticket[]) {
-  await Promise.all(tickets
-    .filter((ticket) => ticket.unread && !ticket.resolved)
-    .map((ticket) => createNotification(user, {
-      id: `seed-${ticket.id}`,
+export async function seedUnreadConversationNotifications(user: AuthenticatedUser, conversations: Conversation[]) {
+  await Promise.all(conversations
+    .filter((conversation) => conversation.unread)
+    .map((conversation) => createNotification(user, {
+      id: `seed-${conversation.id}`,
       type: 'message',
-      senderName: ticket.from.includes('@') ? 'Academix member' : ticket.from,
-      ...(ticket.contactAvatar ? { senderAvatar: ticket.contactAvatar } : {}),
+      senderName: conversation.from.includes('@') ? 'Academix member' : conversation.from,
+      ...(conversation.contactAvatar ? { senderAvatar: conversation.contactAvatar } : {}),
       text: 'sent you a message',
-      href: `/inbox/${ticket.id}`,
-      ticketId: ticket.id,
+      href: `/inbox/${conversation.id}`,
+      conversationId: conversation.id,
     }, false)));
 }
 
 export async function markNotificationRead(user: AuthenticatedUser, notificationId: string) {
-  const result = await request<{ unreadCount: number; unreadMessageCount: number; ticketId: string | null }>(
+  const result = await request<{ unreadCount: number; unreadMessageCount: number; conversationId: string | null }>(
     `/api/notifications/${encodeURIComponent(notificationId)}/read`,
     user,
     { method: 'PATCH' },
@@ -116,9 +116,9 @@ export async function markNotificationRead(user: AuthenticatedUser, notification
   return result;
 }
 
-export async function markTicketNotificationsRead(user: AuthenticatedUser, ticketId: string) {
+export async function markConversationNotificationsRead(user: AuthenticatedUser, conversationId: string) {
   const result = await request<{ unreadCount: number; unreadMessageCount: number }>(
-    `/api/notifications/ticket/${encodeURIComponent(ticketId)}/read`,
+    `/api/notifications/conversation/${encodeURIComponent(conversationId)}/read`,
     user,
     { method: 'PATCH' },
   );

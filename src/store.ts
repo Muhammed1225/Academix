@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 
-import { people, posts as initialPosts, tickets as initialTickets } from './data/mock';
-import type { GroupMember, Post, Ticket } from './data/types';
+import { people, posts as initialPosts, conversations as initialConversations } from './data/mock';
+import type { GroupMember, Post, Conversation } from './data/types';
 import { displayName } from './data/userIdentity';
-import { createNotification, markTicketNotificationsRead } from './notificationsService';
+import { createNotification, markConversationNotificationsRead } from './notificationsService';
 
 interface Toast {
   id: number;
@@ -57,7 +57,7 @@ export interface AuthenticatedUser extends OnboardingProfile {
 
 interface AppState {
   posts: Post[];
-  tickets: Ticket[];
+  conversations: Conversation[];
   mentorQuestions: { question: string; mentorId: string; createdAt: string }[];
   savedColleges: string[];
   signedIn: boolean;
@@ -66,7 +66,7 @@ interface AppState {
   advisorOpen: boolean;
   authOpen: boolean;
   toast: Toast | null;
-  miniChatTicketId: string | null;
+  miniChatConversationId: string | null;
   miniChatMinimized: boolean;
   miniChatHidden: boolean;
   messageSoundsEnabled: boolean;
@@ -78,29 +78,28 @@ interface AppState {
   createGroup: (input: { name: string; bio: string; picture?: string; members: GroupMember[] }) => string | null;
   saveMentorQuestion: (input: { question: string; mentorId: string }) => void;
 
-  markRead: (ticketId: string) => void;
-  reply: (ticketId: string, text: string) => void;
-  toggleResolved: (ticketId: string) => void;
+  markRead: (conversationId: string) => void;
+  reply: (conversationId: string, text: string) => void;
 
   toggleSavedCollege: (collegeId: string) => void;
   setSignedIn: (value: boolean) => void;
   setAuthenticatedUser: (user: AuthenticatedUser) => void;
   setAdvisorOpen: (value: boolean) => void;
   setAuthOpen: (value: boolean) => void;
-  setMiniChatTicketId: (ticketId: string | null) => void;
+  setMiniChatConversationId: (conversationId: string | null) => void;
   setMiniChatMinimized: (minimized: boolean) => void;
   setMiniChatHidden: (hidden: boolean) => void;
   setMessageSoundsEnabled: (enabled: boolean) => void;
   openMiniChatForPerson: (person: { id: string; name: string; subtitle: string; avatar?: string }) => void;
-  receiveMessage: (ticketId: string, message: Ticket['messages'][number]) => void;
+  receiveMessage: (conversationId: string, message: Conversation['messages'][number]) => void;
   showToast: (message: string, icon?: string) => void;
 }
 
 const updatePost = (posts: Post[], id: string, change: (p: Post) => Post) =>
   posts.map((p) => (p.id === id ? change(p) : p));
 
-const updateTicket = (tickets: Ticket[], id: string, change: (t: Ticket) => Ticket) =>
-  tickets.map((t) => (t.id === id ? change(t) : t));
+const updateConversation = (conversations: Conversation[], id: string, change: (t: Conversation) => Conversation) =>
+  conversations.map((t) => (t.id === id ? change(t) : t));
 
 /** Composer'daki forum adını feed kanal filtresine eşler. */
 const channelForForum = (forum: string) =>
@@ -127,7 +126,7 @@ const playMessageNotification = () => {
  */
 export const useApp = create<AppState>((set, get) => ({
   posts: initialPosts,
-  tickets: initialTickets,
+  conversations: initialConversations,
   mentorQuestions: [],
   savedColleges: [],
   signedIn: false,
@@ -136,7 +135,7 @@ export const useApp = create<AppState>((set, get) => ({
   advisorOpen: false,
   authOpen: false,
   toast: null,
-  miniChatTicketId: null,
+  miniChatConversationId: null,
   miniChatMinimized: false,
   miniChatHidden: false,
   messageSoundsEnabled: typeof window !== 'undefined' && window.localStorage.getItem('academix.message-sounds') === 'true',
@@ -252,9 +251,9 @@ export const useApp = create<AppState>((set, get) => ({
       ...selectedMembers.map((member) => ({ ...member, isAdmin: false, isCurrentUser: false })),
     ];
     const createdAt = new Date().toISOString();
-    const ticketId = `group-${Date.now()}`;
-    const ticket: Ticket = {
-      id: ticketId,
+    const conversationId = `group-${Date.now()}`;
+    const conversation: Conversation = {
+      id: conversationId,
       groupBio: bio.trim(),
       groupPicture: picture,
       groupCreatedAt: createdAt,
@@ -289,17 +288,16 @@ export const useApp = create<AppState>((set, get) => ({
       from: groupName,
       fromMeta: `${groupMembers.length} members`,
       messages: [],
-      resolved: false,
       unread: false,
     };
 
     set((current) => ({
-      tickets: [ticket, ...current.tickets],
-      miniChatTicketId: ticketId,
+      conversations: [conversation, ...current.conversations],
+      miniChatConversationId: conversationId,
       miniChatMinimized: false,
       miniChatHidden: false,
     }));
-    return ticketId;
+    return conversationId;
   },
 
   saveMentorQuestion: (input) =>
@@ -307,18 +305,18 @@ export const useApp = create<AppState>((set, get) => ({
       mentorQuestions: [...state.mentorQuestions, { ...input, createdAt: new Date().toISOString() }],
     })),
 
-  markRead: (ticketId) =>
+  markRead: (conversationId) =>
     set((s) => {
-      const ticket = s.tickets.find((item) => item.id === ticketId);
-      if (ticket?.unread && s.user) {
-        void markTicketNotificationsRead(s.user, ticketId).catch(() =>
+      const conversation = s.conversations.find((item) => item.id === conversationId);
+      if (conversation?.unread && s.user) {
+        void markConversationNotificationsRead(s.user, conversationId).catch(() =>
           get().showToast('Unable to sync notification status', 'error'),
         );
       }
-      return { tickets: updateTicket(s.tickets, ticketId, (t) => ({ ...t, unread: false })) };
+      return { conversations: updateConversation(s.conversations, conversationId, (t) => ({ ...t, unread: false })) };
     }),
 
-  reply: (ticketId, text) => {
+  reply: (conversationId, text) => {
     const state = get();
     const sender = displayName(state.user?.name, state.user?.email);
     const sentAt = new Date().toISOString();
@@ -334,7 +332,7 @@ export const useApp = create<AppState>((set, get) => ({
       });
 
     set((s) => ({
-      tickets: updateTicket(s.tickets, ticketId, (t) => ({
+      conversations: updateConversation(s.conversations, conversationId, (t) => ({
         ...t,
         messages: [...t.messages, { author: sender, time: 'Just now', text, isMe: true }],
         ...(t.category === 'Group' && links.length
@@ -350,8 +348,6 @@ export const useApp = create<AppState>((set, get) => ({
     }));
   },
 
-  toggleResolved: (ticketId) =>
-    set((s) => ({ tickets: updateTicket(s.tickets, ticketId, (t) => ({ ...t, resolved: !t.resolved })) })),
 
   toggleSavedCollege: (collegeId) =>
     set((s) => ({
@@ -365,24 +361,24 @@ export const useApp = create<AppState>((set, get) => ({
     authChecked: true,
     ...(signedIn ? {} : {
       user: null,
-      miniChatTicketId: null,
+      miniChatConversationId: null,
       miniChatMinimized: false,
       miniChatHidden: false,
-      ...(s.user ? { posts: initialPosts, tickets: initialTickets, savedColleges: [] } : {}),
+      ...(s.user ? { posts: initialPosts, conversations: initialConversations, savedColleges: [] } : {}),
     }),
   })),
   setAuthenticatedUser: (user) => set((s) => ({
     user,
     signedIn: true,
     authChecked: true,
-    ...(s.user?.id !== user.id ? { miniChatTicketId: null, miniChatMinimized: false, miniChatHidden: false } : {}),
-    ...(s.user?.id !== user.id ? { posts: initialPosts, tickets: initialTickets, savedColleges: [] } : {}),
+    ...(s.user?.id !== user.id ? { miniChatConversationId: null, miniChatMinimized: false, miniChatHidden: false } : {}),
+    ...(s.user?.id !== user.id ? { posts: initialPosts, conversations: initialConversations, savedColleges: [] } : {}),
   })),
   setAdvisorOpen: (advisorOpen) => set({ advisorOpen }),
   setAuthOpen: (authOpen) => set({ authOpen }),
-  setMiniChatTicketId: (miniChatTicketId) => set({
-    miniChatTicketId,
-    ...(!miniChatTicketId ? { miniChatMinimized: false, miniChatHidden: false } : { miniChatHidden: false }),
+  setMiniChatConversationId: (miniChatConversationId) => set({
+    miniChatConversationId,
+    ...(!miniChatConversationId ? { miniChatMinimized: false, miniChatHidden: false } : { miniChatHidden: false }),
   }),
   setMiniChatMinimized: (miniChatMinimized) => set({ miniChatMinimized }),
   setMiniChatHidden: (miniChatHidden) => set({ miniChatHidden }),
@@ -392,16 +388,16 @@ export const useApp = create<AppState>((set, get) => ({
   },
   openMiniChatForPerson: (person) =>
     set((state) => {
-      const existing = state.tickets.find((ticket) =>
-        ticket.contactId === person.id ||
-        (ticket.category === 'Direct message' &&
-          (ticket.from === person.name ||
-            ticket.messages.some((message) => message.author === person.name && !message.isMe))),
+      const existing = state.conversations.find((conversation) =>
+        conversation.contactId === person.id ||
+        (conversation.category === 'Direct message' &&
+          (conversation.from === person.name ||
+            conversation.messages.some((message) => message.author === person.name && !message.isMe))),
       );
-      const ticketId = existing?.id ?? `direct-${person.id}`;
-      const tickets = existing ? state.tickets : [
+      const conversationId = existing?.id ?? `direct-${person.id}`;
+      const conversations = existing ? state.conversations : [
         {
-          id: ticketId,
+          id: conversationId,
           contactId: person.id,
           ...(person.avatar ? { contactAvatar: person.avatar } : {}),
           category: 'Direct message',
@@ -411,30 +407,29 @@ export const useApp = create<AppState>((set, get) => ({
           from: person.name,
           fromMeta: person.subtitle,
           messages: [],
-          resolved: false,
           unread: false,
         },
-        ...state.tickets,
+        ...state.conversations,
       ];
       return {
-        tickets,
-        miniChatTicketId: ticketId,
+        conversations,
+        miniChatConversationId: conversationId,
         miniChatMinimized: false,
         miniChatHidden: false,
       };
     }),
-  receiveMessage: (ticketId, message) => {
+  receiveMessage: (conversationId, message) => {
     const state = get();
-    if (!state.tickets.some((item) => item.id === ticketId)) {
+    if (!state.conversations.some((item) => item.id === conversationId)) {
       state.showToast('Unable to open this conversation', 'error');
       return;
     }
     const shouldNotify = !message.isMe && state.messageSoundsEnabled &&
-      (state.miniChatTicketId !== ticketId || state.miniChatMinimized || state.miniChatHidden ||
+      (state.miniChatConversationId !== conversationId || state.miniChatMinimized || state.miniChatHidden ||
         (typeof document !== 'undefined' &&
           (document.visibilityState !== 'visible' || !document.hasFocus())));
     set((current) => ({
-        tickets: updateTicket(current.tickets, ticketId, (item) => ({
+        conversations: updateConversation(current.conversations, conversationId, (item) => ({
           ...item,
           messages: [...item.messages, message],
           preview: message.text,
@@ -443,23 +438,23 @@ export const useApp = create<AppState>((set, get) => ({
         })),
         ...(!message.isMe
           ? {
-            miniChatTicketId: ticketId,
-            miniChatMinimized: current.miniChatTicketId !== ticketId || current.miniChatMinimized || current.miniChatHidden,
+            miniChatConversationId: conversationId,
+            miniChatMinimized: current.miniChatConversationId !== conversationId || current.miniChatMinimized || current.miniChatHidden,
             miniChatHidden: false,
           }
           : {}),
       }));
     if (!message.isMe && state.user) {
-      const ticket = state.tickets.find((item) => item.id === ticketId);
-      const id = `message-${ticketId}-${Date.now()}-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`;
+      const conversation = state.conversations.find((item) => item.id === conversationId);
+      const id = `message-${conversationId}-${Date.now()}-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`;
       void createNotification(state.user, {
         id,
         type: 'message',
         senderName: displayName(message.author),
-        ...(ticket?.contactAvatar ? { senderAvatar: ticket.contactAvatar } : {}),
+        ...(conversation?.contactAvatar ? { senderAvatar: conversation.contactAvatar } : {}),
         text: 'sent you a message',
-        href: `/inbox/${ticketId}`,
-        ticketId,
+        href: `/inbox/${conversationId}`,
+        conversationId,
       }).catch(() => get().showToast('Unable to save the new notification', 'error'));
     }
     if (shouldNotify && typeof window !== 'undefined' && 'AudioContext' in window) {
@@ -478,4 +473,4 @@ export const useApp = create<AppState>((set, get) => ({
   },
 }));
 
-export const useUnreadCount = () => useApp((s) => s.tickets.filter((t) => t.unread && !t.resolved).length);
+export const useUnreadCount = () => useApp((s) => s.conversations.filter((conversation) => conversation.unread).length);

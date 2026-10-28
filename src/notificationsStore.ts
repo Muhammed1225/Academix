@@ -7,11 +7,11 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
   saveNotificationPreferences,
-  seedUnreadTicketNotifications,
+  seedUnreadConversationNotifications,
   type NotificationItem,
   type NotificationPreferences,
 } from './notificationsService';
-import { tickets } from './data/mock';
+import { conversations } from './data/mock';
 
 interface NotificationsState {
   userId: string | null;
@@ -75,7 +75,7 @@ export const useNotifications = create<NotificationsState>((set, get) => ({
       error: null,
     });
     try {
-      if (changingUser) await seedUnreadTicketNotifications(user, tickets);
+      if (changingUser) await seedUnreadConversationNotifications(user, conversations);
       const page = await listNotifications(user, { limit: 20, unread: selectedUnreadOnly });
       set({
         items: page.items,

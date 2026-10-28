@@ -143,7 +143,7 @@ export default function FeedPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const [authorFilterOpen, setAuthorFilterOpen] = useState(false);
-  const { query, selectedUniversities, removeUniversity } = useOutletContext<FeedSearchContext>();
+  const { query, selectedUniversities, selectedMajors, removeUniversity, removeMajor } = useOutletContext<FeedSearchContext>();
   const authorFilterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -191,6 +191,29 @@ export default function FeedPage() {
         post.author.subtitle,
       ].filter(Boolean).join(' '));
       if (!selectedUniversities.some((name) => affiliation.includes(normalized(name)))) return false;
+    }
+    if (selectedMajors.length) {
+      const authorStudyFields = normalized([
+        post.author.subtitle,
+        post.author.education,
+        ...(post.author.interests ?? []),
+      ].filter(Boolean).join(' '));
+      const matchesMajor = selectedMajors.some((selection) => {
+        const categoryMajors = colleges.flatMap((college) =>
+          college.majorCategories.includes(selection)
+            ? college.majors.filter((major) => major.category === selection).map((major) => major.name)
+            : [],
+        );
+        const aliases = [
+          selection,
+          ...categoryMajors,
+        ];
+        return aliases.some((alias) => {
+          const terms = normalized(alias).split(' ').filter((term) => !['b', 's', 'of', 'in', 'the', 'and'].includes(term));
+          return terms.length > 0 && terms.every((term) => authorStudyFields.includes(term));
+        });
+      });
+      if (!matchesMajor) return false;
     }
     return true;
   });
@@ -289,8 +312,8 @@ export default function FeedPage() {
             )}
           </div>
         </div>
-        {selectedUniversities.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2" aria-label="Selected university filters">
+        {(selectedUniversities.length > 0 || selectedMajors.length > 0) && (
+          <div className="flex flex-wrap items-center gap-2" aria-label="Selected feed filters">
             {selectedUniversities.map((name) => (
               <span key={name} className="inline-flex max-w-full items-center gap-1 rounded-full bg-secondary-fixed px-3 py-1 text-xs font-semibold text-on-secondary-fixed">
                 <span className="truncate">{name}</span>
@@ -298,6 +321,19 @@ export default function FeedPage() {
                   type="button"
                   onClick={() => removeUniversity(name)}
                   aria-label={`Remove ${name} university filter`}
+                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary"
+                >
+                  <Icon name="close" className="!text-[14px]" />
+                </button>
+              </span>
+            ))}
+            {selectedMajors.map((name) => (
+              <span key={name} className="inline-flex max-w-full items-center gap-1 rounded-full bg-secondary-fixed px-3 py-1 text-xs font-semibold text-on-secondary-fixed">
+                <span className="truncate">{name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeMajor(name)}
+                  aria-label={`Remove ${name} major filter`}
                   className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary"
                 >
                   <Icon name="close" className="!text-[14px]" />

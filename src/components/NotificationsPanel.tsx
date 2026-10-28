@@ -180,7 +180,7 @@ export function NotificationFeed({
     if (user && !item.readAt) {
       void markRead(user, item)
         .then(() => {
-          if (item.ticketId) useApp.getState().markRead(item.ticketId);
+          if (item.conversationId) useApp.getState().markRead(item.conversationId);
         })
         .catch(() => showToast('Unable to update notification status', 'error'));
     }
@@ -191,7 +191,7 @@ export function NotificationFeed({
     if (!user) return;
     void markAllRead(user)
       .then(() => {
-        for (const item of items) if (item.ticketId) useApp.getState().markRead(item.ticketId);
+        for (const item of items) if (item.conversationId) useApp.getState().markRead(item.conversationId);
       })
       .catch(() => showToast('Unable to mark notifications as read', 'error'));
   };

@@ -5,7 +5,7 @@ import UserAvatar from '../components/UserAvatar';
 import { Avatar, Icon, Modal, Tag, cx } from '../components/ui';
 import { colleges } from '../data/mock';
 import { displayName } from '../data/userIdentity';
-import type { GroupMember, GroupSharedDocument, GroupSharedLink, GroupSharedPost, Ticket } from '../data/types';
+import type { GroupMember, GroupSharedDocument, GroupSharedLink, GroupSharedPost, Conversation } from '../data/types';
 import { useApp } from '../store';
 
 function GroupPicture({ src, name, size }: { src?: string; name: string; size: number }) {
@@ -22,7 +22,7 @@ function GroupPicture({ src, name, size }: { src?: string; name: string; size: n
   );
 }
 
-function CreateGroupModal({ onClose, onCreated }: { onClose: () => void; onCreated: (ticketId: string) => void }) {
+function CreateGroupModal({ onClose, onCreated }: { onClose: () => void; onCreated: (conversationId: string) => void }) {
   const user = useApp((state) => state.user);
   const createGroup = useApp((state) => state.createGroup);
   const [step, setStep] = useState<1 | 2>(1);
@@ -94,13 +94,13 @@ function CreateGroupModal({ onClose, onCreated }: { onClose: () => void; onCreat
       isAdmin: false,
       isCurrentUser: false,
     }));
-    const ticketId = createGroup({
+    const conversationId = createGroup({
       name: groupName,
       bio: groupBio,
       ...(groupPicture ? { picture: groupPicture } : {}),
       members,
     });
-    if (ticketId) onCreated(ticketId);
+    if (conversationId) onCreated(conversationId);
   };
 
   const selectedCount = selectedIds.filter((id) => connections.some(({ mentor }) => mentor.id === id)).length;
@@ -281,20 +281,20 @@ function formatGroupDate(value: string) {
     : new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
 }
 
-function GroupInfoPanel({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
+function GroupInfoPanel({ conversation, onClose }: { conversation: Conversation; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<GroupInfoTab>('posts');
   const tabs: { id: GroupInfoTab; label: string; icon: string }[] = [
     { id: 'posts', label: 'Posts', icon: 'article' },
     { id: 'links', label: 'Links', icon: 'link' },
     { id: 'documents', label: 'Documents', icon: 'description' },
   ];
-  const members = [...(ticket.groupMembers ?? [])].sort((first, second) =>
+  const members = [...(conversation.groupMembers ?? [])].sort((first, second) =>
     Number(second.isAdmin) - Number(first.isAdmin),
   );
-  const sharedPosts: GroupSharedPost[] = ticket.groupSharedPosts ?? [];
-  const sharedLinks: GroupSharedLink[] = ticket.groupSharedLinks ?? [];
-  const sharedDocuments: GroupSharedDocument[] = ticket.groupSharedDocuments ?? [];
-  const date = formatGroupDate(ticket.groupCreatedAt ?? '');
+  const sharedPosts: GroupSharedPost[] = conversation.groupSharedPosts ?? [];
+  const sharedLinks: GroupSharedLink[] = conversation.groupSharedLinks ?? [];
+  const sharedDocuments: GroupSharedDocument[] = conversation.groupSharedDocuments ?? [];
+  const date = formatGroupDate(conversation.groupCreatedAt ?? '');
 
   return (
     <div className="fixed inset-0 z-[70]">
@@ -317,9 +317,9 @@ function GroupInfoPanel({ ticket, onClose }: { ticket: Ticket; onClose: () => vo
 
         <div className="flex-1 overflow-y-auto">
           <section className="border-b border-outline-variant/50 px-5 py-7 text-center">
-            <GroupPicture src={ticket.groupPicture} name={ticket.title || 'Group'} size={104} />
-            <h3 className="mt-3 font-headline text-2xl font-semibold text-primary">{ticket.title || 'Group'}</h3>
-            {ticket.groupBio && <p className="mx-auto mt-2 max-w-md whitespace-pre-wrap text-sm leading-relaxed text-on-surface-variant">{ticket.groupBio}</p>}
+            <GroupPicture src={conversation.groupPicture} name={conversation.title || 'Group'} size={104} />
+            <h3 className="mt-3 font-headline text-2xl font-semibold text-primary">{conversation.title || 'Group'}</h3>
+            {conversation.groupBio && <p className="mx-auto mt-2 max-w-md whitespace-pre-wrap text-sm leading-relaxed text-on-surface-variant">{conversation.groupBio}</p>}
             <p className="mt-2 text-xs text-on-surface-variant">Created on {date}</p>
             <Tag tone="blue" icon="groups" className="mt-3">{members.length} members</Tag>
           </section>
@@ -437,33 +437,31 @@ function accountRole(role?: string) {
   return 'Applicant';
 }
 
-function TicketThread({ ticket, onShowGroupInfo }: { ticket: Ticket; onShowGroupInfo: () => void }) {
+function ConversationThread({ conversation, onShowGroupInfo }: { conversation: Conversation; onShowGroupInfo: () => void }) {
   const reply = useApp((s) => s.reply);
-  const toggleResolved = useApp((s) => s.toggleResolved);
   const showToast = useApp((s) => s.showToast);
   const user = useApp((s) => s.user);
   const ownName = displayName(user?.name, user?.email);
-  const contactName = displayName(ticket.from);
-  const [draft, setDraft] = useState(ticket.suggestedReply ?? '');
-  const directMessage = ticket.category === 'Direct message' || ticket.category === 'Group';
-  const contactHref = ticket.contactId ? `/people/${ticket.contactId}` : undefined;
-  const messagePerson = ticket.contactId ? {
-    id: ticket.contactId,
+  const contactName = displayName(conversation.from);
+  const [draft, setDraft] = useState(conversation.suggestedReply ?? '');
+  const contactHref = conversation.contactId ? `/people/${conversation.contactId}` : undefined;
+  const messagePerson = conversation.contactId ? {
+    id: conversation.contactId,
     name: contactName,
-    subtitle: ticket.contactProfileSubtitle ?? ticket.fromMeta,
-    ...(ticket.contactAvatar ? { avatar: ticket.contactAvatar } : {}),
+    subtitle: conversation.contactProfileSubtitle ?? conversation.fromMeta,
+    ...(conversation.contactAvatar ? { avatar: conversation.contactAvatar } : {}),
   } : undefined;
 
   useEffect(() => {
-    setDraft(ticket.suggestedReply ?? '');
-  }, [ticket.id, ticket.suggestedReply]);
+    setDraft(conversation.suggestedReply ?? '');
+  }, [conversation.id, conversation.suggestedReply]);
 
   const send = (e: FormEvent) => {
     e.preventDefault();
     if (!draft.trim()) return;
-    reply(ticket.id, draft.trim());
+    reply(conversation.id, draft.trim());
     setDraft('');
-    showToast(directMessage ? 'Message sent' : 'Critique sent', 'send');
+    showToast('Message sent', 'send');
   };
 
   return (
@@ -473,69 +471,57 @@ function TicketThread({ ticket, onShowGroupInfo }: { ticket: Ticket; onShowGroup
           <Icon name="arrow_back" />
         </Link>
         <div className="min-w-0 flex-1">
-          {ticket.category === 'Group' ? (
+          {conversation.category === 'Group' ? (
             <button type="button" onClick={onShowGroupInfo} className="flex max-w-full items-center gap-3 rounded-lg text-left transition hover:bg-surface-container-low focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary">
-              <GroupPicture src={ticket.groupPicture} name={ticket.title || 'Group'} size={48} />
+              <GroupPicture src={conversation.groupPicture} name={conversation.title || 'Group'} size={48} />
               <span className="min-w-0">
-                <span className="block truncate text-base font-semibold text-primary">{ticket.title || 'Group'}</span>
-                <span className="block truncate text-xs text-on-surface-variant">{ticket.groupMembers?.length ?? 0} members · View group info</span>
+                <span className="block truncate text-base font-semibold text-primary">{conversation.title || 'Group'}</span>
+                <span className="block truncate text-xs text-on-surface-variant">{conversation.groupMembers?.length ?? 0} members · View group info</span>
               </span>
             </button>
           ) : (
             <>
               <UserAvatar
-                src={ticket.contactAvatar}
+                disableProfilePreview
+                src={conversation.contactAvatar}
                 name={contactName}
                 size={48}
                 showStatus
                 profileHref={contactHref}
-                subtitle={ticket.fromMeta}
-                profileSubtitle={ticket.contactProfileSubtitle}
-                role={ticket.contactRole}
+                subtitle={conversation.fromMeta}
+                profileSubtitle={conversation.contactProfileSubtitle}
+                role={conversation.contactRole}
                 messagePerson={messagePerson}
                 showName
                 nameClassName="text-base"
                 className="max-w-full"
               />
-              <p className="truncate text-sm font-medium text-on-surface-variant">{ticket.title}</p>
+              <p className="truncate text-sm font-medium text-on-surface-variant">{conversation.title}</p>
             </>
           )}
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
-            {ticket.category === 'Group'
-              ? <Tag tone="blue" icon="groups">{ticket.fromMeta}</Tag>
-              : !directMessage && <Tag tone={ticket.resolved ? 'green' : 'blue'}>{ticket.resolved ? 'Resolved' : 'Active Ticket'}</Tag>}
-          </div>
         </div>
-        {!directMessage && <button
-          type="button"
-          className={ticket.resolved ? 'btn-outline' : 'btn-primary'}
-          onClick={() => {
-            toggleResolved(ticket.id);
-            showToast(ticket.resolved ? 'Ticket reopened' : 'Ticket marked as resolved', 'task_alt');
-          }}
-        >
-          <Icon name={ticket.resolved ? 'undo' : 'task_alt'} /> {ticket.resolved ? 'Reopen' : 'Mark Resolved'}
-        </button>}
+        {conversation.category === 'Group' && <Tag tone="blue" icon="groups">{conversation.fromMeta}</Tag>}
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto bg-surface p-5">
-        {ticket.messages.map((m, i) => {
-          const firstInGroup = i === 0 || ticket.messages[i - 1].isMe !== m.isMe;
+        {conversation.messages.map((m, i) => {
+          const firstInGroup = i === 0 || conversation.messages[i - 1].isMe !== m.isMe;
           const senderName = m.isMe ? ownName : contactName;
           const senderHref = m.isMe ? '/profile' : contactHref;
-          const senderRole = m.isMe ? accountRole(user?.role) : ticket.contactRole;
+          const senderRole = m.isMe ? accountRole(user?.role) : conversation.contactRole;
           return (
-            <div key={`${ticket.id}-${i}`} className={cx('flex items-start gap-3', m.isMe && 'flex-row-reverse')}>
+            <div key={`${conversation.id}-${i}`} className={cx('flex items-start gap-3', m.isMe && 'flex-row-reverse')}>
               {firstInGroup ? (
                 <UserAvatar
-                  src={m.isMe ? user?.photo || undefined : ticket.contactAvatar}
+                  disableProfilePreview
+                  src={m.isMe ? user?.photo || undefined : conversation.contactAvatar}
                   name={senderName}
                   size={36}
                   profileHref={senderHref}
                   subtitle={m.isMe
                     ? [user?.major, user?.university].filter(Boolean).join(' • ') || 'Academix community member'
-                    : ticket.fromMeta}
-                  profileSubtitle={m.isMe ? undefined : ticket.contactProfileSubtitle}
+                    : conversation.fromMeta}
+                  profileSubtitle={m.isMe ? undefined : conversation.contactProfileSubtitle}
                   role={senderRole}
                   messagePerson={m.isMe ? undefined : messagePerson}
                   showName
@@ -555,11 +541,11 @@ function TicketThread({ ticket, onShowGroupInfo }: { ticket: Ticket; onShowGroup
         })}
       </div>
 
-      {!ticket.resolved && (
-        <form onSubmit={send} className="border-t border-outline-variant/50 p-4">
-          {ticket.suggestedReply && draft === ticket.suggestedReply && (
+      <form onSubmit={send} className="border-t border-outline-variant/50 p-4">
+          {conversation.suggestedReply && draft === conversation.suggestedReply && (
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-on-surface-variant">
               <UserAvatar
+                disableProfilePreview
                 src={user?.photo || undefined}
                 name={ownName}
                 email={user?.email}
@@ -578,7 +564,7 @@ function TicketThread({ ticket, onShowGroupInfo }: { ticket: Ticket; onShowGroup
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             rows={3}
-            placeholder={directMessage ? 'Write a message...' : 'Write your critique...'}
+            placeholder="Write a message..."
             className="input resize-none"
           />
           <div className="mt-2 flex items-center gap-1">
@@ -590,28 +576,27 @@ function TicketThread({ ticket, onShowGroupInfo }: { ticket: Ticket; onShowGroup
             </button>
             <div className="flex-1" />
             <button type="submit" disabled={!draft.trim()} className="btn-primary">
-              <Icon name="send" /> {directMessage ? 'Send' : 'Send Critique'}
+              <Icon name="send" /> Send
             </button>
           </div>
-        </form>
-      )}
+      </form>
     </div>
   );
 }
 
 export default function InboxPage() {
-  const { ticketId } = useParams();
+  const { conversationId } = useParams();
   const navigate = useNavigate();
-  const tickets = useApp((s) => s.tickets);
+  const conversations = useApp((s) => s.conversations);
   const markRead = useApp((s) => s.markRead);
-  const setMiniChatTicketId = useApp((s) => s.setMiniChatTicketId);
-  const miniChatTicketId = useApp((s) => s.miniChatTicketId);
-  const activeId = ticketId ?? miniChatTicketId;
-  const active = tickets.find((t) => t.id === activeId);
-  const openCount = tickets.filter((t) => !t.resolved && !['Direct message', 'Group'].includes(t.category)).length;
+  const setMiniChatConversationId = useApp((s) => s.setMiniChatConversationId);
+  const miniChatConversationId = useApp((s) => s.miniChatConversationId);
+  const activeId = conversationId ?? miniChatConversationId;
+  const active = conversations.find((t) => t.id === activeId);
+  const conversationCount = conversations.length;
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
-  const [groupInfoTicketId, setGroupInfoTicketId] = useState<string | null>(null);
-  const groupInfoTicket = tickets.find((ticket) => ticket.id === groupInfoTicketId && ticket.category === 'Group');
+  const [groupInfoConversationId, setGroupInfoConversationId] = useState<string | null>(null);
+  const groupInfoConversation = conversations.find((conversation) => conversation.id === groupInfoConversationId && conversation.category === 'Group');
 
   useEffect(() => {
     if (!active) return;
@@ -630,8 +615,8 @@ export default function InboxPage() {
   }, [active, markRead]);
 
   useEffect(() => {
-    if (active) setMiniChatTicketId(active.id);
-  }, [active?.id, setMiniChatTicketId]);
+    if (active) setMiniChatConversationId(active.id);
+  }, [active?.id, setMiniChatConversationId]);
 
   return (
     <div>
@@ -639,7 +624,7 @@ export default function InboxPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="font-headline text-3xl font-semibold text-primary">Messages</h1>
-            <p className="mt-1 text-on-surface-variant">Your mentorship conversations and pending supplemental essay feedback.</p>
+            <p className="mt-1 text-on-surface-variant">Your messages and group conversations.</p>
           </div>
           <button type="button" onClick={() => setCreateGroupOpen(true)} className="btn-outline">
             <Icon name="group_add" /> Create a group
@@ -650,10 +635,10 @@ export default function InboxPage() {
         <aside className={cx('border-r border-outline-variant/50', active && 'hidden md:block')}>
           <div className="border-b border-outline-variant/50 px-5 py-3">
             <Tag tone="blue" icon="inbox">
-              {openCount} Active Inquiry Tickets
+              {conversationCount} {conversationCount === 1 ? 'Conversation' : 'Conversations'}
             </Tag>
           </div>
-          {tickets.map((t) => (
+          {conversations.map((t) => (
             <div
               key={t.id}
               className={cx(
@@ -663,6 +648,7 @@ export default function InboxPage() {
             >
               <div className="min-w-0 flex-1">
                 <UserAvatar
+                  disableProfilePreview
                   src={t.contactAvatar}
                   name={displayName(t.from)}
                   size={40}
@@ -678,17 +664,17 @@ export default function InboxPage() {
                     ...(t.contactAvatar ? { avatar: t.contactAvatar } : {}),
                   } : undefined}
                   showName
-                  nameClassName={cx('text-sm', t.unread && !t.resolved ? 'font-bold' : 'font-semibold')}
+                  nameClassName={cx('text-sm', t.unread ? 'font-bold' : 'font-semibold')}
                   className="w-full"
                 />
                 <button type="button" onClick={() => navigate(`/inbox/${t.id}`)} className="mt-2 block w-full text-left">
                   <span className="flex items-center gap-2">
-                    <Tag tone={t.resolved ? 'green' : 'blue'}>{t.resolved ? 'Resolved' : t.category}</Tag>
+                    <Tag tone="blue">{t.category}</Tag>
                     <span className="flex-1" />
-                    {t.unread && !t.resolved && <span className="h-2 w-2 shrink-0 rounded-full bg-secondary" aria-label="Unread" />}
+                    {t.unread && <span className="h-2 w-2 shrink-0 rounded-full bg-secondary" aria-label="Unread" />}
                     <span className="shrink-0 text-xs text-on-surface-variant">{t.timeAgo}</span>
                   </span>
-                  <span className={cx('mt-2 block truncate text-sm', t.unread && !t.resolved ? 'font-bold text-primary' : 'font-semibold text-on-surface')}>{t.title}</span>
+                  <span className={cx('mt-2 block truncate text-sm', t.unread ? 'font-bold text-primary' : 'font-semibold text-on-surface')}>{t.title}</span>
                   <span className="mt-1 line-clamp-2 block text-xs text-on-surface-variant">"{t.preview}"</span>
                 </button>
               </div>
@@ -697,12 +683,12 @@ export default function InboxPage() {
         </aside>
         <section className={cx(!active && 'hidden md:block')}>
           {active ? (
-            <TicketThread ticket={active} onShowGroupInfo={() => setGroupInfoTicketId(active.id)} />
+            <ConversationThread conversation={active} onShowGroupInfo={() => setGroupInfoConversationId(active.id)} />
           ) : (
             <div className="flex h-full min-h-[480px] flex-col items-center justify-center gap-2 p-10 text-center text-on-surface-variant">
               <Icon name="forum" className="!text-5xl text-outline-variant" />
-              <p className="font-semibold text-on-surface">Select a ticket</p>
-              <p className="text-sm">Pick an inquiry on the left to read the thread and send your critique.</p>
+              <p className="font-semibold text-on-surface">Select a conversation</p>
+              <p className="text-sm">Choose a conversation to read and reply.</p>
             </div>
           )}
         </section>
@@ -710,17 +696,17 @@ export default function InboxPage() {
       {createGroupOpen && (
         <CreateGroupModal
           onClose={() => setCreateGroupOpen(false)}
-          onCreated={(groupTicketId) => {
+          onCreated={(groupConversationId) => {
             setCreateGroupOpen(false);
-            navigate(`/inbox/${groupTicketId}`);
+            navigate(`/inbox/${groupConversationId}`);
           }}
         />
       )}
-      {groupInfoTicket && (
+      {groupInfoConversation && (
         <GroupInfoPanel
-          key={groupInfoTicket.id}
-          ticket={groupInfoTicket}
-          onClose={() => setGroupInfoTicketId(null)}
+          key={groupInfoConversation.id}
+          conversation={groupInfoConversation}
+          onClose={() => setGroupInfoConversationId(null)}
         />
       )}
     </div>

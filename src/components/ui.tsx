@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, type CSSProperties, type ReactNode, type Ref } from 'react';
 
 import { BRAND } from '../data/mock';
 import { verificationLabel, type Person, type Verification } from '../data/types';
@@ -172,12 +172,16 @@ export function Modal({
   children,
   width = 'max-w-lg',
   label,
+  dialogStyle,
+  dialogRef,
 }: {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
   width?: string;
   label: string;
+  dialogStyle?: CSSProperties;
+  dialogRef?: Ref<HTMLDivElement>;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -194,9 +198,11 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-primary/40 backdrop-blur-[2px] sm:items-center sm:p-6" onMouseDown={onClose}>
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={label}
+        style={dialogStyle}
         className={cx('animate-slide-up max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white shadow-float sm:rounded-2xl', width)}
         onMouseDown={(e) => e.stopPropagation()}
       >

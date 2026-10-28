@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from 'react';
 
 import { BRAND } from '../data/mock';
 import { Icon, cx } from './ui';
@@ -58,7 +58,22 @@ const initialMessages: Record<AdvisorMode, ChatMessage[]> = {
   ],
 };
 
-export default function AdvisorChat({ mode, onClose, className }: { mode: AdvisorMode; onClose?: () => void; className?: string }) {
+export interface AdvisorHeaderDragHandlers {
+  onPointerDown: (event: PointerEvent<HTMLDivElement>) => void;
+  onPointerMove: (event: PointerEvent<HTMLDivElement>) => void;
+  onPointerUp: (event: PointerEvent<HTMLDivElement>) => void;
+  onPointerCancel: (event: PointerEvent<HTMLDivElement>) => void;
+  onLostPointerCapture: (event: PointerEvent<HTMLDivElement>) => void;
+}
+
+interface AdvisorChatProps {
+  mode: AdvisorMode;
+  onClose?: () => void;
+  className?: string;
+  headerDragHandlers?: AdvisorHeaderDragHandlers;
+}
+
+export default function AdvisorChat({ mode, onClose, className, headerDragHandlers }: AdvisorChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages[mode]);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
@@ -92,7 +107,10 @@ export default function AdvisorChat({ mode, onClose, className }: { mode: Adviso
 
   return (
     <div className={cx('flex min-h-0 flex-col', className)}>
-      <div className="flex items-center gap-3 border-b border-outline-variant/50 px-5 py-4">
+      <div
+        {...headerDragHandlers}
+        className={cx('flex items-center gap-3 border-b border-outline-variant/50 px-5 py-4', headerDragHandlers && 'cursor-grab touch-none active:cursor-grabbing')}
+      >
         <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary-fixed text-secondary">
           <Icon name={isMatch ? 'auto_awesome' : 'smart_toy'} />
         </span>

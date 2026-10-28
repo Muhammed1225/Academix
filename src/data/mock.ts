@@ -1,4 +1,4 @@
-import type { Ama, Channel, College, Major, MentorProfile, Person, Post, Ticket } from './types';
+import type { Ama, Channel, College, Major, MentorProfile, Person, Post, Conversation } from './types';
 
 /** Marka adı tek yerden yönetilir. */
 export const BRAND = 'Academix';
@@ -579,7 +579,7 @@ export const colleges: College[] = [
   },
 ];
 
-export const tickets: Ticket[] = [
+export const conversations: Conversation[] = [
   {
     id: 't1',
     category: 'Essay Review',
@@ -592,7 +592,6 @@ export const tickets: Ticket[] = [
     contactRole: 'Student',
     contactProfileSubtitle: 'Prospective student • Applying Early Decision',
     fromMeta: 'SAT 1540 • Applying ED',
-    resolved: false,
     unread: true,
     messages: [
       {
@@ -622,7 +621,6 @@ export const tickets: Ticket[] = [
     contactRole: 'Student',
     contactProfileSubtitle: 'Incoming student • Carnegie Mellon University',
     fromMeta: 'Freshman Admit',
-    resolved: false,
     unread: true,
     messages: [
       {
@@ -644,7 +642,6 @@ export const tickets: Ticket[] = [
     contactRole: 'Student',
     contactProfileSubtitle: 'Computer Science student • Carnegie Mellon University',
     fromMeta: 'Sophomore',
-    resolved: false,
     unread: false,
     messages: [
       {
