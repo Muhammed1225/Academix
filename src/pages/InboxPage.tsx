@@ -686,9 +686,14 @@ export default function InboxPage() {
             <ConversationThread conversation={active} onShowGroupInfo={() => setGroupInfoConversationId(active.id)} />
           ) : (
             <div className="flex h-full min-h-[480px] flex-col items-center justify-center gap-2 p-10 text-center text-on-surface-variant">
-              <Icon name="forum" className="!text-5xl text-outline-variant" />
-              <p className="font-semibold text-on-surface">Select a conversation</p>
-              <p className="text-sm">Choose a conversation to read and reply.</p>
+              <Icon name={conversationId ? 'search_off' : 'forum'} className="!text-5xl text-outline-variant" />
+              <p className="font-semibold text-on-surface">
+                {conversationId ? 'Conversation not found' : 'Select a conversation'}
+              </p>
+              <p className="text-sm">
+                {conversationId ? 'This conversation may have been removed or is no longer available.' : 'Choose a conversation to read and reply.'}
+              </p>
+              {conversationId && <Link to="/inbox" className="btn-outline mt-3">Back to messages</Link>}
             </div>
           )}
         </section>

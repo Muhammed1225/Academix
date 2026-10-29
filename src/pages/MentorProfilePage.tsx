@@ -1,55 +1,15 @@
 import { useState } from 'react';
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { BookingPanel } from '../components/BookingModal';
 import PostCard from '../components/PostCard';
 import { Avatar, Icon, SectionHeader, Tag, cx } from '../components/ui';
-import { BRAND, mentorProfiles } from '../data/mock';
-import { mentorDirectory } from '../data/mentors';
+import { BRAND } from '../data/mock';
+import { mentorProfilesById } from '../data/mentors';
 import type { MentorProfile, Review } from '../data/types';
 import { useApp } from '../store';
 
 type ProfileTab = 'posts' | 'journey' | 'sessions' | 'feedback';
-
-function DirectoryMentorProfile({ mentorId }: { mentorId: string }) {
-  const mentor = mentorDirectory.find((item) => item.id === mentorId);
-  const navigate = useNavigate();
-  const openMiniChatForPerson = useApp((state) => state.openMiniChatForPerson);
-  if (!mentor) return <Navigate to="/mentors" replace />;
-  const message = () => {
-    openMiniChatForPerson({
-      id: mentor.id,
-      name: mentor.name,
-      subtitle: `${mentor.field} • ${mentor.university}`,
-      ...(mentor.avatar ? { avatar: mentor.avatar } : {}),
-    });
-    const conversation = useApp.getState().conversations.find((item) => item.contactId === mentor.id || item.id === `direct-${mentor.id}`);
-    if (conversation) navigate(`/inbox/${conversation.id}`);
-  };
-  return (
-    <div className="mx-auto max-w-3xl space-y-5">
-      <Link to="/mentors" className="inline-flex items-center gap-1 text-sm font-semibold text-secondary hover:underline">
-        <Icon name="arrow_back" className="!text-[18px]" /> All mentors
-      </Link>
-      <section className="card p-6 sm:p-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-          <Avatar src={mentor.avatar || undefined} name={mentor.name || 'Mentor'} size={96} rounded="rounded-full" />
-          <div className="min-w-0 flex-1">
-            <h1 className="font-headline text-3xl font-semibold text-primary">{mentor.name || 'Verified mentor'}</h1>
-            {mentor.verified && <Tag tone="green" icon="verified" className="mt-2">Verified</Tag>}
-            <p className="mt-3 text-sm font-semibold text-on-surface">{mentor.university || 'University not listed'}</p>
-            <p className="mt-1 text-sm text-on-surface-variant">{mentor.field || 'Academic mentor'}</p>
-          </div>
-          <button type="button" onClick={message} className="btn-primary shrink-0"><Icon name="mail" /> Message</button>
-        </div>
-        <div className="mt-6 border-t border-outline-variant/50 pt-5">
-          <h2 className="font-semibold text-primary">About</h2>
-          <p className="mt-2 leading-relaxed text-on-surface-variant">{mentor.bio || 'A verified mentor ready to share their academic experience.'}</p>
-        </div>
-      </section>
-    </div>
-  );
-}
 
 function Stars({ size = 16 }: { size?: number }) {
   return (
@@ -149,6 +109,7 @@ function SessionsTab({ profile }: { profile: MentorProfile }) {
   const showToast = useApp((s) => s.showToast);
   const [registered, setRegistered] = useState(false);
   const next = profile.nextSession;
+  if (!next) return <div className="card p-8 text-center text-sm text-on-surface-variant">No upcoming sessions are available yet.</div>;
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-secondary-fixed bg-surface-container-low p-6">
@@ -291,12 +252,21 @@ function FeedbackTab({ profile }: { profile: MentorProfile }) {
 
 export default function MentorProfilePage() {
   const { mentorId = 'maya' } = useParams();
-  const profile = mentorProfiles[mentorId];
+  const profile = mentorProfilesById[mentorId];
   const showToast = useApp((s) => s.showToast);
   const [tab, setTab] = useState<ProfileTab>('posts');
   const [following, setFollowing] = useState(false);
 
-  if (!profile) return <DirectoryMentorProfile mentorId={mentorId} />;
+  if (!profile) {
+    return (
+      <div className="mx-auto max-w-xl rounded-xl border border-outline-variant/50 bg-white p-8 text-center">
+        <Icon name="person_off" className="!text-5xl text-outline-variant" />
+        <h1 className="mt-3 font-headline text-2xl font-semibold text-primary">Mentor not found</h1>
+        <p className="mt-2 text-sm text-on-surface-variant">We could not find that mentor profile.</p>
+        <Link to="/mentors" className="btn-primary mt-5">Back to mentors</Link>
+      </div>
+    );
+  }
 
   const tabs: { id: ProfileTab; label: string; icon: string; meta: string }[] = [
     { id: 'posts', label: 'Posts', icon: 'dynamic_feed', meta: String(profile.posts.length) },
@@ -309,9 +279,13 @@ export default function MentorProfilePage() {
     <div className="space-y-6">
       <section className="card overflow-hidden">
         <div className="relative h-48 sm:h-60">
-          <img src={profile.cover} alt="" className="h-full w-full object-cover" />
+          {profile.cover ? (
+            <img src={profile.cover} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="h-full bg-gradient-to-br from-primary-container via-secondary to-[#86c7ce]" />
+          )}
           <span className="absolute left-4 top-4 flex items-center gap-1 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-on-tertiary-fixed-variant">
-            <Icon name="verified_user" fill className="!text-[15px] text-on-tertiary-container" /> CMU Institutional ID Verified
+            <Icon name="verified_user" fill className="!text-[15px] text-on-tertiary-container" /> {profile.university ?? 'Institution'} Institutional ID Verified
           </span>
         </div>
         <div className="flex flex-col gap-5 px-6 pb-6 lg:flex-row lg:items-end">
@@ -323,13 +297,9 @@ export default function MentorProfilePage() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-headline text-3xl font-bold text-primary">{profile.name}</h1>
-              <Tag tone="blue" icon="school">
-                Institution Verified
-              </Tag>
-              <Tag tone="gold" icon="workspace_premium">
-                Gold Peer Mentor
-              </Tag>
-              <Tag tone="green">Accepting Fall '25 Mentees</Tag>
+              <Tag tone="blue" icon="school">Institution Verified</Tag>
+              <Tag tone="gold" icon="workspace_premium">Gold Peer Mentor</Tag>
+              {(profile.tags ?? []).slice(0, 2).map((tag) => <Tag key={tag} tone="green">{tag}</Tag>)}
             </div>
             <p className="mt-1 font-semibold text-secondary">{profile.classOf}</p>
             <p className="mt-1 text-on-surface-variant">{profile.headline}</p>
@@ -399,9 +369,9 @@ export default function MentorProfilePage() {
             </div>
             <div className="card p-5 text-sm">
               <p className="eyebrow">Research Focus</p>
-              <p className="mt-1 font-semibold">Distributed Systems & LTI</p>
-              <p className="eyebrow mt-3">Next Career</p>
-              <p className="mt-1 font-semibold">Incoming Jane Street SWE</p>
+              <p className="mt-1 font-semibold">{profile.degree}</p>
+              <p className="eyebrow mt-3">University</p>
+              <p className="mt-1 font-semibold">{profile.university ?? 'University not listed'}</p>
               <p className="eyebrow mt-3">Community Standing</p>
               <p className="mt-1 flex items-center gap-1 font-semibold">
                 {profile.rating} <Icon name="star" fill className="!text-[16px] text-gold" />

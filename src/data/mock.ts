@@ -432,6 +432,7 @@ export const colleges: College[] = [
         tags: ['15-122 Rigor', 'FAANG Internships', 'SCS Supplemental Essay'],
         quote: 'Happy to unpack the real workload of SCS freshmen year, choosing between AI vs CS track, and optimizing portfolio projects.',
         responseTime: '~2h',
+        major: 'Artificial Intelligence',
       },
       {
         id: 'marcus',
@@ -446,6 +447,7 @@ export const colleges: College[] = [
         tags: ['Wall St Recruiting', 'Quantitative Track', 'Transfer Admissions'],
         quote: 'Can detail how Tepper blends hardcore analytics into business. Interned at Morgan Stanley & McKinsey.',
         responseTime: '~45m',
+        major: 'Statistics',
       },
       {
         id: 'aarohi',
@@ -460,6 +462,7 @@ export const colleges: College[] = [
         tags: ['Robotics Institute Labs', 'First-Year Dorms', 'Formula SAE'],
         quote: 'Ask me about hands-on prototyping facilities, maker pass access, and landing hardware engineering co-ops early.',
         responseTime: '~1h',
+        major: 'Mechanical Engineering',
       },
       {
         id: 'julian',
@@ -474,6 +477,7 @@ export const colleges: College[] = [
         tags: ['Product Design (HCI)', 'Dietrich Flexibility', 'Oakland Food Scene'],
         quote: 'Dietrich allows you to connect behavioral psych with bleeding-edge UX engineering. Ask me how to build this hybrid minor.',
         responseTime: '~5h',
+        major: 'Information Systems',
       },
     ],
     discussions: [

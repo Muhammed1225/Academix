@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 
+import ConnectionRequestModal from '../components/ConnectionRequestModal';
 import PostCard from '../components/PostCard';
 import { Avatar, Icon, Tag, VerificationBadge } from '../components/ui';
 import { people, posts } from '../data/mock';
@@ -8,13 +9,24 @@ import { useApp } from '../store';
 
 export default function PersonProfilePage() {
   const { personId = '' } = useParams();
+  const navigate = useNavigate();
   const person = Object.values(people).find((entry) => entry.id === personId);
   const showToast = useApp((s) => s.showToast);
   const openMiniChatForPerson = useApp((s) => s.openMiniChatForPerson);
   const [connectionRequested, setConnectionRequested] = useState(false);
+  const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [requestedProfiles, setRequestedProfiles] = useState<string[]>([]);
 
-  if (!person) return <Navigate to="/" replace />;
+  if (!person) {
+    return (
+      <div className="mx-auto max-w-xl rounded-xl border border-outline-variant/50 bg-white p-8 text-center">
+        <Icon name="person_off" className="!text-5xl text-outline-variant" />
+        <h1 className="mt-3 font-headline text-2xl font-semibold text-primary">Profile not found</h1>
+        <p className="mt-2 text-sm text-on-surface-variant">We could not find this profile. It may have been removed or is no longer available.</p>
+        <Link to="/" className="btn-primary mt-5">Return to feed</Link>
+      </div>
+    );
+  }
   if (person.id === 'maya') return <Navigate to="/mentors/maya" replace />;
 
   const authoredPosts = posts.filter((post) => post.author.id === person.id && !post.auditNote);
@@ -49,21 +61,21 @@ export default function PersonProfilePage() {
                 <button
                   type="button"
                   disabled={connectionRequested}
-                  onClick={() => {
-                    setConnectionRequested(true);
-                    showToast(`Connection request sent to ${person.name}`, 'person_add');
-                  }}
+                  onClick={() => setConnectionDialogOpen(true)}
                   className={connectionRequested ? 'btn-outline flex-1 sm:flex-none' : 'btn-primary flex-1 sm:flex-none'}
                 >
                   <Icon name={connectionRequested ? 'check' : 'person_add'} />
-                  {connectionRequested ? 'Request sent' : 'Connect'}
+                  {connectionRequested ? 'Pending' : 'Connect'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => openMiniChatForPerson(person)}
+                  onClick={() => {
+                    const conversationId = openMiniChatForPerson(person);
+                    navigate(`/inbox/${conversationId}`);
+                  }}
                   className="btn-outline flex-1 sm:flex-none"
                 >
-                  <Icon name="mail" /> Message
+                  <Icon name="mail" /> Messages
                 </button>
               </div>
             </div>
@@ -195,6 +207,16 @@ export default function PersonProfilePage() {
           Academix profiles help students and educators find people with shared academic interests.
         </p>
       </aside>
+      <ConnectionRequestModal
+        personId={person.id}
+        personName={person.name}
+        open={connectionDialogOpen}
+        onClose={() => setConnectionDialogOpen(false)}
+        onSent={() => {
+          setConnectionDialogOpen(false);
+          setConnectionRequested(true);
+        }}
+      />
     </div>
   );
 }

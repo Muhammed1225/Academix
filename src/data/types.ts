@@ -94,6 +94,8 @@ export interface Mentor {
   tags: string[];
   quote: string;
   responseTime: string;
+  /** TODO: Populate university and major directly from the mentor API. */
+  major?: string;
 }
 
 export interface Discussion {
@@ -300,6 +302,8 @@ export interface MentorProfile {
   degree: string;
   location: string;
   languages: string;
+  university?: string;
+  tags?: string[];
   stats: { value: string; label: string }[];
   about: string[];
   wishIKnew: string[];
@@ -307,7 +311,7 @@ export interface MentorProfile {
   posts: Post[];
   journeyIntro: string;
   journey: JourneySection[];
-  nextSession: Workshop & { seats: number };
+  nextSession?: Workshop & { seats: number };
   workshops: Workshop[];
   rating: number;
   reviewCount: number;

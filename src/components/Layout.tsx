@@ -13,10 +13,12 @@ import NotificationsPanel from './NotificationsPanel';
 import UserAvatar from './UserAvatar';
 import { BrandMark, Icon, Tag, cx } from './ui';
 import AskMentorModal from './AskMentorModal';
+import FilterButton from './FilterButton';
 
 const navItems = [
   { to: '/', label: 'Feed', icon: 'dynamic_feed', end: true },
   { to: '/colleges', label: 'Explore Universities', icon: 'account_balance' },
+  { to: '/mentors', label: 'Mentors', icon: 'school' },
   { to: '/connections', label: 'Make Connections', icon: 'person_add' },
   { to: '/inbox', label: 'Messages', icon: 'mail' },
 ];
@@ -333,8 +335,10 @@ function Header({
             <Icon name="search" />
           </button>
           <div ref={filterRootRef} className="relative shrink-0">
-            <button
-              type="button"
+            <FilterButton
+              activeCount={selectedUniversities.length + selectedMajors.length}
+              expanded={filterOpen}
+              ariaLabel="Filter universities and majors"
               onClick={() => {
                 if (!filterOpen) {
                   setDraftUniversities(selectedUniversities);
@@ -342,22 +346,7 @@ function Header({
                 }
                 setFilterOpen((open) => !open);
               }}
-              aria-label="Filter universities and majors"
-              aria-haspopup="dialog"
-              aria-expanded={filterOpen}
-              className={cx(
-                'relative inline-flex h-10 items-center gap-1.5 rounded-full border px-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary sm:px-3',
-                selectedUniversities.length + selectedMajors.length ? 'border-secondary bg-secondary-fixed text-secondary' : 'border-outline-variant bg-white text-on-surface-variant hover:bg-surface-container-low',
-              )}
-            >
-              <Icon name="filter_list" className="!text-[18px]" />
-              <span className="hidden sm:inline">Filter</span>
-              {selectedUniversities.length + selectedMajors.length > 0 && (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary px-1 text-[11px] font-bold leading-none text-white">
-                  {selectedUniversities.length + selectedMajors.length}
-                </span>
-              )}
-            </button>
+            />
             {filterOpen && (
               <div
                 role="dialog"
@@ -596,13 +585,14 @@ function MobileNav() {
   const items = [
     { to: '/', label: 'Feed', icon: 'dynamic_feed', end: true },
     { to: '/colleges', label: 'Universities', icon: 'account_balance' },
+    { to: '/mentors', label: 'Mentors', icon: 'school' },
     { to: '/compose', label: 'Ask community', icon: 'forum', primary: true },
     { to: '/inbox', label: 'Messages', icon: 'mail' },
     { to: '/connections', label: 'Make Connections', icon: 'person_add' },
   ];
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-outline-variant/60 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden">
-      <div className="grid grid-cols-5">
+      <div className="grid grid-cols-6">
         {items.map((item) => (
           <NavLink
             key={item.to}
@@ -648,14 +638,16 @@ function Footer({ onAskMentor }: { onAskMentor: () => void }) {
       });
     }
   };
+  const normalizeUniversity = (name: string) => name.replace(/\s*\([^)]*\)/g, '').trim().toLocaleLowerCase('en');
+  const topUniversityNames = ['Baku Higher Oil School', 'ADA University', 'Baku State University', 'Azerbaijan Medical University']
+    .map((name) => universities.find((university) => normalizeUniversity(university) === normalizeUniversity(name)) ?? name);
   const columns = [
     { title: 'Network', links: ['Scholars Feed', 'College Directories', 'Verified Mentors', 'Academic Q&A'] },
-    { title: 'Institutions', links: ['Carnegie Mellon University', 'Admissions Portals', 'Research Labs', 'Department Chairs'] },
-    { title: 'Trust & Rigor', links: ['Credential Verification', 'Academic Honor Code', 'Peer Privacy Protocol', 'Institutional Security'] },
+    { title: 'Top Universities', links: topUniversityNames },
   ];
   return (
     <footer className="mt-16 border-t border-outline-variant/50 bg-white pb-20 lg:pb-0">
-      <div className="mx-auto grid max-w-content gap-10 px-4 py-12 md:grid-cols-4">
+      <div className="mx-auto grid max-w-content gap-10 px-4 py-12 md:grid-cols-3">
         <div>
           <BrandMark size="text-xl" />
           <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
@@ -672,7 +664,19 @@ function Footer({ onAskMentor }: { onAskMentor: () => void }) {
             <ul className="mt-3 space-y-2 text-sm text-on-surface-variant">
               {col.links.map((label) => (
                 <li key={label}>
-                  {col.title === 'Network' ? (
+                  {col.title === 'Top Universities' ? (
+                    <Link
+                      to={(() => {
+                        const college = colleges.find((entry) =>
+                          [entry.name, entry.shortName].some((name) => normalizeUniversity(name) === normalizeUniversity(label)),
+                        );
+                        return college ? `/colleges/${college.id}` : `/colleges?university=${encodeURIComponent(label)}`;
+                      })()}
+                      className="transition-colors hover:text-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary"
+                    >
+                      {label}
+                    </Link>
+                  ) : col.title === 'Network' ? (
                     label === 'Scholars Feed' ? (
                       <button type="button" onClick={() => navigate('/?postsFrom=student-scholar')} className="text-left transition-colors hover:text-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary">
                         {label}

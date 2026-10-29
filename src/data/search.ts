@@ -1,4 +1,5 @@
 import { colleges, mentorProfiles } from './mock';
+import { mentorProfilePath } from './mentorRoutes';
 import { universities } from './educationOptions';
 import type { Major, MentorProfile, Post } from './types';
 
@@ -103,7 +104,7 @@ export function createSearchCatalog(posts: Post[]): SearchItem[] {
     title: mentor.name,
     subtitle: `${mentor.headline} · ${mentor.location}`,
     content: `${mentor.name} ${mentor.headline} ${mentor.degree} ${mentor.location} ${mentor.about.join(' ')} ${mentor.tracks.map((track) => `${track.title} ${track.body}`).join(' ')}`,
-    href: `/mentors/${mentor.id}`,
+    href: mentorProfilePath(mentor.id),
     image: mentor.avatar,
     university: 'Carnegie Mellon University',
     location: mentor.location,

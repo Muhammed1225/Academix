@@ -90,7 +90,7 @@ interface AppState {
   setMiniChatMinimized: (minimized: boolean) => void;
   setMiniChatHidden: (hidden: boolean) => void;
   setMessageSoundsEnabled: (enabled: boolean) => void;
-  openMiniChatForPerson: (person: { id: string; name: string; subtitle: string; avatar?: string }) => void;
+  openMiniChatForPerson: (person: { id: string; name: string; subtitle: string; avatar?: string }) => string;
   receiveMessage: (conversationId: string, message: Conversation['messages'][number]) => void;
   showToast: (message: string, icon?: string) => void;
 }
@@ -386,16 +386,17 @@ export const useApp = create<AppState>((set, get) => ({
     window.localStorage.setItem('academix.message-sounds', String(messageSoundsEnabled));
     set({ messageSoundsEnabled });
   },
-  openMiniChatForPerson: (person) =>
-    set((state) => {
-      const existing = state.conversations.find((conversation) =>
+  openMiniChatForPerson: (person) => {
+    const state = get();
+    const existing = state.conversations.find((conversation) =>
         conversation.contactId === person.id ||
         (conversation.category === 'Direct message' &&
           (conversation.from === person.name ||
             conversation.messages.some((message) => message.author === person.name && !message.isMe))),
       );
-      const conversationId = existing?.id ?? `direct-${person.id}`;
-      const conversations = existing ? state.conversations : [
+    const conversationId = existing?.id ?? `direct-${person.id}`;
+    set((current) => {
+      const conversations = existing ? current.conversations : [
         {
           id: conversationId,
           contactId: person.id,
@@ -417,7 +418,9 @@ export const useApp = create<AppState>((set, get) => ({
         miniChatMinimized: false,
         miniChatHidden: false,
       };
-    }),
+    });
+    return conversationId;
+  },
   receiveMessage: (conversationId, message) => {
     const state = get();
     if (!state.conversations.some((item) => item.id === conversationId)) {
