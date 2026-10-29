@@ -33,6 +33,7 @@ interface UserAvatarProps {
   showName?: boolean;
   nameClassName?: string;
   subtitleClassName?: string;
+  wrapIdentityText?: boolean;
   className?: string;
   messagePerson?: MessagePerson;
   trailing?: ReactNode;
@@ -54,6 +55,7 @@ export default function UserAvatar({
   showName = false,
   nameClassName,
   subtitleClassName,
+  wrapIdentityText = false,
   className,
   messagePerson,
   trailing,
@@ -210,8 +212,8 @@ export default function UserAvatar({
       {showAvatar && avatar}
       {showName && (
         <span className="min-w-0 flex-1">
-          <span title={safeName} className={cx('block truncate font-semibold text-primary', nameClassName)}>{safeName}</span>
-          {subtitle && <span title={subtitle} className={cx('block truncate text-xs font-normal text-on-surface-variant', subtitleClassName)}>{subtitle}</span>}
+          <span title={safeName} className={cx('block font-semibold text-primary', wrapIdentityText ? 'break-words' : 'truncate', nameClassName)}>{safeName}</span>
+          {subtitle && <span title={subtitle} className={cx('block text-xs font-normal text-on-surface-variant', wrapIdentityText ? 'break-words' : 'truncate', subtitleClassName)}>{subtitle}</span>}
         </span>
       )}
       {trailing}

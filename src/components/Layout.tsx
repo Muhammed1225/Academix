@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent, type RefObject } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { BRAND, colleges } from '../data/mock';
@@ -726,7 +726,7 @@ function ToastHost() {
   );
 }
 
-function MiniChatDock() {
+function MiniChatDock({ onDockChange }: { onDockChange: () => void }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const signedIn = useApp((state) => state.signedIn);
@@ -832,10 +832,13 @@ function MiniChatDock() {
     return () => window.removeEventListener('resize', keepDockInViewport);
   }, [dockPosition]);
 
+  useLayoutEffect(() => {
+    onDockChange();
+  }, [dockPosition, dockSize, minimized, onDockChange]);
+
   if (!signedIn || !conversation || hidden || pathname.startsWith('/inbox')) return null;
 
   const otherUser = displayName([...conversation.messages].reverse().find((message) => !message.isMe)?.author ?? conversation.from);
-  const contactProfile = conversation.contactId ? `/people/${conversation.contactId}` : undefined;
   const messagePerson = conversation.contactId ? {
     id: conversation.contactId,
     name: otherUser,
@@ -901,7 +904,7 @@ function MiniChatDock() {
         if (atDock) {
           setDockPosition(null);
         } else {
-          const collisions = ['ai-college-match-launcher', 'community-launcher']
+          const collisions = ['community-launcher']
             .map((id) => document.getElementById(id)?.getBoundingClientRect())
             .filter((rect): rect is DOMRect => !!rect);
           const overlaps = (x: number, y: number) => collisions.some((rect) =>
@@ -1051,7 +1054,6 @@ function MiniChatDock() {
           name={otherUser}
           size={40}
           showStatus
-          profileHref={contactProfile}
           subtitle={conversation.fromMeta}
           profileSubtitle={conversation.contactProfileSubtitle}
           role={conversation.contactRole}
@@ -1150,14 +1152,14 @@ function MiniChatDock() {
             name={otherUser}
             size={38}
             showStatus
-            profileHref={contactProfile}
-            subtitle={conversation.fromMeta}
+            subtitle={conversation.contactProfileSubtitle ?? conversation.fromMeta}
             profileSubtitle={conversation.contactProfileSubtitle}
             subtitleClassName="text-white/80"
             role={conversation.contactRole}
             messagePerson={messagePerson}
             showName
             nameClassName="text-sm text-white"
+            wrapIdentityText
             className="min-w-0 flex-1"
           />
           <span aria-hidden="true" className="flex shrink-0 gap-0.5 opacity-60">
@@ -1203,7 +1205,7 @@ function MiniChatDock() {
         {conversation.messages.map((message, index) => {
           const firstInGroup = index === 0 || conversation.messages[index - 1].isMe !== message.isMe;
           const senderName = message.isMe ? displayName(user?.name, user?.email) : otherUser;
-          const profileHref = message.isMe ? '/profile' : contactProfile;
+          const profileHref = message.isMe ? '/profile' : undefined;
           const role = message.isMe
             ? user?.role === 'faculty' ? 'Faculty' : user?.role === 'scholar' ? 'Student' : 'Applicant'
             : conversation.contactRole;
@@ -1312,21 +1314,11 @@ function CommunityLauncher() {
 function AdvisorLauncher({
   buttonRef,
   position,
-  onPointerDown,
-  onPointerMove,
-  onPointerUp,
-  onPointerCancel,
   onOpen,
-  dragging,
 }: {
   buttonRef: RefObject<HTMLButtonElement>;
   position: { left: number; top: number } | null;
-  onPointerDown: (event: PointerEvent<HTMLButtonElement>) => void;
-  onPointerMove: (event: PointerEvent<HTMLButtonElement>) => void;
-  onPointerUp: (event: PointerEvent<HTMLButtonElement>) => void;
-  onPointerCancel: (event: PointerEvent<HTMLButtonElement>) => void;
   onOpen: () => void;
-  dragging: boolean;
 }) {
   const { pathname } = useLocation();
   // Bölüm sayfasında kendi danışman paneli var; oluşturma ve mesaj ekranlarında yer kaplamasın.
@@ -1336,21 +1328,15 @@ function AdvisorLauncher({
       ref={buttonRef}
       id="ai-college-match-launcher"
       type="button"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerCancel}
-      onLostPointerCapture={onPointerCancel}
       onClick={onOpen}
       aria-label="AI College Match"
       title="AI College Match"
       style={position ? { left: position.left, top: position.top } : undefined}
-      className={`fixed z-50 flex items-center justify-center gap-2 rounded-2xl bg-secondary px-4 py-3.5 font-semibold text-white shadow-float ${dragging ? 'transition-none' : 'transition-all duration-[250ms] ease-in-out motion-reduce:transition-none'} hover:bg-secondary/90 ${position ? '' : 'bottom-[calc(96px_+_var(--chat-dock-height,0px)_+_var(--chat-dock-stack-gap,0px))] right-4 lg:bottom-[calc(32px_+_var(--chat-dock-height,0px)_+_var(--chat-dock-stack-gap,0px))] lg:right-8'}`}
+      className={`fixed z-50 flex items-center justify-center gap-2 rounded-2xl bg-secondary px-4 py-3.5 font-semibold text-white shadow-float transition-[left,top] duration-150 hover:bg-secondary/90 ${position ? '' : 'bottom-[calc(96px_+_var(--chat-dock-height,0px)_+_var(--chat-dock-stack-gap,0px))] right-4 lg:bottom-[calc(32px_+_var(--chat-dock-height,0px)_+_var(--chat-dock-stack-gap,0px))] lg:right-8'}`}
     >
       <Icon name="smart_toy" />
       <span className="hidden sm:inline">AI College Match</span>
       <span className="h-2.5 w-2.5 rounded-full bg-tertiary-fixed" />
-      <Icon name="drag_indicator" className="!text-[16px] text-white/70" />
     </button>
   );
 }
@@ -1400,7 +1386,6 @@ function FloatingActionLayer() {
   const advisorButtonRef = useRef<HTMLButtonElement>(null);
   const advisorPanelRef = useRef<HTMLDivElement>(null);
   const advisorDragRef = useRef<{
-    target: 'button' | 'panel';
     pointerId: number;
     pointerX: number;
     pointerY: number;
@@ -1408,14 +1393,10 @@ function FloatingActionLayer() {
     top: number;
     moved: boolean;
   } | null>(null);
-  const suppressAdvisorClickRef = useRef(false);
   const [advisorPosition, setAdvisorPosition] = useState<{ left: number; top: number } | null>(null);
   const [advisorPanelPosition, setAdvisorPanelPosition] = useState<{ left: number; top: number } | null>(null);
-  const [advisorDragging, setAdvisorDragging] = useState(false);
-  const advisorPositionRef = useRef(advisorPosition);
   const advisorPanelPositionRef = useRef(advisorPanelPosition);
   const [advisorOpen, setAdvisorOpen] = useState(false);
-  advisorPositionRef.current = advisorPosition;
   advisorPanelPositionRef.current = advisorPanelPosition;
   const signedIn = useApp((state) => state.signedIn);
   const conversationId = useApp((state) => state.miniChatConversationId);
@@ -1426,19 +1407,34 @@ function FloatingActionLayer() {
   const dockRects = () => [...document.querySelectorAll<HTMLElement>('[data-chat-dock]')]
     .map((dock) => dock.getBoundingClientRect());
 
-  const beginAdvisorDrag = (
-    target: 'button' | 'panel',
-    event: PointerEvent<HTMLElement>,
-    element: HTMLElement | null,
-  ) => {
-    if (event.button !== 0 || !element || advisorDragRef.current) return;
-    if (target === 'panel' && event.target instanceof Element && event.target.closest('button, input, textarea, a')) return;
+  const updateAdvisorPosition = useCallback(() => {
+    const dock = layerRef.current?.querySelector<HTMLElement>('[data-chat-dock]');
+    const button = advisorButtonRef.current;
+    if (!dock) {
+      setAdvisorPosition(null);
+      return;
+    }
+    if (!button) return;
+    const dockBounds = dock.getBoundingClientRect();
+    const buttonBounds = button.getBoundingClientRect();
+    const left = Math.max(8, Math.min(window.innerWidth - buttonBounds.width - 8, dockBounds.right - buttonBounds.width));
+    const top = dockBounds.top - buttonBounds.height - 12;
+    const anchoredTop = top >= 8
+      ? top
+      : Math.min(window.innerHeight - buttonBounds.height - 8, dockBounds.bottom + 12);
+    setAdvisorPosition((current) => current?.left === left && current.top === anchoredTop
+      ? current
+      : { left, top: anchoredTop });
+  }, []);
+
+  const beginAdvisorPanelDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !advisorPanelRef.current || advisorDragRef.current) return;
+    if (event.target instanceof Element && event.target.closest('button, input, textarea, a')) return;
+    const element = advisorPanelRef.current;
     const bounds = element.getBoundingClientRect();
     event.currentTarget.setPointerCapture(event.pointerId);
     document.documentElement.style.userSelect = 'none';
-    setAdvisorDragging(true);
     advisorDragRef.current = {
-      target,
       pointerId: event.pointerId,
       pointerX: event.clientX,
       pointerY: event.clientY,
@@ -1448,16 +1444,15 @@ function FloatingActionLayer() {
     };
   };
 
-  const moveAdvisorDrag = (target: 'button' | 'panel', event: PointerEvent<HTMLElement>) => {
+  const moveAdvisorPanelDrag = (event: PointerEvent<HTMLDivElement>) => {
     const drag = advisorDragRef.current;
-    if (drag?.target !== target || drag.pointerId !== event.pointerId) return;
+    if (drag?.pointerId !== event.pointerId) return;
     const deltaX = event.clientX - drag.pointerX;
     const deltaY = event.clientY - drag.pointerY;
     if (!drag.moved && Math.hypot(deltaX, deltaY) <= 4) return;
     event.preventDefault();
     drag.moved = true;
-    const element = target === 'button' ? advisorButtonRef.current : advisorPanelRef.current;
-    const bounds = element?.getBoundingClientRect();
+    const bounds = advisorPanelRef.current?.getBoundingClientRect();
     if (!bounds) return;
     const position = findFreePosition(
       drag.left + deltaX,
@@ -1466,15 +1461,13 @@ function FloatingActionLayer() {
       bounds.height,
       dockRects(),
     );
-    if (target === 'button') setAdvisorPosition(position);
-    else setAdvisorPanelPosition(position);
+    setAdvisorPanelPosition(position);
   };
 
-  const endAdvisorDrag = (target: 'button' | 'panel', event: PointerEvent<HTMLElement>) => {
+  const endAdvisorPanelDrag = (event: PointerEvent<HTMLDivElement>) => {
     const drag = advisorDragRef.current;
-    if (drag?.target !== target || drag.pointerId !== event.pointerId) return;
-    const element = target === 'button' ? advisorButtonRef.current : advisorPanelRef.current;
-    const bounds = element?.getBoundingClientRect();
+    if (drag?.pointerId !== event.pointerId) return;
+    const bounds = advisorPanelRef.current?.getBoundingClientRect();
     if (drag.moved && bounds) {
       const position = findFreePosition(
         drag.left + event.clientX - drag.pointerX,
@@ -1483,33 +1476,26 @@ function FloatingActionLayer() {
         bounds.height,
         dockRects(),
       );
-      if (target === 'button') setAdvisorPosition(position);
-      else setAdvisorPanelPosition(position);
-      suppressAdvisorClickRef.current = true;
-      window.setTimeout(() => { suppressAdvisorClickRef.current = false; }, 0);
-    } else if (target === 'button') {
-      setAdvisorOpen(true);
+      setAdvisorPanelPosition(position);
     }
     advisorDragRef.current = null;
-    setAdvisorDragging(false);
     document.documentElement.style.userSelect = '';
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
-  const cancelAdvisorDrag = (target: 'button' | 'panel', event: PointerEvent<HTMLElement>) => {
-    if (advisorDragRef.current?.target !== target || advisorDragRef.current.pointerId !== event.pointerId) return;
+  const cancelAdvisorPanelDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if (advisorDragRef.current?.pointerId !== event.pointerId) return;
     advisorDragRef.current = null;
-    setAdvisorDragging(false);
     document.documentElement.style.userSelect = '';
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
   const advisorPanelDragHandlers = {
-    onPointerDown: (event: PointerEvent<HTMLDivElement>) => beginAdvisorDrag('panel', event, advisorPanelRef.current),
-    onPointerMove: (event: PointerEvent<HTMLDivElement>) => moveAdvisorDrag('panel', event),
-    onPointerUp: (event: PointerEvent<HTMLDivElement>) => endAdvisorDrag('panel', event),
-    onPointerCancel: (event: PointerEvent<HTMLDivElement>) => cancelAdvisorDrag('panel', event),
-    onLostPointerCapture: (event: PointerEvent<HTMLDivElement>) => cancelAdvisorDrag('panel', event),
+    onPointerDown: beginAdvisorPanelDrag,
+    onPointerMove: moveAdvisorPanelDrag,
+    onPointerUp: endAdvisorPanelDrag,
+    onPointerCancel: cancelAdvisorPanelDrag,
+    onLostPointerCapture: cancelAdvisorPanelDrag,
   };
 
   useLayoutEffect(() => {
@@ -1534,14 +1520,7 @@ function FloatingActionLayer() {
       const advisorHeight = layer.querySelector<HTMLElement>('#ai-college-match-launcher')?.getBoundingClientRect().height ?? 0;
       document.documentElement.style.setProperty('--chat-dock-height', `${height}px`);
       document.documentElement.style.setProperty('--chat-dock-stack-gap', height ? `${12 + advisorHeight}px` : '0px');
-      const button = advisorButtonRef.current;
-      if (button && advisorPositionRef.current) {
-        const bounds = button.getBoundingClientRect();
-        const position = findFreePosition(bounds.left, bounds.top, bounds.width, bounds.height, dockRects());
-        if (position.left !== advisorPositionRef.current.left || position.top !== advisorPositionRef.current.top) {
-          setAdvisorPosition(position);
-        }
-      }
+      updateAdvisorPosition();
       const panel = advisorPanelRef.current;
       if (panel && advisorPanelPositionRef.current) {
         const bounds = panel.getBoundingClientRect();
@@ -1554,7 +1533,7 @@ function FloatingActionLayer() {
     const resizeObserver = new ResizeObserver(updateDockHeight);
     const observeDocks = () => {
       resizeObserver.disconnect();
-      layer.querySelectorAll<HTMLElement>('[data-chat-dock="docked"]').forEach((dock) => resizeObserver.observe(dock));
+      layer.querySelectorAll<HTMLElement>('[data-chat-dock]').forEach((dock) => resizeObserver.observe(dock));
       const advisor = layer.querySelector<HTMLElement>('#ai-college-match-launcher');
       if (advisor) resizeObserver.observe(advisor);
       if (advisorPanelRef.current) resizeObserver.observe(advisorPanelRef.current);
@@ -1571,23 +1550,16 @@ function FloatingActionLayer() {
       document.documentElement.style.setProperty('--chat-dock-height', '0px');
       document.documentElement.style.setProperty('--chat-dock-stack-gap', '0px');
     };
-  }, []);
+  }, [updateAdvisorPosition]);
 
   return (
     <div ref={layerRef} className="pointer-events-none fixed inset-0 z-40">
-      {chatVisible && <div className="pointer-events-auto"><MiniChatDock /></div>}
+      {chatVisible && <div className="pointer-events-auto"><MiniChatDock onDockChange={updateAdvisorPosition} /></div>}
       <div className="pointer-events-auto">
         <AdvisorLauncher
           buttonRef={advisorButtonRef}
           position={advisorPosition}
-          onPointerDown={(event) => beginAdvisorDrag('button', event, advisorButtonRef.current)}
-          onPointerMove={(event) => moveAdvisorDrag('button', event)}
-          onPointerUp={(event) => endAdvisorDrag('button', event)}
-          onPointerCancel={(event) => cancelAdvisorDrag('button', event)}
-          dragging={advisorDragging}
-          onOpen={() => {
-            if (!suppressAdvisorClickRef.current) setAdvisorOpen(true);
-          }}
+          onOpen={() => setAdvisorOpen(true)}
         />
       </div>
       <div className="pointer-events-auto">

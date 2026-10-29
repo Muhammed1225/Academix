@@ -1,4 +1,5 @@
 import { useEffect, type CSSProperties, type ReactNode, type Ref } from 'react';
+import { createPortal } from 'react-dom';
 
 import { BRAND } from '../data/mock';
 import { verificationLabel, type Person, type Verification } from '../data/types';
@@ -195,7 +196,7 @@ export function Modal({
   }, [open, onClose]);
 
   if (!open) return null;
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-primary/40 backdrop-blur-[2px] sm:items-center sm:p-6" onMouseDown={onClose}>
       <div
         ref={dialogRef}
@@ -208,6 +209,7 @@ export function Modal({
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

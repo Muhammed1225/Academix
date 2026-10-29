@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useOutletContext, useSearchParams } from 'react-router-dom';
 
 import PostCard from '../components/PostCard';
-import { Avatar, Icon, MetricTile, Tag, cx } from '../components/ui';
+import { Avatar, Icon, Tag, cx } from '../components/ui';
 import { amas, channels, colleges } from '../data/mock';
 import type { Ama, PostAuthorType } from '../data/types';
 import { displayName } from '../data/userIdentity';
@@ -119,18 +119,14 @@ export function InstitutionSpotlight() {
     <div className="card p-5">
       <p className="eyebrow">Institution Spotlight</p>
       <div className="mt-3 flex items-center gap-3">
-        <span className="flex h-12 w-12 items-center justify-center rounded-md bg-[#a6192e] font-headline text-sm font-bold text-white">CMU</span>
+        <span className="flex h-12 w-12 items-center justify-center rounded-md bg-[#a6192e] font-headline text-sm font-bold text-white">BHOS</span>
         <div>
-          <div className="font-semibold">Carnegie Mellon</div>
-          <div className="text-xs text-on-surface-variant">School of Computer Science</div>
+          <div className="font-semibold">Baku Higher Oil School</div>
+          <div className="text-xs text-on-surface-variant">BHOS</div>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <MetricTile value="#1" label="US News CS" />
-        <MetricTile value="5.2%" label="SCS Acceptance" dark />
-      </div>
       <Link to="/colleges/cmu" className="btn-primary mt-4 w-full">
-        Explore CMU Program Details
+        Explore BHOS Details
       </Link>
     </div>
   );

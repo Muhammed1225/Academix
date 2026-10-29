@@ -284,7 +284,7 @@ export default function CollegesPage() {
             Find university hubs, explore academic programs, and connect with current students and mentors.
           </p>
         </div>
-        <div className="w-full space-y-3 lg:max-w-md">
+        <div className="w-full space-y-3 lg:w-[135%] lg:max-w-none">
           <button
             type="button"
             onClick={() => setAdmissionCalculatorOpen(true)}
@@ -295,7 +295,7 @@ export default function CollegesPage() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block font-semibold text-primary">Which universities can I get into?</span>
-              <span className="mt-1 block text-xs text-on-surface-variant">Explore admission possibilities based on your exam results.</span>
+              <span className="mt-1 block text-xs text-on-surface-variant">Explore admission possibilities based on your exam results, compare your scores with university requirements, and see where you could be a strong fit.</span>
             </span>
             <Icon name="arrow_forward" className="shrink-0 text-secondary transition group-hover:translate-x-1" />
           </button>
