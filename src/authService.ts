@@ -66,7 +66,9 @@ function testAuthenticate(mode: AuthMode, input: Record<string, unknown>): AuthR
         ...(typeof input.university === 'string' && input.university ? { university: input.university } : {}),
         ...(typeof input.major === 'string' && input.major ? { major: input.major } : {}),
         ...(Number.isInteger(graduationYear) && graduationYear > 0 ? { graduationYear } : {}),
-        verificationStatus: 'unverified',
+        verificationStatus: mode === 'register' && input.requestGoldVerification === true && role !== 'prospective'
+          ? 'pending'
+          : 'unverified',
         photo: savedUser?.photo ?? '',
         biography: savedUser?.biography ?? '',
         interests: savedUser?.interests ?? [],
@@ -127,26 +129,33 @@ export async function saveProfile(changes: ProfileChanges): Promise<AuthResult> 
         (!Number.isInteger(changes.graduationYear) || Number(changes.graduationYear) < 2000 || Number(changes.graduationYear) > 2100)) {
         return { ok: false, error: 'Choose a valid graduation year.' };
       }
-      const requestingVerification = changes.requestGoldVerification === true;
-      if (requestingVerification && !['scholar', 'faculty'].includes(changes.role)) {
-        return { ok: false, error: 'Gold verification is available for student / scholar and faculty / representative accounts.' };
-      }
-      if (requestingVerification && !['identity_document', 'edu_email'].includes(changes.verificationMethod ?? '')) {
-        return { ok: false, error: 'Choose a valid verification method.' };
-      }
-      if (requestingVerification && changes.verificationMethod === 'edu_email' &&
-        !/^[^@\s]+@[^@\s]+\.edu$/i.test((changes.eduEmail ?? '').trim())) {
-        return { ok: false, error: 'Enter a valid institutional .edu email for this verification option.' };
-      }
-      if (requestingVerification && changes.verificationMethod === 'identity_document' &&
-        (!changes.identityDocument || !['image/jpeg', 'image/png'].includes(changes.identityDocument.mimeType) ||
-          !['student_card', 'work_card'].includes(changes.identityDocument.type) ||
-          changes.identityDocument.type !== (changes.role === 'faculty' ? 'work_card' : 'student_card') ||
-          !changes.identityDocument.base64 || changes.identityDocument.base64.length > Math.ceil((5 * 1024 * 1024) / 3) * 4)) {
-        return { ok: false, error: changes.role === 'faculty'
-          ? 'Upload a faculty or work ID to request Gold verification.'
-          : 'Upload a student or work card to request Gold verification.' };
-      }
+    }
+    const requestingVerification = changes.requestGoldVerification === true;
+    const verificationRole = changes.role ?? user.role;
+    if (requestingVerification && changes.role === undefined && user.verificationStatus === 'pending') {
+      return { ok: false, error: 'A Gold verification request is already pending.' };
+    }
+    if (requestingVerification && changes.role === undefined && user.verificationStatus === 'verified') {
+      return { ok: false, error: 'Your account is already Gold verified.' };
+    }
+    if (requestingVerification && !['scholar', 'faculty'].includes(verificationRole)) {
+      return { ok: false, error: 'Gold verification is available for student / scholar and faculty / representative accounts.' };
+    }
+    if (requestingVerification && !['identity_document', 'edu_email'].includes(changes.verificationMethod ?? '')) {
+      return { ok: false, error: 'Choose a valid verification method.' };
+    }
+    if (requestingVerification && changes.verificationMethod === 'edu_email' &&
+      !/^[^@\s]+@[^@\s]+\.edu$/i.test((changes.eduEmail ?? '').trim())) {
+      return { ok: false, error: 'Enter a valid institutional .edu email for this verification option.' };
+    }
+    if (requestingVerification && changes.verificationMethod === 'identity_document' &&
+      (!changes.identityDocument || !['image/jpeg', 'image/png'].includes(changes.identityDocument.mimeType) ||
+        !['student_card', 'work_card'].includes(changes.identityDocument.type) ||
+        changes.identityDocument.type !== (verificationRole === 'faculty' ? 'work_card' : 'student_card') ||
+        !changes.identityDocument.base64 || changes.identityDocument.base64.length > Math.ceil((5 * 1024 * 1024) / 3) * 4)) {
+      return { ok: false, error: verificationRole === 'faculty'
+        ? 'Upload a faculty or work ID to request Gold verification.'
+        : 'Upload a student or work card to request Gold verification.' };
     }
     const { graduationYear } = changes;
     const profile: Partial<AuthenticatedUser> = {
@@ -171,6 +180,7 @@ export async function saveProfile(changes: ProfileChanges): Promise<AuthResult> 
       else delete updated.major;
       updated.verificationStatus = changes.requestGoldVerification ? 'pending' : 'unverified';
     }
+    if (requestingVerification && changes.role === undefined) updated.verificationStatus = 'pending';
     if (graduationYear === null || (changes.role !== undefined && changes.role !== 'scholar')) delete updated.graduationYear;
     else if (graduationYear !== undefined) updated.graduationYear = graduationYear;
     if (changes.bannerImage === null || changes.bannerImage === '') delete updated.bannerImage;

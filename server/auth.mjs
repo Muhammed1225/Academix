@@ -622,8 +622,74 @@ const server = createServer(async (req, res) => {
         input.eduEmail !== undefined ||
         input.identityDocument !== undefined
       ) {
-        sendJson(res, 400, { error: 'Gold verification details can only be submitted with a role change.' });
-        return;
+        if (input.requestGoldVerification !== true) {
+          sendJson(res, 400, { error: 'Submit a valid Gold verification request.' });
+          return;
+        }
+        if (!['scholar', 'faculty'].includes(user.role)) {
+          sendJson(res, 400, { error: 'Gold verification is available for student / scholar and faculty / representative accounts.' });
+          return;
+        }
+        if (user.verificationStatus === 'pending') {
+          sendJson(res, 409, { error: 'A Gold verification request is already pending.' });
+          return;
+        }
+        if (user.verificationStatus === 'verified') {
+          sendJson(res, 409, { error: 'Your account is already Gold verified.' });
+          return;
+        }
+        const verificationMethod = input.verificationMethod;
+        if (!['identity_document', 'edu_email'].includes(verificationMethod)) {
+          sendJson(res, 400, { error: 'Choose a valid verification method.' });
+          return;
+        }
+        const eduEmail = typeof input.eduEmail === 'string' ? input.eduEmail.trim().toLowerCase() : '';
+        if (verificationMethod === 'edu_email' && !/^[^@\s]+@[^@\s]+\.edu$/.test(eduEmail)) {
+          sendJson(res, 400, { error: 'Enter a valid institutional .edu email for this verification option.' });
+          return;
+        }
+        const identityDocument = input.identityDocument ? decodeIdentityDocument(input.identityDocument) : null;
+        if (identityDocument && input.identityDocument.type !== (user.role === 'faculty' ? 'work_card' : 'student_card')) {
+          sendJson(res, 400, { error: 'Choose the identity document type that matches your account role.' });
+          return;
+        }
+        if (input.identityDocument && !identityDocument) {
+          sendJson(res, 400, { error: 'Upload a valid JPG or PNG identity document no larger than 5 MB.' });
+          return;
+        }
+        if (verificationMethod === 'identity_document' && !identityDocument) {
+          sendJson(res, 400, {
+            error: user.role === 'faculty'
+              ? 'Upload a faculty or work ID to request Gold verification.'
+              : 'Upload a student or work card to request Gold verification.',
+          });
+          return;
+        }
+        if (verificationMethod === 'edu_email' && identityDocument) {
+          sendJson(res, 400, { error: 'Choose either .edu email review or a student/work card.' });
+          return;
+        }
+
+        updated.verificationStatus = 'pending';
+        updated.verificationRequest = {
+          method: verificationMethod,
+          ...(verificationMethod === 'edu_email' ? { eduEmail } : {}),
+          submittedAt: new Date().toISOString(),
+        };
+        delete updated.verificationDocument;
+        if (identityDocument) {
+          const extension = input.identityDocument.mimeType === 'image/png' ? '.png' : '.jpg';
+          const fileName = `${randomBytes(16).toString('hex')}${extension}`;
+          await mkdir(verificationDirectory, { recursive: true, mode: 0o700 });
+          const filePath = resolve(verificationDirectory, fileName);
+          await writeFile(filePath, identityDocument, { flag: 'wx', mode: 0o600 });
+          verificationDocumentPath = filePath;
+          updated.verificationDocument = {
+            fileName,
+            type: input.identityDocument.type,
+            submittedAt: new Date().toISOString(),
+          };
+        }
       }
       if (session.testOnly) {
         session.user = updated;
@@ -642,7 +708,7 @@ const server = createServer(async (req, res) => {
           throw error;
         }
       }
-      sendJson(res, 200, { user: publicUser(updated) });
+      sendJson(res, 200, { ok: true, user: publicUser(updated) });
     } catch (error) {
       if (verificationDocumentPath) {
         await unlink(verificationDocumentPath).catch((cleanupError) => {

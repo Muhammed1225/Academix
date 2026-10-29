@@ -13,6 +13,7 @@ export default function GoldVerificationSection({
   setEduEmail,
   errors,
   setErrors,
+  disabled = false,
 }: {
   role: GoldRole;
   requestGold: boolean;
@@ -25,6 +26,7 @@ export default function GoldVerificationSection({
   setEduEmail: (value: string) => void;
   errors: GoldVerificationErrors;
   setErrors: (errors: GoldVerificationErrors) => void;
+  disabled?: boolean;
 }) {
   const verificationTitle = role === 'faculty' ? 'Faculty / Work ID' : 'Student card';
 
@@ -34,6 +36,7 @@ export default function GoldVerificationSection({
         <input
           type="checkbox"
           checked={requestGold}
+          disabled={disabled}
           onChange={(event) => { setRequestGold(event.target.checked); setErrors({}); }}
           className="accent-secondary"
         />
@@ -44,11 +47,11 @@ export default function GoldVerificationSection({
           <legend className="text-sm font-semibold">Verification method</legend>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-outline-variant bg-white p-2.5 text-xs">
-              <input type="radio" checked={method === 'identity_document'} onChange={() => setMethod('identity_document')} name="verification-method" className="accent-secondary" />
+              <input type="radio" checked={method === 'identity_document'} disabled={disabled} onChange={() => setMethod('identity_document')} name="verification-method" className="accent-secondary" />
               {verificationTitle}
             </label>
             <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-outline-variant bg-white p-2.5 text-xs">
-              <input type="radio" checked={method === 'edu_email'} onChange={() => setMethod('edu_email')} name="verification-method" className="accent-secondary" />
+              <input type="radio" checked={method === 'edu_email'} disabled={disabled} onChange={() => setMethod('edu_email')} name="verification-method" className="accent-secondary" />
               .edu email
             </label>
           </div>
@@ -58,7 +61,7 @@ export default function GoldVerificationSection({
             <Icon name="cloud_upload" className="text-secondary" />
             <span className="mt-1 text-sm font-semibold">Upload image of your {verificationTitle.toLowerCase()}</span>
             <span className="mt-1 text-xs text-on-surface-variant">JPG or PNG, up to 5 MB</span>
-            <input type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" className="sr-only" onChange={(event) => setDocument(event.target.files?.[0] ?? null)} />
+            <input type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" className="sr-only" disabled={disabled} onChange={(event) => setDocument(event.target.files?.[0] ?? null)} />
             {document && <span className="mt-2 max-w-full truncate text-xs text-secondary">{document.name}</span>}
             {errors.document && <span className="mt-2 text-xs text-error">{errors.document}</span>}
           </label>
@@ -68,6 +71,7 @@ export default function GoldVerificationSection({
             <input
               type="email"
               value={eduEmail}
+              disabled={disabled}
               onChange={(event) => setEduEmail(event.target.value)}
               placeholder="you@university.edu"
               className="input mt-2 !bg-surface-container-low/40 !py-[9px]"

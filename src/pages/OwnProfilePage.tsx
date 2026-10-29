@@ -572,6 +572,7 @@ export function RoleChangePage() {
 
 function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: () => void }) {
   const setAuthenticatedUser = useApp((state) => state.setAuthenticatedUser);
+  const showToast = useApp((state) => state.showToast);
   const navigate = useNavigate();
   const [name, setName] = useState(displayName(user.name, user.email));
   const [photo, setPhoto] = useState(user.photo);
@@ -588,6 +589,14 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
   const [graduationYearsOpen, setGraduationYearsOpen] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [requestGold, setRequestGold] = useState(false);
+  const [verificationMethod, setVerificationMethod] = useState<VerificationMethod>('identity_document');
+  const [identityDocument, setIdentityDocument] = useState<File | null>(null);
+  const [eduEmail, setEduEmail] = useState('');
+  const [verificationErrors, setVerificationErrors] = useState<GoldVerificationErrors>({});
+  const [requestError, setRequestError] = useState('');
+  const [requestSaving, setRequestSaving] = useState(false);
+  const [requestSubmitted, setRequestSubmitted] = useState(false);
   const photoInput = useRef<HTMLInputElement>(null);
   const availableInterests = [...new Set([...interestOptions, ...selectedInterests])];
   const availableMajors = [...new Set([...majorOptions, ...(major ? [major] : [])])];
@@ -600,6 +609,51 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
     setSelectedInterests((selected) => selected.includes(interest)
       ? selected.filter((item) => item !== interest)
       : selected.length < 30 ? [...selected, interest] : selected);
+  };
+
+  const submitGoldVerification = async () => {
+    if (requestSaving || !requestGold) return;
+    const role = user.role === 'faculty' ? 'faculty' : 'scholar';
+    const nextErrors = validateGoldVerification({
+      role,
+      requestGold: true,
+      method: verificationMethod,
+      eduEmail,
+      document: identityDocument,
+    });
+    setVerificationErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+
+    setRequestSaving(true);
+    setRequestError('');
+    try {
+      const encodedDocument = verificationMethod === 'identity_document' && identityDocument
+        ? await readIdentityDocument(identityDocument)
+        : undefined;
+      const result = await saveProfile({
+        requestGoldVerification: true,
+        verificationMethod,
+        ...(verificationMethod === 'edu_email' ? { eduEmail: eduEmail.trim().toLowerCase() } : {}),
+        ...(encodedDocument && identityDocument ? {
+          identityDocument: {
+            type: role === 'faculty' ? 'work_card' : 'student_card',
+            mimeType: identityDocument.type,
+            base64: encodedDocument,
+          },
+        } : {}),
+      });
+      if (!result.ok || !result.user) {
+        setRequestError(result.error ?? 'Unable to submit your Gold verification request. Please try again.');
+        return;
+      }
+      setAuthenticatedUser(result.user);
+      setRequestSubmitted(true);
+      showToast('Gold verification request submitted successfully');
+    } catch {
+      setRequestError('Unable to reach the profile service. Please try again.');
+    } finally {
+      setRequestSaving(false);
+    }
   };
 
   const choosePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -811,6 +865,53 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
             <label className="block text-sm font-semibold">Location<input maxLength={200} value={location} onChange={(event) => setLocation(event.target.value)} className="input mt-1.5" placeholder="City, region" /></label>
             <label className="block text-sm font-semibold">Email address<input readOnly value={user.email} className="input mt-1.5 bg-surface-container-low text-on-surface-variant" /></label>
           </div>
+          {user.role !== 'prospective' && (
+            <section aria-label="Gold verification" className="space-y-3 border-t border-outline-variant/50 pt-4">
+              <h3 className="font-headline text-lg font-semibold text-primary">Gold verification</h3>
+              {user.verificationStatus === 'verified' ? (
+                <VerificationBadge verification="gold" label="Gold Verified" />
+              ) : user.verificationStatus === 'pending' ? (
+                <div role="status" className="rounded-xl bg-surface-container-low px-3.5 py-3 text-sm font-medium text-on-surface">
+                  {requestSubmitted ? 'Your request was submitted successfully. Verification request pending.' : 'Verification request pending'}
+                </div>
+              ) : (
+                <>
+                  {user.verificationStatus === 'rejected' && (
+                    <p role="status" className="rounded-xl bg-error-container px-3.5 py-3 text-sm font-medium text-on-error-container">
+                      Your Gold verification request was rejected. You may submit a new request.
+                    </p>
+                  )}
+                  <GoldVerificationSection
+                    role={user.role === 'faculty' ? 'faculty' : 'scholar'}
+                    requestGold={requestGold}
+                    setRequestGold={setRequestGold}
+                    method={verificationMethod}
+                    setMethod={setVerificationMethod}
+                    document={identityDocument}
+                    setDocument={setIdentityDocument}
+                    eduEmail={eduEmail}
+                    setEduEmail={setEduEmail}
+                    errors={verificationErrors}
+                    setErrors={setVerificationErrors}
+                    disabled={requestSaving}
+                  />
+                  {requestError && <p role="alert" className="text-sm font-medium text-error">{requestError}</p>}
+                  {requestGold && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        disabled={requestSaving}
+                        onClick={() => void submitGoldVerification()}
+                        className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {requestSaving ? 'Submitting…' : 'Request Gold Verification'}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          )}
           <div className="flex justify-end">
             <button type="button" onClick={() => navigate('/change-role')} className="btn-outline border-secondary text-secondary hover:bg-secondary-fixed">
                   <Icon name="manage_accounts" />
@@ -1018,7 +1119,7 @@ export default function OwnProfilePage() {
     .filter(({ sharedInterests }) => sharedInterests.length > 0)
     .sort((a, b) => b.sharedInterests.length - a.sharedInterests.length)
     .slice(0, 3);
-  const verification = user.verificationStatus === 'verified' ? 'edu' : user.role === 'prospective' ? 'prospective' : 'unverified';
+  const verification = user.verificationStatus === 'verified' ? 'gold' : user.role === 'prospective' ? 'prospective' : 'unverified';
 
   return (
     <>
@@ -1155,7 +1256,7 @@ export default function OwnProfilePage() {
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <VerificationBadge verification={verification} />
-                  {user.verificationStatus === 'pending' && <Tag tone="neutral">Verification pending</Tag>}
+                  {user.verificationStatus === 'pending' && <Tag tone="neutral">Verification request pending</Tag>}
                 </div>
               </div>
               <div className="mt-5 flex items-center gap-2 border-t border-outline-variant/50 pt-4 text-sm text-on-surface-variant">
@@ -1253,7 +1354,7 @@ export default function OwnProfilePage() {
               </div>
               <div className="flex gap-3">
                 <Icon name="verified_user" className="text-secondary" />
-                <div><dt className="text-xs text-on-surface-variant">Account status</dt><dd className="mt-0.5 text-sm font-medium text-primary">{user.verificationStatus === 'pending' ? 'Verification review pending' : user.verificationStatus === 'verified' ? 'Institution verified' : 'Unverified account'}</dd></div>
+                <div><dt className="text-xs text-on-surface-variant">Account status</dt><dd className="mt-0.5 text-sm font-medium text-primary">{user.verificationStatus === 'pending' ? 'Verification request pending' : user.verificationStatus === 'verified' ? 'Gold Verified' : user.verificationStatus === 'rejected' ? 'Gold verification request rejected' : 'Unverified account'}</dd></div>
               </div>
             </dl>
           </section>

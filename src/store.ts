@@ -52,7 +52,7 @@ export interface AuthenticatedUser extends OnboardingProfile {
   university?: string;
   major?: string;
   graduationYear?: number;
-  verificationStatus: 'pending' | 'unverified' | 'verified';
+  verificationStatus: 'pending' | 'unverified' | 'verified' | 'rejected';
 }
 
 interface AppState {
