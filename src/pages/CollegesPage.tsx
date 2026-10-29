@@ -154,6 +154,7 @@ function UniversitySections({ university, college }: { university: string; colle
   const sections = [
     {
       id: 'majors',
+      href: college ? `/colleges/${college.id}/majors` : undefined,
       emoji: '🎓',
       title: 'Majors',
       content: majors.length ? (
@@ -188,6 +189,7 @@ function UniversitySections({ university, college }: { university: string; colle
     },
     {
       id: 'news',
+      href: college ? `/colleges/${college.id}#news` : undefined,
       emoji: '📰',
       title: 'News',
       content: relatedPosts.length ? (
@@ -203,6 +205,7 @@ function UniversitySections({ university, college }: { university: string; colle
     },
     {
       id: 'gallery',
+      href: college ? `/colleges/${college.id}#gallery` : undefined,
       emoji: '📸',
       title: 'Gallery',
       content: photos.length ? (
@@ -217,18 +220,28 @@ function UniversitySections({ university, college }: { university: string; colle
 
   return (
     <div className="grid auto-rows-fr gap-3 sm:grid-cols-2">
-      {sections.map((section) => (
-        <section
-          key={section.id}
-          className={`card flex min-h-[288px] min-w-0 flex-col p-3 ${section.id === 'majors' ? 'sm:row-span-2' : ''}`}
-        >
-          <h3 className="mb-1.5 flex items-center gap-2 font-headline text-base font-semibold text-primary">
-            <span aria-hidden="true" className="text-xl">{section.emoji}</span>
-            {section.title}
-          </h3>
-          <div className="min-h-0 flex-1 overflow-y-auto">{section.content}</div>
-        </section>
-      ))}
+      {sections.map((section) => {
+        const className = `card flex min-h-[288px] min-w-0 flex-col p-3 ${section.id === 'majors' ? 'sm:row-span-2' : ''} ${section.href ? 'transition hover:border-secondary/40 hover:shadow-float focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary' : ''}`;
+        const content = (
+          <>
+            <h3 className="mb-1.5 flex items-center gap-2 font-headline text-base font-semibold text-primary">
+              <span aria-hidden="true" className="text-xl">{section.emoji}</span>
+              {section.title}
+              {section.href && <Icon name="arrow_forward" className="ml-auto text-secondary" />}
+            </h3>
+            <div className="min-h-0 flex-1 overflow-y-auto">{section.content}</div>
+          </>
+        );
+        return section.href ? (
+          <Link key={section.id} to={section.href} className={className} aria-label={`View ${section.title} for ${university}`}>
+            {content}
+          </Link>
+        ) : (
+          <section key={section.id} className={className}>
+            {content}
+          </section>
+        );
+      })}
     </div>
   );
 }

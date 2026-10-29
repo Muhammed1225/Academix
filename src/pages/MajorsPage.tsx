@@ -293,19 +293,25 @@ export default function MajorsPage() {
 
   return (
     <div className="space-y-5">
-      <nav className="flex flex-wrap items-center gap-1.5 text-sm text-on-surface-variant">
-        <Link to="/colleges" className="hover:text-secondary">
-          Explore Universities
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <nav className="flex flex-wrap items-center gap-1.5 text-sm text-on-surface-variant">
+          <Link to="/colleges" className="hover:text-secondary">
+            Explore Universities
+          </Link>
+          <Icon name="chevron_right" className="!text-[16px]" />
+          <Link to={`/colleges/${college.id}`} className="hover:text-secondary">
+            {college.name}
+          </Link>
+          <Icon name="chevron_right" className="!text-[16px]" />
+          <span>Majors & Academic Programs</span>
+          <Icon name="chevron_right" className="!text-[16px]" />
+          <span className="font-semibold text-primary">{major.name}</span>
+        </nav>
+        <Link to={`/colleges/${college.id}`} className="btn-outline shrink-0">
+          <Icon name="arrow_back" />
+          University overview
         </Link>
-        <Icon name="chevron_right" className="!text-[16px]" />
-        <Link to={`/colleges/${college.id}`} className="hover:text-secondary">
-          {college.name}
-        </Link>
-        <Icon name="chevron_right" className="!text-[16px]" />
-        <span>Majors & Academic Programs</span>
-        <Icon name="chevron_right" className="!text-[16px]" />
-        <span className="font-semibold text-primary">{major.name}</span>
-      </nav>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
         <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
