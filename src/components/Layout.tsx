@@ -578,7 +578,7 @@ function Header({
             {notificationsOpen && <NotificationsPanel onClose={() => setNotificationsOpen(false)} />}
           </div>
           {!signedIn && authChecked && (
-            <Link to="/auth" className="btn-primary">Sign up / Log in</Link>
+            <Link to="/auth" className="btn-primary !bg-white !text-[#0051D5] hover:!bg-white/90">Sign up / Log in</Link>
           )}
         </div>
       </div>
