@@ -8,6 +8,8 @@ import {
   markNotificationRead,
   saveNotificationPreferences,
   seedUnreadConversationNotifications,
+  notificationFilterOptions,
+  type NotificationFilter,
   type NotificationItem,
   type NotificationPreferences,
 } from './notificationsService';
@@ -15,7 +17,7 @@ import { conversations } from './data/mock';
 
 interface NotificationsState {
   userId: string | null;
-  filterUnread: boolean;
+  filter: NotificationFilter;
   items: NotificationItem[];
   totalCount: number;
   unreadCount: number;
@@ -27,8 +29,8 @@ interface NotificationsState {
   preferences: NotificationPreferences;
   preferencesLoading: boolean;
   preferencesError: string | null;
-  refresh: (user: AuthenticatedUser | null, unreadOnly?: boolean) => Promise<void>;
-  loadMore: (user: AuthenticatedUser, unreadOnly: boolean) => Promise<void>;
+  refresh: (user: AuthenticatedUser | null, filter?: NotificationFilter) => Promise<void>;
+  loadMore: (user: AuthenticatedUser, filter: NotificationFilter) => Promise<void>;
   markRead: (user: AuthenticatedUser, notification: NotificationItem) => Promise<void>;
   markAllRead: (user: AuthenticatedUser) => Promise<void>;
   loadPreferences: (user: AuthenticatedUser) => Promise<void>;
@@ -37,7 +39,7 @@ interface NotificationsState {
 
 export const useNotifications = create<NotificationsState>((set, get) => ({
   userId: null,
-  filterUnread: false,
+  filter: 'all',
   items: [],
   totalCount: 0,
   unreadCount: 0,
@@ -50,11 +52,11 @@ export const useNotifications = create<NotificationsState>((set, get) => ({
   preferencesLoading: false,
   preferencesError: null,
 
-  refresh: async (user, unreadOnly) => {
+  refresh: async (user, selectedFilter) => {
     if (!user) {
       set({
         userId: null,
-        filterUnread: false,
+        filter: 'all',
         items: [],
         totalCount: 0,
         unreadCount: 0,
@@ -66,17 +68,17 @@ export const useNotifications = create<NotificationsState>((set, get) => ({
       return;
     }
     const changingUser = get().userId !== user.id;
-    const selectedUnreadOnly = unreadOnly ?? (changingUser ? false : get().filterUnread);
+    const filter = selectedFilter ?? (changingUser ? 'all' : get().filter);
     set({
       userId: user.id,
-      filterUnread: selectedUnreadOnly,
+      filter,
       ...(changingUser ? { items: [], totalCount: 0, unreadCount: 0, unreadMessageCount: 0 } : {}),
       loading: true,
       error: null,
     });
     try {
       if (changingUser) await seedUnreadConversationNotifications(user, conversations);
-      const page = await listNotifications(user, { limit: 20, unread: selectedUnreadOnly });
+      const page = await listNotifications(user, { limit: 20, ...notificationFilterOptions(filter) });
       set({
         items: page.items,
         totalCount: page.totalCount,
@@ -90,14 +92,14 @@ export const useNotifications = create<NotificationsState>((set, get) => ({
     }
   },
 
-  loadMore: async (user, unreadOnly) => {
+  loadMore: async (user, filter) => {
     if (get().loadingMore || !get().hasMore) return;
     set({ loadingMore: true, error: null });
     try {
       const page = await listNotifications(user, {
         offset: get().items.length,
         limit: 20,
-        unread: unreadOnly,
+        ...notificationFilterOptions(filter),
       });
       set((state) => ({
         items: [...state.items, ...page.items],
@@ -116,14 +118,14 @@ export const useNotifications = create<NotificationsState>((set, get) => ({
     try {
       const summary = await markNotificationRead(user, notification.id);
       set((state) => {
-        const items = state.filterUnread
+        const items = state.filter === 'unread'
           ? state.items.filter((item) => item.id !== notification.id)
           : state.items.map((item) =>
             item.id === notification.id ? { ...item, readAt: item.readAt ?? new Date().toISOString() } : item,
           );
         return {
           items,
-          ...(state.filterUnread && items.length === 0 ? { hasMore: false } : {}),
+          ...(state.filter === 'unread' && items.length === 0 ? { hasMore: false } : {}),
           unreadCount: summary.unreadCount,
           unreadMessageCount: summary.unreadMessageCount,
         };
@@ -139,8 +141,8 @@ export const useNotifications = create<NotificationsState>((set, get) => ({
       const summary = await markAllNotificationsRead(user);
       const now = new Date().toISOString();
       set((state) => ({
-        items: state.filterUnread ? [] : state.items.map((item) => ({ ...item, readAt: item.readAt ?? now })),
-        ...(state.filterUnread ? { hasMore: false } : {}),
+        items: state.filter === 'unread' ? [] : state.items.map((item) => ({ ...item, readAt: item.readAt ?? now })),
+        ...(state.filter === 'unread' ? { hasMore: false } : {}),
         unreadCount: summary.unreadCount,
         unreadMessageCount: summary.unreadMessageCount,
       }));

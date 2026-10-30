@@ -19,6 +19,15 @@ export interface NotificationPreferences {
   updates: boolean;
 }
 
+export type NotificationFilter = 'all' | 'unread' | 'messages' | 'updates';
+
+export function notificationFilterOptions(filter: NotificationFilter) {
+  return {
+    unread: filter === 'unread',
+    type: filter === 'messages' ? 'message' as const : filter === 'updates' ? 'system' as const : undefined,
+  };
+}
+
 export interface NotificationPage {
   items: NotificationItem[];
   totalCount: number;
@@ -68,12 +77,13 @@ export function notifyNotificationsChanged() {
 
 export async function listNotifications(
   user: AuthenticatedUser,
-  options: { offset?: number; limit?: number; unread?: boolean } = {},
+  options: { offset?: number; limit?: number; unread?: boolean; type?: NotificationItem['type'] } = {},
 ) {
   const params = new URLSearchParams({
     offset: String(options.offset ?? 0),
     limit: String(options.limit ?? 20),
     ...(options.unread ? { unread: 'true' } : {}),
+    ...(options.type ? { type: options.type } : {}),
   });
   return request<NotificationPage>(`/api/notifications?${params}`, user);
 }

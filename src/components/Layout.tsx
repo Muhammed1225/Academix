@@ -197,30 +197,33 @@ function Header({
   };
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 border-b border-outline-variant/40 bg-white shadow-header">
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-white/25 bg-[#0051D5] text-white shadow-header">
       <div className="mx-auto flex h-16 max-w-content items-center justify-between gap-1 px-3 sm:gap-2 sm:px-4">
-        <div className="flex min-w-0 max-w-xl flex-[0_1_24rem] items-center gap-1.5">
-          <Link to="/" className="shrink-0" aria-label={`${BRAND} feed`}>
-            <BrandMark />
+        <div className="flex min-w-0 flex-[0_1_30rem] items-center gap-1.5">
+          <Link to="/" className="shrink-0 text-white" aria-label={`${BRAND} feed`}>
+            <span className="inline-flex items-center gap-1.5 font-headline text-2xl font-bold tracking-tight text-white">
+              {BRAND}
+            </span>
           </Link>
-          <form
-            onSubmit={onSearch}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget)) setSearchFocused(false);
-            }}
-            className="relative hidden min-w-[9rem] flex-1 md:block"
-          >
-            <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search university, major, mentor, or question..."
-              aria-label="Search Academix"
-              aria-autocomplete="list"
-              aria-expanded={searchFocused}
-              className="input h-9 w-full min-w-0 rounded-full !py-1.5 pl-9"
-            />
+          <div className="relative flex min-w-0 flex-1 items-center gap-1 md:rounded-full md:border md:border-white/40 md:bg-white/10 md:focus-within:border-white/80 md:focus-within:ring-2 md:focus-within:ring-white/20 md:focus-within:bg-[#0051D5]">
+            <form
+              onSubmit={onSearch}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setSearchFocused(false);
+              }}
+              className="relative hidden min-w-[9rem] flex-1 md:block"
+            >
+              <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/80" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search university, major, mentor, or question..."
+                aria-label="Search Academix"
+                aria-autocomplete="list"
+                aria-expanded={searchFocused}
+                className="input h-9 w-full min-w-0 rounded-full !border-0 !bg-transparent !py-1.5 pl-9 !ring-0 text-white placeholder:text-white/70 focus:!bg-transparent"
+              />
             {searchFocused && (query.trim() ? (
               <div role="group" aria-label="Search suggestions" className="absolute left-0 top-full z-[60] mt-2 max-h-[70vh] w-[min(28rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-outline-variant/60 bg-white py-2 shadow-float">
                 {suggestionGroups.length ? suggestionGroups.map((group) => (
@@ -330,13 +333,14 @@ function Header({
                 ) : <p className="px-4 py-3 text-sm text-on-surface-variant">Start typing to find people, universities, programmes, and discussions.</p>}
               </div>
             ))}
-          </form>
-          <button type="button" onClick={() => navigate('/search')} aria-label="Open search" className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-low md:hidden">
-            <Icon name="search" />
-          </button>
+            </form>
+            <button type="button" onClick={() => navigate('/search')} aria-label="Open search" className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-low md:hidden">
+              <Icon name="search" />
+            </button>
           <div ref={filterRootRef} className="relative shrink-0">
             <FilterButton
               compact
+              inverse
               activeCount={selectedUniversities.length + selectedMajors.length}
               expanded={filterOpen}
               ariaLabel="Filter universities and majors"
@@ -466,6 +470,7 @@ function Header({
               </div>
             )}
           </div>
+          </div>
         </div>
 
         <nav className="hidden h-full shrink-0 items-center gap-0 lg:flex">
@@ -476,16 +481,16 @@ function Header({
               end={item.end}
               className={({ isActive }) =>
                 cx(
-                  'flex h-full whitespace-nowrap items-center gap-1 border-b-2 px-1.5 text-xs transition-colors xl:px-2 2xl:px-2.5',
+                  'flex h-full whitespace-nowrap items-center gap-1 border-b-2 px-2 text-sm transition-colors xl:px-3 2xl:px-3.5',
                   isActive
-                    ? 'border-secondary font-semibold text-secondary'
-                    : 'border-transparent text-on-surface-variant hover:text-on-surface',
+                    ? 'border-white font-semibold text-white'
+                    : 'border-transparent text-white/75 hover:text-white',
                 )
               }
             >
               {item.label}
               {item.to === '/inbox' && unreadMessages > 0 && (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary-fixed px-1.5 text-[11px] font-bold text-secondary">
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-[11px] font-bold text-[#0051D5]">
                   {unreadMessages}
                 </span>
               )}
@@ -505,10 +510,10 @@ function Header({
               className="group relative inline-flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-none"
             >
               <UserAvatar src={user?.photo || undefined} name={displayName(user?.name, user?.email)} email={user?.email} size={44} />
-              <span className="pointer-events-none absolute inset-0 rounded-full border-2 border-transparent transition-colors group-hover:border-secondary group-focus-visible:border-secondary" />
+              <span className="pointer-events-none absolute inset-0 rounded-full border-2 border-transparent transition-colors group-hover:border-white group-focus-visible:border-white" />
             </button>
             {menuOpen && (
-              <div role="menu" className="animate-slide-up absolute right-0 top-12 w-48 overflow-hidden rounded-xl border border-outline-variant/60 bg-white py-1 shadow-float">
+              <div role="menu" className="animate-slide-up absolute right-0 top-12 w-48 overflow-hidden rounded-xl border border-outline-variant/60 bg-white py-1 text-black shadow-float">
                 <Link
                   to="/profile"
                   role="menuitem"
@@ -546,7 +551,7 @@ function Header({
                   type="button"
                   role="menuitem"
                   onClick={() => void signOut()}
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-error hover:bg-error-container/50"
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-error-container/50"
                 >
                   <Icon name="logout" /> Sign out
                 </button>

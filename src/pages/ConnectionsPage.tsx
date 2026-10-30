@@ -378,22 +378,13 @@ export default function ConnectionsPage() {
         </p>
       </header>
 
-      {user && (!user.university || !user.major || (user.role === 'scholar' && (!user.enrollmentYear || !user.programmeDurationYears))) && (
-        <aside className="flex flex-col gap-3 rounded-xl border border-secondary/20 bg-secondary-fixed/50 p-4 sm:flex-row sm:items-center sm:justify-between" role="status">
-          <div>
-            <p className="font-semibold text-primary">Add your university and major to appear in search</p>
-            <p className="mt-1 text-sm text-on-surface-variant">Complete your study details and choose whether your profile is discoverable.</p>
-          </div>
-          <Link to="/profile?edit=true" className="btn-primary shrink-0">Edit profile</Link>
-        </aside>
-      )}
-
-      <section className="card p-5 sm:p-6" aria-labelledby="roles-heading">
+      <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,13fr)]">
+      <section className="card h-full min-w-0 p-5 sm:p-6" aria-labelledby="roles-heading">
         <div className="text-center">
           <h2 id="roles-heading" className="font-semibold text-primary">Connect with</h2>
           <p className="mt-1 text-sm text-on-surface-variant">Choose one or more roles to filter people. Leave them unselected to see everyone.</p>
         </div>
-        <div role="group" aria-label="Filter by role" className="mx-auto mt-4 grid max-w-[640px] grid-cols-1 gap-2 sm:grid-cols-3">
+        <div role="group" aria-label="Filter by role" className="mx-auto mt-4 grid max-w-[640px] grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1">
           {connectionRoleIds.map((id) => {
             const { label, icon } = connectionRoles[id];
             const selected = selectedRoles.includes(id);
@@ -418,7 +409,7 @@ export default function ConnectionsPage() {
         </div>
       </section>
 
-      <section className="card p-5 sm:p-6" aria-labelledby="find-students-heading">
+      <section className="card h-full min-w-0 p-5 sm:p-6" aria-labelledby="find-students-heading">
         <div className="text-center">
           <h2 id="find-students-heading" className="font-semibold text-primary">Find by university and major</h2>
           <p className="mt-1 text-sm text-on-surface-variant">Narrow your search to people studying what and where you care about.</p>
@@ -468,45 +459,19 @@ export default function ConnectionsPage() {
                 onToggle={(value) => toggleParamList(config.id, config.selected, value)}
               />
             ))}
-            <div>
-              <span className="mb-1.5 block text-sm font-semibold text-primary">Year of study</span>
-              <div role="group" aria-label="Filter by year of study" className="flex min-h-11 flex-wrap gap-1.5">
-                {yearOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    disabled={studentYearDisabled}
-                    aria-pressed={selectedYears.includes(option.id)}
-                    onClick={() => toggleParamList('years', selectedYears, option.id)}
-                    className={cx(
-                      'rounded-full border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary disabled:cursor-not-allowed disabled:opacity-45',
-                      selectedYears.includes(option.id) ? 'border-secondary bg-secondary-fixed text-secondary' : 'border-outline-variant text-on-surface-variant hover:bg-surface-container-low',
-                    )}
-                  >
-                    {option.label}{peopleResults?.facets.years.find((facet) => facet.id === option.id)?.count !== undefined && (
-                      <span className="ml-1 text-[10px] opacity-75">{peopleResults.facets.years.find((facet) => facet.id === option.id)?.count}</span>
-                    )}
-                  </button>
+            <div className="min-w-0">
+              <label htmlFor="graduation-year-filter" className="mb-1.5 block text-sm font-semibold text-primary">Graduation year</label>
+              <select
+                id="graduation-year-filter"
+                value={graduationYears[0] ?? ''}
+                onChange={(event) => updateParams({ graduationYears: event.target.value ? [event.target.value] : [] })}
+                className="input min-h-11"
+              >
+                <option value="">Any graduation year</option>
+                {Array.from({ length: 14 }, (_, index) => String(new Date().getFullYear() - 6 + index)).map((year) => (
+                  <option key={year} value={year}>{year}</option>
                 ))}
-              </div>
-              <div role="group" aria-label="Filter by degree level" className="mt-2 flex flex-wrap gap-1.5">
-                {degreeLevelOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    disabled={studentYearDisabled}
-                    aria-pressed={selectedLevels.includes(option.id)}
-                    onClick={() => toggleParamList('levels', selectedLevels, option.id)}
-                    className={cx(
-                      'rounded-full border px-2.5 py-1 text-[11px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary disabled:cursor-not-allowed disabled:opacity-45',
-                      selectedLevels.includes(option.id) ? 'border-secondary bg-secondary-fixed text-secondary' : 'border-outline-variant text-on-surface-variant hover:bg-surface-container-low',
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-              {studentYearDisabled && <p className="mt-1 text-xs text-on-surface-variant">Study year is available when students are included.</p>}
+              </select>
             </div>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -556,14 +521,6 @@ export default function ConnectionsPage() {
                   }} className="input mt-1.5" placeholder="Search a location" />
                 </label>
                 <fieldset>
-                  <legend className="text-sm font-semibold text-primary">Graduation year</legend>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {Array.from({ length: 14 }, (_, index) => String(new Date().getFullYear() - 6 + index)).map((year) => (
-                      <button key={year} type="button" aria-pressed={graduationYears.includes(year)} onClick={() => toggleParamList('graduationYears', graduationYears, year)} className={cx('rounded-full border px-2.5 py-1 text-xs font-medium', graduationYears.includes(year) ? 'border-secondary bg-secondary-fixed text-secondary' : 'border-outline-variant bg-white text-on-surface-variant hover:bg-surface-container-low')}>{year}</button>
-                    ))}
-                  </div>
-                </fieldset>
-                <fieldset>
                   <legend className="text-sm font-semibold text-primary">Intake year</legend>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {Array.from({ length: 14 }, (_, index) => String(new Date().getFullYear() - 6 + index)).map((year) => (
@@ -576,6 +533,26 @@ export default function ConnectionsPage() {
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {languageOptions.map((language) => (
                       <button key={language} type="button" aria-pressed={languages.includes(language)} onClick={() => toggleParamList('languages', languages, language)} className={cx('rounded-full border px-2.5 py-1 text-xs font-medium', languages.includes(language) ? 'border-secondary bg-secondary-fixed text-secondary' : 'border-outline-variant bg-white text-on-surface-variant hover:bg-surface-container-low')}>{language}</button>
+                    ))}
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend className="text-sm font-semibold text-primary">Degree level</legend>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {degreeLevelOptions.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        disabled={studentYearDisabled}
+                        aria-pressed={selectedLevels.includes(option.id)}
+                        onClick={() => toggleParamList('levels', selectedLevels, option.id)}
+                        className={cx(
+                          'rounded-full border px-2.5 py-1 text-[11px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary disabled:cursor-not-allowed disabled:opacity-45',
+                          selectedLevels.includes(option.id) ? 'border-secondary bg-secondary-fixed text-secondary' : 'border-outline-variant text-on-surface-variant hover:bg-surface-container-low',
+                        )}
+                      >
+                        {option.label}
+                      </button>
                     ))}
                   </div>
                 </fieldset>
@@ -606,6 +583,7 @@ export default function ConnectionsPage() {
           </div>
         </div>
       </section>
+      </div>
 
       <section className="card p-5 sm:p-6" aria-labelledby="interests-heading">
         <div className="grid items-center gap-3 text-center sm:grid-cols-3">

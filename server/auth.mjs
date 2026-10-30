@@ -506,8 +506,11 @@ async function handleNotifications(req, res, url) {
     const limit = Math.min(50, Math.max(1, Number.parseInt(url.searchParams.get('limit') || '20', 10) || 20));
     const offset = Math.max(0, Number.parseInt(url.searchParams.get('offset') || '0', 10) || 0);
     const unreadOnly = url.searchParams.get('unread') === 'true';
+    const notificationType = ['message', 'system'].includes(url.searchParams.get('type'))
+      ? url.searchParams.get('type')
+      : null;
     const items = notificationData.items
-      .filter((item) => item.userId === user.id && (!unreadOnly || !item.readAt))
+      .filter((item) => item.userId === user.id && (!unreadOnly || !item.readAt) && (!notificationType || item.type === notificationType))
       .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
     sendJson(res, 200, {
       items: items.slice(offset, offset + limit).map(({ userId, ...item }) => item),

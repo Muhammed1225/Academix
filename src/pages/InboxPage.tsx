@@ -668,12 +668,11 @@ export default function InboxPage() {
                   className="w-full"
                 />
                 <button type="button" onClick={() => navigate(`/inbox/${t.id}`)} className="mt-2 block w-full text-left">
-                  <span className="flex items-center gap-2">
-                    <span className={cx('min-w-0 flex-1 truncate text-sm', t.unread ? 'font-bold text-primary' : 'font-semibold text-on-surface')}>{t.title}</span>
+                  <span className="mt-1.5 line-clamp-2 block text-sm leading-relaxed text-on-surface-variant">"{t.preview}"</span>
+                  <span className="mt-2 flex items-center justify-start gap-2 text-left">
                     {t.unread && <span className="h-2 w-2 shrink-0 rounded-full bg-secondary" aria-label="Unread" />}
                     <span className="shrink-0 text-xs text-on-surface-variant">{t.timeAgo}</span>
                   </span>
-                  <span className="mt-1 line-clamp-2 block text-xs text-on-surface-variant">"{t.preview}"</span>
                 </button>
               </div>
             </div>

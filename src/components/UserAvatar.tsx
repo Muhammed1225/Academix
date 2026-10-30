@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as Reac
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 
-import { avatarColor, displayName, initialsForName } from '../data/userIdentity';
+import { displayName } from '../data/userIdentity';
 import type { Verification } from '../data/types';
 import { useApp } from '../store';
 import { cx, Icon, VerificationBadge } from './ui';
@@ -187,10 +187,9 @@ export default function UserAvatar({
         <span
           role="img"
           aria-label={safeName}
-          className="flex h-full w-full items-center justify-center rounded-full font-bold text-white"
-          style={{ backgroundColor: avatarColor(safeName), fontSize: size * 0.34 }}
+          className="flex h-full w-full items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant"
         >
-          {initialsForName(safeName)}
+          <Icon name="person" size={size * 0.62} />
         </span>
       )}
       {showStatus && (

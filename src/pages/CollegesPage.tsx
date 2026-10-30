@@ -257,10 +257,13 @@ export default function CollegesPage() {
       : universities.filter((university) => university.toLocaleLowerCase('en').includes(query.trim().toLocaleLowerCase('en'))),
     [query, showAllUniversities],
   );
-  const filteredUniversities = useMemo(
-    () => universities.filter((university) => university.toLocaleLowerCase('en').includes(query.trim().toLocaleLowerCase('en'))),
-    [query],
-  );
+  const filteredUniversities = useMemo(() => {
+    const trimmedQuery = query.trim();
+    if (selectedUniversity && trimmedQuery && normalizeName(trimmedQuery) === normalizeName(selectedUniversity)) {
+      return universities;
+    }
+    return universities.filter((university) => university.toLocaleLowerCase('en').includes(trimmedQuery.toLocaleLowerCase('en')));
+  }, [query, selectedUniversity]);
   useEffect(() => {
     const handleOutsidePointerDown = (event: PointerEvent) => {
       if (event.target instanceof Node && !searchContainerRef.current?.contains(event.target)) {

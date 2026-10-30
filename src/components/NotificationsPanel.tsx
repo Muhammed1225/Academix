@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 import { useApp } from '../store';
 import { useNotifications } from '../notificationsStore';
-import type { NotificationItem, NotificationPreferences } from '../notificationsService';
+import type { NotificationFilter, NotificationItem, NotificationPreferences } from '../notificationsService';
 import UserAvatar from './UserAvatar';
 import { Icon, cx } from './ui';
 
@@ -168,12 +168,12 @@ export function NotificationFeed({
   const loadMore = useNotifications((state) => state.loadMore);
   const markRead = useNotifications((state) => state.markRead);
   const markAllRead = useNotifications((state) => state.markAllRead);
-  const [tab, setTab] = useState<'all' | 'unread'>('all');
+  const [tab, setTab] = useState<NotificationFilter>('all');
   const [showPreferences, setShowPreferences] = useState(false);
   const groups = useMemo(() => groupedItems(items), [items]);
 
   useEffect(() => {
-    if (user) void refresh(user, tab === 'unread');
+    if (user) void refresh(user, tab);
   }, [refresh, tab, user]);
 
   const handleItemClick = (item: NotificationItem) => {
@@ -224,17 +224,22 @@ export function NotificationFeed({
             )}
           </div>
           <div className="flex border-b border-outline-variant/50 px-4">
-            {(['all', 'unread'] as const).map((value) => (
+            {([
+              ['all', 'All'],
+              ['unread', 'Unread'],
+              ['messages', 'Messages'],
+              ['updates', 'Updates'],
+            ] as const).map(([value, label]) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => setTab(value)}
                 className={cx(
-                  'border-b-2 px-3 py-2.5 text-sm font-semibold capitalize',
+                  'border-b-2 px-3 py-2.5 text-sm font-semibold',
                   tab === value ? 'border-secondary text-secondary' : 'border-transparent text-on-surface-variant hover:text-on-surface',
                 )}
               >
-                {value}
+                {label}
               </button>
             ))}
           </div>
@@ -247,28 +252,30 @@ export function NotificationFeed({
             ) : error ? (
               <div className="flex flex-col items-center gap-2 p-8 text-center">
                 <p className="text-sm text-error">{error}</p>
-                <button type="button" onClick={() => user && void refresh(user, tab === 'unread')} className="btn-secondary text-sm">Retry</button>
+                <button type="button" onClick={() => user && void refresh(user, tab)} className="btn-secondary text-sm">Retry</button>
               </div>
             ) : loading ? <NotificationSkeleton /> : items.length > 0 ? (
               <>
                 <NotificationRows items={items} onItemClick={handleItemClick} />
                 {hasMore && (
                   <div className="p-3 text-center">
-                    <button type="button" disabled={loadingMore} onClick={() => user && void loadMore(user, tab === 'unread')} className="text-sm font-semibold text-secondary hover:underline disabled:opacity-50">
+                    <button type="button" disabled={loadingMore} onClick={() => user && void loadMore(user, tab)} className="text-sm font-semibold text-secondary hover:underline disabled:opacity-50">
                       {loadingMore ? 'Loading…' : 'Load more'}
                     </button>
                   </div>
                 )}
               </>
-            ) : tab === 'unread' && totalCount > 0 ? (
-              <p className="p-6 text-center text-sm text-on-surface-variant">No unread notifications on this page.</p>
-            ) : totalCount === 0 && groups.length === 0 ? (
+            ) : tab === 'all' && totalCount === 0 && groups.length === 0 ? (
               <div className="flex flex-col items-center px-8 py-10 text-center">
                 <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-secondary-fixed text-secondary"><Icon name="done_all" /></span>
                 <p className="font-semibold text-primary">You’re all caught up</p>
                 <p className="mt-1 text-sm text-on-surface-variant">We’ll let you know when something new comes in.</p>
               </div>
-            ) : <p className="p-6 text-center text-sm text-on-surface-variant">No unread notifications.</p>}
+            ) : (
+              <p className="p-6 text-center text-sm text-on-surface-variant">
+                {tab === 'unread' ? 'No unread notifications.' : tab === 'messages' ? 'No message notifications.' : tab === 'updates' ? 'No updates yet.' : 'No notifications yet.'}
+              </p>
+            )}
           </div>
           {!fullPage && (
             <Link to="/notifications" onClick={onClose} className="border-t border-outline-variant/50 px-4 py-3 text-center text-sm font-semibold text-secondary hover:bg-surface-container-low">
