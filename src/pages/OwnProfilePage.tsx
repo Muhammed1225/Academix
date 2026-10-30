@@ -585,8 +585,20 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
   const [universitiesOpen, setUniversitiesOpen] = useState(false);
   const [major, setMajor] = useState(user.major ?? '');
   const [majorsOpen, setMajorsOpen] = useState(false);
-  const [graduationYear, setGraduationYear] = useState(user.graduationYear?.toString() ?? '');
+  const [graduationYear, setGraduationYear] = useState((user.graduationYear ?? user.expectedGraduationYear)?.toString() ?? '');
   const [graduationYearsOpen, setGraduationYearsOpen] = useState(false);
+  const [degreeLevel, setDegreeLevel] = useState(user.degreeLevel ?? 'bachelors');
+  const [programmeDurationYears, setProgrammeDurationYears] = useState(user.programmeDurationYears?.toString() ?? '');
+  const [enrollmentYear, setEnrollmentYear] = useState(user.enrollmentYear?.toString() ?? '');
+  const [yearOfStudyOverride, setYearOfStudyOverride] = useState(user.yearOfStudyOverride?.toString() ?? '');
+  const [discoverable, setDiscoverable] = useState(user.discoverable ?? false);
+  const [showUniversityInSearch, setShowUniversityInSearch] = useState(user.showUniversityInSearch ?? true);
+  const [showYearInSearch, setShowYearInSearch] = useState(user.showYearInSearch ?? true);
+  const [openToMessages, setOpenToMessages] = useState(user.openToMessages ?? false);
+  const [openToMentoring, setOpenToMentoring] = useState(user.openToMentoring ?? false);
+  const [title, setTitle] = useState(user.title ?? '');
+  const [department, setDepartment] = useState(user.department ?? '');
+  const [profileLanguages, setProfileLanguages] = useState(user.languages ?? []);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [requestGold, setRequestGold] = useState(false);
@@ -601,7 +613,7 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
   const availableInterests = [...new Set([...interestOptions, ...selectedInterests])];
   const availableMajors = [...new Set([...majorOptions, ...(major ? [major] : [])])];
   const graduationYears = [...new Set([
-    ...Array.from({ length: 32 }, (_, index) => String(2000 + index)),
+    ...Array.from({ length: new Date().getFullYear() + 13 - 2000 }, (_, index) => String(2000 + index)),
     ...(graduationYear ? [graduationYear] : []),
   ])].sort((a, b) => Number(a) - Number(b));
 
@@ -687,6 +699,19 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
           university,
           major,
           graduationYear: graduationYear ? Number(graduationYear) : null,
+          expectedGraduationYear: graduationYear ? Number(graduationYear) : null,
+          degreeLevel,
+          programmeDurationYears: programmeDurationYears ? Number(programmeDurationYears) : null,
+          enrollmentYear: enrollmentYear ? Number(enrollmentYear) : null,
+          yearOfStudyOverride: yearOfStudyOverride ? Number(yearOfStudyOverride) : null,
+          discoverable,
+          showUniversityInSearch,
+          showYearInSearch,
+          openToMessages,
+          openToMentoring,
+          title,
+          department,
+          languages: profileLanguages,
       });
       if (!result.ok || !result.user) {
         setError(result.error ?? 'Unable to save your profile. Please try again.');
@@ -830,7 +855,7 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
               )}
             </div>
             <div>
-              <span className="block text-sm font-semibold">Graduation year</span>
+              <span className="block text-sm font-semibold">Expected graduation year</span>
               <button
                 type="button"
                 aria-expanded={graduationYearsOpen}
@@ -862,9 +887,61 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
                 </div>
               )}
             </div>
+            <label className="block text-sm font-semibold">Degree level
+              <select value={degreeLevel} onChange={(event) => setDegreeLevel(event.target.value as typeof degreeLevel)} className="input mt-1.5">
+                <option value="bachelors">Bachelor&apos;s</option>
+                <option value="masters">Master&apos;s</option>
+                <option value="phd">PhD</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label className="block text-sm font-semibold">Programme length
+              <select value={programmeDurationYears} onChange={(event) => setProgrammeDurationYears(event.target.value)} className="input mt-1.5">
+                <option value="">Select programme length</option>
+                {Array.from({ length: 12 }, (_, index) => String(index + 1)).map((year) => <option key={year} value={year}>{year} {year === '1' ? 'year' : 'years'}</option>)}
+              </select>
+            </label>
+            <label className="block text-sm font-semibold">Enrollment year
+              <select value={enrollmentYear} onChange={(event) => setEnrollmentYear(event.target.value)} className="input mt-1.5">
+                <option value="">Select enrollment year</option>
+                {Array.from({ length: 42 }, (_, index) => String(new Date().getFullYear() - index + 1)).map((year) => <option key={year}>{year}</option>)}
+              </select>
+            </label>
+            <label className="block text-sm font-semibold">Year of study (manual override, optional)
+              <select value={yearOfStudyOverride} onChange={(event) => setYearOfStudyOverride(event.target.value)} className="input mt-1.5">
+                <option value="">Calculate from enrollment year</option>
+                {Array.from({ length: 12 }, (_, index) => String(index + 1)).map((year) => <option key={year} value={year}>Year {year}</option>)}
+              </select>
+              <span className="mt-1 block text-xs font-normal text-on-surface-variant">Calculated from your enrollment year using an academic year that starts in September.</span>
+            </label>
+            {user.role === 'faculty' && <>
+              <label className="block text-sm font-semibold">Title<input maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} className="input mt-1.5" placeholder="e.g. Associate Professor" /></label>
+              <label className="block text-sm font-semibold">Department<input maxLength={120} value={department} onChange={(event) => setDepartment(event.target.value)} className="input mt-1.5" /></label>
+            </>}
             <label className="block text-sm font-semibold">Location<input maxLength={200} value={location} onChange={(event) => setLocation(event.target.value)} className="input mt-1.5" placeholder="City, region" /></label>
             <label className="block text-sm font-semibold">Email address<input readOnly value={user.email} className="input mt-1.5 bg-surface-container-low text-on-surface-variant" /></label>
           </div>
+          <fieldset className="rounded-xl border border-outline-variant/70 p-4">
+            <legend className="px-1 text-sm font-semibold">People search privacy</legend>
+            <div className="space-y-3 text-sm">
+              <label className="flex items-start gap-2"><input type="checkbox" checked={discoverable} onChange={(event) => setDiscoverable(event.target.checked)} className="mt-1 accent-secondary" /><span><span className="font-semibold">Show me in Find students search</span><span className="block text-xs text-on-surface-variant">Only public profile details are shared. This is off until you opt in.</span></span></label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={showUniversityInSearch} onChange={(event) => setShowUniversityInSearch(event.target.checked)} className="accent-secondary" />Show my university in search</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={showYearInSearch} onChange={(event) => setShowYearInSearch(event.target.checked)} className="accent-secondary" />Show my study year in search</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={openToMessages} onChange={(event) => setOpenToMessages(event.target.checked)} className="accent-secondary" />Open to messages</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={openToMentoring} onChange={(event) => setOpenToMentoring(event.target.checked)} className="accent-secondary" />Open to mentoring</label>
+            </div>
+            <fieldset className="mt-4 border-t border-outline-variant/50 pt-3">
+              <legend className="text-sm font-semibold">Languages spoken</legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {['Azerbaijani', 'English', 'Turkish', 'Russian', 'Arabic', 'French', 'German', 'Spanish'].map((language) => (
+                  <label key={language} className="flex items-center gap-1.5 rounded-full border border-outline-variant bg-white px-2.5 py-1 text-xs">
+                    <input type="checkbox" checked={profileLanguages.includes(language)} onChange={(event) => setProfileLanguages((current) => event.target.checked ? [...current, language] : current.filter((value) => value !== language))} className="accent-secondary" />
+                    {language}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </fieldset>
           {user.role !== 'prospective' && (
             <section aria-label="Gold verification" className="space-y-3 border-t border-outline-variant/50 pt-4">
               <h3 className="font-headline text-lg font-semibold text-primary">Gold verification</h3>

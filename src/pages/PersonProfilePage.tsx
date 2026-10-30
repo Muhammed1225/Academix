@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 
 import ConnectionRequestModal from '../components/ConnectionRequestModal';
 import PostCard from '../components/PostCard';
+import UserAvatar from '../components/UserAvatar';
 import { Avatar, Icon, Tag, VerificationBadge } from '../components/ui';
 import { people, posts } from '../data/mock';
+import { getPublicPerson, type PeoplePerson } from '../peopleService';
 import { useApp } from '../store';
 
 export default function PersonProfilePage() {
@@ -13,16 +15,80 @@ export default function PersonProfilePage() {
   const person = Object.values(people).find((entry) => entry.id === personId);
   const showToast = useApp((s) => s.showToast);
   const openMiniChatForPerson = useApp((s) => s.openMiniChatForPerson);
+  const currentUser = useApp((s) => s.user);
+  const [directoryPerson, setDirectoryPerson] = useState<PeoplePerson | null>(null);
+  const [directoryLoading, setDirectoryLoading] = useState(!person);
+  const [directoryError, setDirectoryError] = useState('');
   const [connectionRequested, setConnectionRequested] = useState(false);
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [requestedProfiles, setRequestedProfiles] = useState<string[]>([]);
 
+  useEffect(() => {
+    if (person) return;
+    const controller = new AbortController();
+    setDirectoryLoading(true);
+    setDirectoryError('');
+    void getPublicPerson(personId, currentUser?.id ?? '', controller.signal)
+      .then(setDirectoryPerson)
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setDirectoryError(error instanceof Error ? error.message : 'Unable to load this profile.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDirectoryLoading(false);
+      });
+    return () => controller.abort();
+  }, [person, personId, currentUser?.id]);
+
   if (!person) {
+    if (directoryLoading) {
+      return <div role="status" className="card mx-auto max-w-xl p-8 text-center text-on-surface-variant">Loading profile…</div>;
+    }
+    if (directoryPerson) {
+      const roleLabel = directoryPerson.role === 'student' ? 'Student / Scholar' : directoryPerson.role === 'faculty' ? 'Faculty representative' : 'Prospective student';
+      const yearLabel = directoryPerson.role === 'prospective'
+        ? 'Prospective'
+        : directoryPerson.role === 'faculty'
+          ? [directoryPerson.title, directoryPerson.department].filter(Boolean).join(' · ')
+          : directoryPerson.graduatedYear
+            ? `Graduated ${directoryPerson.graduatedYear}`
+            : directoryPerson.year
+              ? `Year ${directoryPerson.year}${directoryPerson.programmeDurationYears ? `/${directoryPerson.programmeDurationYears}` : ''}`
+              : '';
+      return (
+        <section className="card mx-auto max-w-2xl p-6 sm:p-8">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+            <UserAvatar src={directoryPerson.avatar || undefined} name={directoryPerson.name} size={88} />
+            <div className="min-w-0 flex-1">
+              <h1 className="font-headline text-2xl font-semibold text-primary">{directoryPerson.name}</h1>
+              <Tag tone="green" className="mt-2">{roleLabel}</Tag>
+              {directoryPerson.university && <p title={directoryPerson.university} className="mt-4 text-sm text-on-surface">{directoryPerson.universityShortName} · {directoryPerson.university}</p>}
+              {directoryPerson.major && <p className="mt-1 text-sm text-on-surface-variant">{directoryPerson.major}</p>}
+              {yearLabel && <p className="mt-1 text-sm text-on-surface-variant">{yearLabel}</p>}
+              {directoryPerson.sharedInterests.length > 0 && <p className="mt-3 text-sm text-on-surface-variant">{directoryPerson.sharedInterests.length} shared interests</p>}
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button type="button" disabled={connectionRequested} onClick={() => {
+                  setConnectionRequested(true);
+                  showToast(`Connection request sent to ${directoryPerson.name}`, 'person_add');
+                }} className={connectionRequested ? 'btn-outline' : 'btn-primary'}>
+                  <Icon name={connectionRequested ? 'check' : 'person_add'} />{connectionRequested ? 'Request sent' : 'Connect'}
+                </button>
+                <button type="button" onClick={() => openMiniChatForPerson({
+                  id: directoryPerson.id,
+                  name: directoryPerson.name,
+                  subtitle: [directoryPerson.major, directoryPerson.universityShortName].filter(Boolean).join(' · '),
+                  avatar: directoryPerson.avatar,
+                })} className="btn-outline"><Icon name="mail" />Message</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      );
+    }
     return (
       <div className="mx-auto max-w-xl rounded-xl border border-outline-variant/50 bg-white p-8 text-center">
         <Icon name="person_off" className="!text-5xl text-outline-variant" />
         <h1 className="mt-3 font-headline text-2xl font-semibold text-primary">Profile not found</h1>
-        <p className="mt-2 text-sm text-on-surface-variant">We could not find this profile. It may have been removed or is no longer available.</p>
+        <p className="mt-2 text-sm text-on-surface-variant">{directoryError || 'We could not find this profile. It may have been removed or is no longer available.'}</p>
         <Link to="/" className="btn-primary mt-5">Return to feed</Link>
       </div>
     );

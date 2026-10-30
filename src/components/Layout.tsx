@@ -198,8 +198,8 @@ function Header({
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-outline-variant/40 bg-white shadow-header">
-      <div className="mx-auto flex h-16 max-w-content items-center justify-between gap-4 px-4">
-        <div className="flex min-w-0 max-w-md flex-1 items-center gap-2">
+      <div className="mx-auto flex h-16 max-w-content items-center justify-between gap-1 px-3 sm:gap-2 sm:px-4">
+        <div className="flex min-w-0 max-w-xl flex-[0_1_24rem] items-center gap-1.5">
           <Link to="/" className="shrink-0" aria-label={`${BRAND} feed`}>
             <BrandMark />
           </Link>
@@ -209,7 +209,7 @@ function Header({
             onBlur={(event) => {
               if (!event.currentTarget.contains(event.relatedTarget)) setSearchFocused(false);
             }}
-            className="relative hidden min-w-0 flex-1 md:block"
+            className="relative hidden min-w-[9rem] flex-1 md:block"
           >
             <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
             <input
@@ -219,10 +219,10 @@ function Header({
               aria-label="Search Academix"
               aria-autocomplete="list"
               aria-expanded={searchFocused}
-              className="input rounded-full !py-2 pl-10"
+              className="input h-9 w-full min-w-0 rounded-full !py-1.5 pl-9"
             />
             {searchFocused && (query.trim() ? (
-              <div role="group" aria-label="Search suggestions" className="absolute left-0 right-0 top-full z-[60] mt-2 max-h-[70vh] overflow-y-auto rounded-xl border border-outline-variant/60 bg-white py-2 shadow-float">
+              <div role="group" aria-label="Search suggestions" className="absolute left-0 top-full z-[60] mt-2 max-h-[70vh] w-[min(28rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-outline-variant/60 bg-white py-2 shadow-float">
                 {suggestionGroups.length ? suggestionGroups.map((group) => (
                   <section key={group.id} aria-label={group.label}>
                     <h2 className="px-4 pt-2 text-[10px] font-bold uppercase tracking-wider text-outline">{group.label}</h2>
@@ -245,7 +245,7 @@ function Header({
                     ))}
                   </section>
                 )) : <p className="px-4 py-3 text-sm text-on-surface-variant">No suggestions found.</p>}
-                <div className="flex gap-1 overflow-x-auto border-t border-outline-variant/40 px-3 py-2">
+                <div className="flex flex-wrap gap-1 border-t border-outline-variant/40 px-3 py-2">
                   {[
                     { id: 'all' as const, label: 'All' },
                     { id: 'universities' as const, label: 'Universities' },
@@ -278,7 +278,7 @@ function Header({
                 </button>
               </div>
             ) : (
-              <div role="group" aria-label="Recent searches" className="absolute left-0 right-0 top-full z-[60] mt-2 max-h-[70vh] overflow-y-auto rounded-xl border border-outline-variant/60 bg-white py-2 shadow-float">
+              <div role="group" aria-label="Recent searches" className="absolute left-0 top-full z-[60] mt-2 max-h-[70vh] w-[min(28rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-outline-variant/60 bg-white py-2 shadow-float">
                 {recentSearches.length ? (
                   <>
                     <div className="flex items-center justify-between px-4 pb-1">
@@ -336,6 +336,7 @@ function Header({
           </button>
           <div ref={filterRootRef} className="relative shrink-0">
             <FilterButton
+              compact
               activeCount={selectedUniversities.length + selectedMajors.length}
               expanded={filterOpen}
               ariaLabel="Filter universities and majors"
@@ -467,7 +468,7 @@ function Header({
           </div>
         </div>
 
-        <nav className="hidden h-full items-center gap-1 lg:flex">
+        <nav className="hidden h-full shrink-0 items-center gap-0 lg:flex">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -475,7 +476,7 @@ function Header({
               end={item.end}
               className={({ isActive }) =>
                 cx(
-                  'flex h-full items-center gap-2 border-b-2 px-3.5 text-sm transition-colors',
+                  'flex h-full whitespace-nowrap items-center gap-1 border-b-2 px-1.5 text-xs transition-colors xl:px-2 2xl:px-2.5',
                   isActive
                     ? 'border-secondary font-semibold text-secondary'
                     : 'border-transparent text-on-surface-variant hover:text-on-surface',
@@ -492,7 +493,7 @@ function Header({
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {signedIn && (
           <div className="relative">
             <button

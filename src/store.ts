@@ -50,8 +50,25 @@ export interface AuthenticatedUser extends OnboardingProfile {
   bannerImageZoom?: number;
   location?: string;
   university?: string;
+  universityId?: string;
   major?: string;
+  majorId?: string;
   graduationYear?: number;
+  degreeLevel?: 'bachelors' | 'masters' | 'phd' | 'other';
+  programmeDurationYears?: number;
+  enrollmentYear?: number;
+  expectedGraduationYear?: number;
+  yearOfStudyOverride?: number;
+  discoverable?: boolean;
+  showUniversityInSearch?: boolean;
+  showYearInSearch?: boolean;
+  languages?: string[];
+  openToMessages?: boolean;
+  openToMentoring?: boolean;
+  title?: string;
+  department?: string;
+  lastActiveAt?: string;
+  blockedUserIds?: string[];
   verificationStatus: 'pending' | 'unverified' | 'verified' | 'rejected';
 }
 

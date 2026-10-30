@@ -9,8 +9,17 @@ const scrypt = promisify(scryptCallback);
 const dataFile = resolve(process.env.AUTH_DATA_FILE || resolve(dirname(fileURLToPath(import.meta.url)), 'data', 'users.json'));
 const notificationsFile = resolve(dirname(dataFile), 'notifications.json');
 const verificationDirectory = resolve(dirname(dataFile), 'verification-documents');
+const catalogDirectory = resolve(dirname(dirname(fileURLToPath(import.meta.url))), 'data');
+const [universityNames, majorNames] = await Promise.all([
+  readFile(resolve(catalogDirectory, 'universities.txt'), 'utf8'),
+  readFile(resolve(catalogDirectory, 'majors.txt'), 'utf8'),
+]).then(([universitiesText, majorsText]) => [
+  universitiesText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
+  majorsText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
+]);
 const sessions = new Map();
 const users = new Map();
+const peopleIndexes = { universities: new Map(), majors: new Map(), enrollmentYears: new Map() };
 let notificationData = { items: [], preferences: {}, readConversations: {} };
 let notificationSaveQueue = Promise.resolve();
 const profileBannerBackgrounds = new Set([
@@ -49,6 +58,44 @@ function isProfileBannerImage(value) {
 const port = Number(process.env.AUTH_PORT || 3001);
 const allowTestLogin = process.env.NODE_ENV !== 'production' && process.env.AUTH_ALLOW_TEST_LOGIN !== 'false';
 
+function optionId(value) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('en')
+    .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+const universityById = new Map(universityNames.map((name) => [optionId(name), name]));
+const majorById = new Map(majorNames.map((name) => [optionId(name), name]));
+const universityAliases = new Map([
+  ['banm', 'Baku Higher Oil School (BHOS)'],
+  ['bhos', 'Baku Higher Oil School (BHOS)'],
+  ['baku higher oil school', 'Baku Higher Oil School (BHOS)'],
+  ['ada', 'ADA University'],
+]);
+
+function universityId(value) {
+  const normalized = value.trim().normalize('NFC').toLocaleLowerCase('en');
+  const alias = universityAliases.get(normalized);
+  const canonical = alias ?? universityNames.find((name) => name.toLocaleLowerCase('en') === normalized);
+  return canonical ? optionId(canonical) : '';
+}
+
+function refreshPeopleIndexes() {
+  for (const index of Object.values(peopleIndexes)) index.clear();
+  for (const user of users.values()) {
+    if (!user.discoverable) continue;
+    for (const [index, value] of [
+      [peopleIndexes.universities, user.universityId],
+      [peopleIndexes.majors, user.majorId],
+      [peopleIndexes.enrollmentYears, user.enrollmentYear],
+    ]) {
+      if (!value) continue;
+      const key = String(value);
+      if (!index.has(key)) index.set(key, new Set());
+      index.get(key).add(user.id);
+    }
+  }
+}
+
 try {
   const saved = JSON.parse(await readFile(dataFile, 'utf8'));
   let migrated = false;
@@ -57,12 +104,21 @@ try {
       user.id = randomUUID();
       migrated = true;
     }
+    if (user.university && !user.universityId) {
+      user.universityId = universityId(user.university) || optionId(user.university);
+      migrated = true;
+    }
+    if (user.major && !user.majorId) {
+      user.majorId = optionId(user.major);
+      migrated = true;
+    }
     users.set(user.email, user);
   }
   if (migrated) await saveUsers();
 } catch (error) {
   if (error.code !== 'ENOENT') throw error;
 }
+refreshPeopleIndexes();
 
 try {
   const saved = JSON.parse(await readFile(notificationsFile, 'utf8'));
@@ -118,8 +174,24 @@ function publicUser(user) {
     role: user.role,
     ...(user.location ? { location: user.location } : {}),
     ...(user.university ? { university: user.university } : {}),
+    ...(user.universityId ? { universityId: user.universityId } : {}),
     ...(user.major ? { major: user.major } : {}),
+    ...(user.majorId ? { majorId: user.majorId } : {}),
     ...(user.graduationYear ? { graduationYear: user.graduationYear } : {}),
+    ...(user.expectedGraduationYear ? { expectedGraduationYear: user.expectedGraduationYear } : {}),
+    ...(user.degreeLevel ? { degreeLevel: user.degreeLevel } : {}),
+    ...(user.programmeDurationYears ? { programmeDurationYears: user.programmeDurationYears } : {}),
+    ...(user.enrollmentYear ? { enrollmentYear: user.enrollmentYear } : {}),
+    ...(user.yearOfStudyOverride ? { yearOfStudyOverride: user.yearOfStudyOverride } : {}),
+    ...(typeof user.discoverable === 'boolean' ? { discoverable: user.discoverable } : {}),
+    ...(typeof user.showUniversityInSearch === 'boolean' ? { showUniversityInSearch: user.showUniversityInSearch } : {}),
+    ...(typeof user.showYearInSearch === 'boolean' ? { showYearInSearch: user.showYearInSearch } : {}),
+    ...(Array.isArray(user.languages) ? { languages: user.languages } : {}),
+    ...(typeof user.openToMessages === 'boolean' ? { openToMessages: user.openToMessages } : {}),
+    ...(typeof user.openToMentoring === 'boolean' ? { openToMentoring: user.openToMentoring } : {}),
+    ...(user.title ? { title: user.title } : {}),
+    ...(user.department ? { department: user.department } : {}),
+    ...(Array.isArray(user.blockedUserIds) ? { blockedUserIds: user.blockedUserIds } : {}),
     ...(isProfileBannerBackground(user.bannerBackground) ? { bannerBackground: user.bannerBackground } : {}),
     ...(bannerImageValid ? { bannerImage: user.bannerImage } : {}),
     ...(bannerImageValid && typeof user.bannerImagePosition === 'string' && /^(?:100|[1-9]?\d)% (?:100|[1-9]?\d)%$/.test(user.bannerImagePosition) ? { bannerImagePosition: user.bannerImagePosition } : {}),
@@ -140,6 +212,268 @@ function authenticatedSession(req) {
     return { session: null, user: null };
   }
   return { session, user: session.user || users.get(session.email) || null };
+}
+
+function currentStudy(user, now = new Date()) {
+  if (user.role !== 'scholar' || user.showYearInSearch === false) return null;
+  const duration = Number.isInteger(user.programmeDurationYears) ? user.programmeDurationYears : null;
+  if (Number.isInteger(user.yearOfStudyOverride)) {
+    return { year: duration ? Math.min(user.yearOfStudyOverride, duration) : user.yearOfStudyOverride, duration };
+  }
+  if (!Number.isInteger(user.enrollmentYear)) return null;
+  const academicYear = now.getFullYear() - (now.getMonth() < 8 ? 1 : 0);
+  const year = academicYear - user.enrollmentYear + 1;
+  if (year < 1) return null;
+  if (duration && year > duration) {
+    return { year: null, duration, graduatedYear: user.expectedGraduationYear ?? user.enrollmentYear + duration };
+  }
+  return { year: duration ? Math.min(year, duration) : year, duration };
+}
+
+function parsePeopleList(url, key, max = 10) {
+  const values = url.searchParams.getAll(key).flatMap((value) => value.split(',')).map((value) => value.trim()).filter(Boolean);
+  if (values.length > max || values.some((value) => value.length > 100)) return null;
+  return [...new Set(values)];
+}
+
+function peopleShortUniversity(name) {
+  return name
+    .replace(/^Baku Higher Oil School \(BHOS\)$/i, 'BHOS (BANM)')
+    .replace(/\s+University of .+$/i, '')
+    .replace(/\s+University$/i, '')
+    .replace(/^ADA University$/i, 'ADA');
+}
+
+function peopleRole(user) {
+  return user.role === 'scholar' ? 'student' : user.role;
+}
+
+function serializePeoplePerson(candidate, viewerInterests) {
+  const study = currentStudy(candidate);
+  const universityVisible = candidate.showUniversityInSearch !== false &&
+    candidate.universityId && universityById.has(candidate.universityId);
+  const majorVisible = candidate.majorId && majorById.has(candidate.majorId);
+  return {
+    id: candidate.id,
+    name: candidate.name.trim(),
+    avatar: candidate.photo || '',
+    role: peopleRole(candidate),
+    ...(universityVisible ? {
+      universityId: candidate.universityId,
+      university: universityById.get(candidate.universityId),
+      universityShortName: peopleShortUniversity(universityById.get(candidate.universityId)),
+    } : {}),
+    ...(majorVisible ? { majorId: candidate.majorId, major: majorById.get(candidate.majorId) } : {}),
+    ...(candidate.showYearInSearch !== false && study ? {
+      year: study.year,
+      programmeDurationYears: study.duration,
+      ...(study.graduatedYear ? { graduatedYear: study.graduatedYear } : {}),
+    } : {}),
+    ...(candidate.degreeLevel ? { degreeLevel: candidate.degreeLevel } : {}),
+    ...(candidate.role === 'faculty' ? {
+      title: typeof candidate.title === 'string' ? candidate.title : '',
+      department: typeof candidate.department === 'string' ? candidate.department : '',
+    } : {}),
+    sharedInterests: (candidate.interests ?? []).filter((interest) => viewerInterests.has(interest.toLocaleLowerCase())),
+    openToMessages: candidate.openToMessages === true,
+    openToMentoring: candidate.openToMentoring === true,
+    verified: candidate.verificationStatus === 'verified',
+  };
+}
+
+async function handlePeople(req, res, url) {
+  if (req.method !== 'GET') {
+    sendJson(res, 405, { error: 'Use GET to search people.' }, { Allow: 'GET' });
+    return;
+  }
+  const roles = parsePeopleList(url, 'roles', 3);
+  const rawUniversities = parsePeopleList(url, 'universities');
+  const rawMajors = parsePeopleList(url, 'majors');
+  const years = parsePeopleList(url, 'years', 6);
+  const levels = parsePeopleList(url, 'levels', 3);
+  const interests = parsePeopleList(url, 'interests', 30);
+  const graduationYears = parsePeopleList(url, 'graduationYears', 10);
+  const intakeYears = parsePeopleList(url, 'intakeYears', 10);
+  const languages = parsePeopleList(url, 'languages', 20);
+  const allowedRoles = new Set(['student', 'scholar', 'prospective', 'faculty']);
+  const allowedYears = new Set(['1', '2', '3', '4', '5+', 'graduate']);
+  const query = (url.searchParams.get('q') ?? '').trim();
+  const location = (url.searchParams.get('location') ?? '').trim();
+  const openToMessages = url.searchParams.get('openToMessages') === 'true';
+  const openToMentoring = url.searchParams.get('openToMentoring') === 'true';
+  const verifiedOnly = url.searchParams.get('verified') === 'true';
+  const sort = url.searchParams.get('sort') ?? 'best-match';
+  const cursor = url.searchParams.get('cursor') ?? '';
+  if (!roles || !rawUniversities || !rawMajors || !years || !levels || !interests || !graduationYears || !intakeYears || !languages ||
+    roles.some((role) => !allowedRoles.has(role)) ||
+    rawUniversities.some((id) => !universityById.has(id)) ||
+    rawMajors.some((id) => !majorById.has(id)) ||
+    years.some((year) => !allowedYears.has(year)) ||
+    levels.some((level) => !['bachelors', 'masters', 'phd'].includes(level)) ||
+    interests.some((interest) => interest.length > 80) ||
+    graduationYears.some((year) => !/^(?:19|20|21)\d{2}$/.test(year)) ||
+    intakeYears.some((year) => !/^(?:19|20|21)\d{2}$/.test(year)) ||
+    languages.some((language) => language.length > 60) ||
+    query.length > 100 || location.length > 100 ||
+    !['true', 'false'].includes(url.searchParams.get('openToMessages') ?? 'false') ||
+    !['true', 'false'].includes(url.searchParams.get('openToMentoring') ?? 'false') ||
+    !['true', 'false'].includes(url.searchParams.get('verified') ?? 'false') ||
+    !['best-match', 'same-university', 'same-major', 'year-ascending', 'recently-active', 'name-ascending'].includes(sort) ||
+    (cursor && (!/^\d+$/.test(cursor) || Number(cursor) > 100000))) {
+    sendJson(res, 400, { error: 'One or more people search filters are invalid.' });
+    return;
+  }
+
+  const { user: viewer } = authenticatedSession(req);
+  const viewerInterests = new Set((Array.isArray(viewer?.interests) ? viewer.interests : []).map((value) => value.toLocaleLowerCase()));
+  const viewerUniversityId = viewer?.universityId || (viewer?.university ? universityId(viewer.university) : '');
+  const viewerMajorId = viewer?.majorId || (viewer?.major ? optionId(viewer.major) : '');
+  const currentUserId = viewer?.id;
+  const blockedUserIds = new Set(Array.isArray(viewer?.blockedUserIds) ? viewer.blockedUserIds : []);
+  const commonCandidates = [...users.values()].filter((candidate) =>
+    candidate.discoverable === true &&
+    candidate.id !== currentUserId &&
+    !blockedUserIds.has(candidate.id) &&
+    !(Array.isArray(candidate.blockedUserIds) && candidate.blockedUserIds.includes(currentUserId)) &&
+    typeof candidate.name === 'string' &&
+    candidate.name.trim() !== '' &&
+    !candidate.name.includes('@'),
+  );
+  const normalizedInterests = interests.map((value) => value.toLocaleLowerCase());
+  const baseMatches = (candidate, excludedFilter = '') => {
+    const candidateRole = peopleRole(candidate);
+    if (excludedFilter !== 'roles' && roles.length && !roles.some((role) => role === candidateRole || (role === 'scholar' && candidateRole === 'student'))) return false;
+    if (excludedFilter !== 'universities' && rawUniversities.length &&
+      (candidate.showUniversityInSearch === false || !rawUniversities.includes(candidate.universityId))) return false;
+    if (excludedFilter !== 'majors' && rawMajors.length && !rawMajors.includes(candidate.majorId)) return false;
+    const study = currentStudy(candidate);
+    if (excludedFilter !== 'years' && years.length) {
+      if (candidate.showYearInSearch === false) return false;
+      const yearIds = study?.graduatedYear ? ['graduate'] : study?.year ? [study.year >= 5 ? '5+' : String(study.year)] : [];
+      if (!years.some((year) => yearIds.includes(year))) return false;
+    }
+    if (levels.length && !levels.includes(candidate.degreeLevel)) return false;
+    if (excludedFilter !== 'interests' && normalizedInterests.length &&
+      !normalizedInterests.some((interest) => (candidate.interests ?? []).some((value) => value.toLocaleLowerCase() === interest))) return false;
+    if (location && !candidate.location?.toLocaleLowerCase().includes(location.toLocaleLowerCase())) return false;
+    if (graduationYears.length &&
+      (candidate.showYearInSearch === false || !graduationYears.includes(String(candidate.expectedGraduationYear ?? candidate.graduationYear ?? '')))) return false;
+    if (intakeYears.length &&
+      (candidate.showYearInSearch === false || !intakeYears.includes(String(candidate.enrollmentYear ?? '')))) return false;
+    if (languages.length && !languages.some((language) => (candidate.languages ?? []).some((value) => value.toLocaleLowerCase() === language.toLocaleLowerCase()))) return false;
+    if (openToMessages && candidate.openToMessages !== true) return false;
+    if (openToMentoring && candidate.openToMentoring !== true) return false;
+    if (verifiedOnly && candidate.verificationStatus !== 'verified') return false;
+    if (query) {
+      const searchable = [candidate.name, candidate.university, candidate.major].filter(Boolean).join(' ').toLocaleLowerCase();
+      if (!searchable.includes(query.toLocaleLowerCase())) return false;
+    }
+    return true;
+  };
+  let indexedCandidates = commonCandidates;
+  for (const [ids, index] of [
+    [rawUniversities, peopleIndexes.universities],
+    [rawMajors, peopleIndexes.majors],
+  ]) {
+    if (!ids.length) continue;
+    const matchingIds = new Set(ids.flatMap((id) => [...(index.get(id) ?? [])]));
+    indexedCandidates = indexedCandidates.filter((candidate) => matchingIds.has(candidate.id));
+  }
+  if (years.length) {
+    const matchingIds = new Set();
+    for (const ids of peopleIndexes.enrollmentYears.values()) {
+      for (const candidateId of ids) {
+        const candidate = [...users.values()].find((item) => item.id === candidateId);
+        const study = candidate && currentStudy(candidate);
+        const candidateYear = study?.graduatedYear ? 'graduate' : study?.year ? (study.year >= 5 ? '5+' : String(study.year)) : '';
+        if (candidateYear && years.includes(candidateYear)) matchingIds.add(candidateId);
+      }
+    }
+    for (const candidate of commonCandidates) {
+      if (Number.isInteger(candidate.yearOfStudyOverride)) matchingIds.add(candidate.id);
+    }
+    indexedCandidates = indexedCandidates.filter((candidate) => matchingIds.has(candidate.id));
+  }
+  const filtered = indexedCandidates.filter((candidate) => baseMatches(candidate));
+  const countFacets = (candidates, keyOf) => {
+    const counts = new Map();
+    for (const candidate of candidates) {
+      const key = keyOf(candidate);
+      if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  };
+  const universityCounts = countFacets(commonCandidates.filter((candidate) => baseMatches(candidate, 'universities')), (candidate) =>
+    candidate.showUniversityInSearch === false ? '' : candidate.universityId);
+  const majorCounts = countFacets(commonCandidates.filter((candidate) => baseMatches(candidate, 'majors')), (candidate) => candidate.majorId);
+  const yearCounts = countFacets(commonCandidates.filter((candidate) => baseMatches(candidate, 'years')), (candidate) => {
+    if (candidate.showYearInSearch === false) return '';
+    const study = currentStudy(candidate);
+    return study?.graduatedYear ? 'graduate' : study?.year ? (study.year >= 5 ? '5+' : String(study.year)) : '';
+  });
+
+  const sharedInterests = (candidate) => (candidate.interests ?? [])
+    .filter((interest) => viewerInterests.has(interest.toLocaleLowerCase()));
+  const sorted = [...filtered].sort((first, second) => {
+    if (sort === 'same-university' && viewerUniversityId) {
+      const difference = Number(second.showUniversityInSearch !== false && second.universityId === viewerUniversityId) -
+        Number(first.showUniversityInSearch !== false && first.universityId === viewerUniversityId);
+      if (difference) return difference;
+    }
+    if (sort === 'same-major' && viewerMajorId) {
+      const difference = Number(second.majorId === viewerMajorId) - Number(first.majorId === viewerMajorId);
+      if (difference) return difference;
+    }
+    if (sort === 'year-ascending') {
+      const firstYear = currentStudy(first)?.year ?? Number.MAX_SAFE_INTEGER;
+      const secondYear = currentStudy(second)?.year ?? Number.MAX_SAFE_INTEGER;
+      if (firstYear !== secondYear) return firstYear - secondYear;
+    }
+    if (sort === 'name-ascending') return first.name.localeCompare(second.name);
+    if (sort === 'best-match') {
+      const difference = sharedInterests(second).length - sharedInterests(first).length;
+      if (difference) return difference;
+    }
+    const firstActive = Date.parse(first.lastActiveAt ?? first.updatedAt ?? '');
+    const secondActive = Date.parse(second.lastActiveAt ?? second.updatedAt ?? '');
+    return (Number.isFinite(secondActive) ? secondActive : 0) - (Number.isFinite(firstActive) ? firstActive : 0);
+  });
+  const offset = Number(cursor || 0);
+  const pageSize = 20;
+  const items = sorted.slice(offset, offset + pageSize)
+    .map((candidate) => serializePeoplePerson(candidate, viewerInterests));
+  sendJson(res, 200, {
+    items,
+    total: filtered.length,
+    nextCursor: offset + pageSize < sorted.length ? String(offset + pageSize) : null,
+    facets: {
+      universities: [...universityCounts].map(([id, count]) => ({ id, name: universityById.get(id) ?? id, shortName: peopleShortUniversity(universityById.get(id) ?? id), count })),
+      majors: [...majorCounts].map(([id, count]) => ({ id, name: majorById.get(id) ?? id, count })),
+      years: [...yearCounts].map(([id, count]) => ({ id, count })),
+    },
+  });
+}
+
+function handlePublicPerson(req, res, personId) {
+  if (req.method !== 'GET') {
+    sendJson(res, 405, { error: 'Use GET to view a public profile.' }, { Allow: 'GET' });
+    return;
+  }
+  if (!/^[\w-]{1,100}$/.test(personId)) {
+    sendJson(res, 400, { error: 'Invalid profile id.' });
+    return;
+  }
+  const { user: viewer } = authenticatedSession(req);
+  const candidate = [...users.values()].find((user) => user.id === personId);
+  if (!candidate || candidate.id === viewer?.id || candidate.discoverable !== true ||
+    (Array.isArray(viewer?.blockedUserIds) && viewer.blockedUserIds.includes(candidate.id)) ||
+    (Array.isArray(candidate.blockedUserIds) && candidate.blockedUserIds.includes(viewer?.id)) ||
+    typeof candidate.name !== 'string' || !candidate.name.trim() || candidate.name.includes('@')) {
+    sendJson(res, 404, { error: 'Profile not found.' });
+    return;
+  }
+  const interests = new Set((Array.isArray(viewer?.interests) ? viewer.interests : []).map((value) => value.toLocaleLowerCase()));
+  sendJson(res, 200, serializePeoplePerson(candidate, interests));
 }
 
 function notificationUser(req) {
@@ -382,6 +716,14 @@ function decodeIdentityDocument(document) {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  if (url.pathname.startsWith('/api/people/')) {
+    handlePublicPerson(req, res, url.pathname.slice('/api/people/'.length));
+    return;
+  }
+  if (url.pathname === '/api/people') {
+    await handlePeople(req, res, url);
+    return;
+  }
   if (url.pathname.startsWith('/api/notifications')) {
     await handleNotifications(req, res, url);
     return;
@@ -515,6 +857,91 @@ const server = createServer(async (req, res) => {
         }
         if (input.major.trim()) updated.major = input.major.trim();
         else delete updated.major;
+      }
+      if (updated.university) {
+        const canonicalUniversityId = universityId(updated.university);
+        if (canonicalUniversityId) {
+          updated.university = universityById.get(canonicalUniversityId);
+          updated.universityId = canonicalUniversityId;
+        } else {
+          delete updated.universityId;
+        }
+      } else {
+        delete updated.universityId;
+      }
+      if (updated.major) {
+        const canonicalMajorId = optionId(updated.major);
+        if (majorById.has(canonicalMajorId)) {
+          updated.major = majorById.get(canonicalMajorId);
+          updated.majorId = canonicalMajorId;
+        } else {
+          delete updated.majorId;
+        }
+      } else {
+        delete updated.majorId;
+      }
+      if (input.degreeLevel !== undefined) {
+        if (!['bachelors', 'masters', 'phd', 'other'].includes(input.degreeLevel)) {
+          sendJson(res, 400, { error: 'Choose a valid degree level.' });
+          return;
+        }
+        updated.degreeLevel = input.degreeLevel;
+      }
+      if (input.programmeDurationYears !== undefined) {
+        if (input.programmeDurationYears === null || input.programmeDurationYears === '') {
+          delete updated.programmeDurationYears;
+        } else if (!Number.isInteger(input.programmeDurationYears) || input.programmeDurationYears < 1 || input.programmeDurationYears > 12) {
+          sendJson(res, 400, { error: 'Programme length must be between 1 and 12 years.' });
+          return;
+        } else {
+          updated.programmeDurationYears = input.programmeDurationYears;
+        }
+      }
+      for (const field of ['enrollmentYear', 'expectedGraduationYear']) {
+        if (input[field] === undefined) continue;
+        if (input[field] === null || input[field] === '') {
+          delete updated[field];
+        } else if (!Number.isInteger(input[field]) || input[field] < 1900 || input[field] > new Date().getFullYear() + 12) {
+          sendJson(res, 400, { error: `Enter a valid ${field === 'enrollmentYear' ? 'enrollment' : 'expected graduation'} year.` });
+          return;
+        } else {
+          updated[field] = input[field];
+        }
+      }
+      if (input.yearOfStudyOverride !== undefined) {
+        if (input.yearOfStudyOverride === null || input.yearOfStudyOverride === '') {
+          delete updated.yearOfStudyOverride;
+        } else if (!Number.isInteger(input.yearOfStudyOverride) || input.yearOfStudyOverride < 1 || input.yearOfStudyOverride > 12) {
+          sendJson(res, 400, { error: 'Enter a valid current year of study.' });
+          return;
+        } else {
+          updated.yearOfStudyOverride = input.yearOfStudyOverride;
+        }
+      }
+      for (const field of ['discoverable', 'showUniversityInSearch', 'showYearInSearch', 'openToMessages', 'openToMentoring']) {
+        if (input[field] === undefined) continue;
+        if (typeof input[field] !== 'boolean') {
+          sendJson(res, 400, { error: 'Profile visibility settings must be true or false.' });
+          return;
+        }
+        updated[field] = input[field];
+      }
+      if (input.languages !== undefined) {
+        if (!Array.isArray(input.languages) || input.languages.length > 20 ||
+          input.languages.some((language) => typeof language !== 'string' || !language.trim() || language.trim().length > 60)) {
+          sendJson(res, 400, { error: 'Choose up to 20 valid spoken languages.' });
+          return;
+        }
+        updated.languages = [...new Set(input.languages.map((language) => language.trim()))];
+      }
+      for (const field of ['title', 'department']) {
+        if (input[field] === undefined) continue;
+        if (typeof input[field] !== 'string' || input[field].trim().length > 120) {
+          sendJson(res, 400, { error: `${field === 'title' ? 'Title' : 'Department'} must be 120 characters or fewer.` });
+          return;
+        }
+        if (input[field].trim()) updated[field] = input[field].trim();
+        else delete updated[field];
       }
       if (input.graduationYear !== undefined) {
         if (input.graduationYear === null || input.graduationYear === '') {
@@ -691,14 +1118,22 @@ const server = createServer(async (req, res) => {
           };
         }
       }
+      if (updated.discoverable === true && updated.role === 'scholar' &&
+        (!updated.universityId || !updated.majorId || !Number.isInteger(updated.enrollmentYear) || !Number.isInteger(updated.programmeDurationYears))) {
+        sendJson(res, 400, { error: 'Add a valid university, major, enrollment year, and programme length before appearing in student search.' });
+        return;
+      }
+      updated.updatedAt = new Date().toISOString();
       if (session.testOnly) {
         session.user = updated;
       } else {
         users.set(user.email, updated);
         try {
           await saveUsers();
+          refreshPeopleIndexes();
         } catch (error) {
           users.set(user.email, user);
+          refreshPeopleIndexes();
           if (verificationDocumentPath) {
             await unlink(verificationDocumentPath).catch((cleanupError) => {
               console.error('Unable to remove uncommitted verification document:', cleanupError);
@@ -846,7 +1281,10 @@ const server = createServer(async (req, res) => {
         role: input.role,
         ...(typeof input.university === 'string' && input.university ? { university: input.university } : {}),
         ...(typeof input.major === 'string' && input.major ? { major: input.major } : {}),
+        ...(typeof input.university === 'string' && universityId(input.university) ? { universityId: universityId(input.university) } : {}),
+        ...(typeof input.major === 'string' && majorById.has(optionId(input.major)) ? { majorId: optionId(input.major) } : {}),
         ...(input.role === 'scholar' ? { graduationYear: Number(input.graduationYear) } : {}),
+        discoverable: false,
         verificationStatus: isVerificationRequest ? 'pending' : 'unverified',
         photo: '',
         biography: '',
@@ -862,8 +1300,10 @@ const server = createServer(async (req, res) => {
       users.set(email, user);
       try {
         await saveUsers();
+        refreshPeopleIndexes();
       } catch (error) {
         users.delete(email);
+        refreshPeopleIndexes();
         if (verificationDocument) {
           await unlink(resolve(verificationDirectory, verificationDocument.fileName)).catch((cleanupError) => {
             console.error('Unable to remove uncommitted verification document:', cleanupError);
@@ -910,6 +1350,11 @@ const server = createServer(async (req, res) => {
       authenticatedUser = user;
     }
 
+    if (!testOnly && users.has(authenticatedUser.email)) {
+      authenticatedUser.lastActiveAt = new Date().toISOString();
+      users.set(authenticatedUser.email, authenticatedUser);
+      await saveUsers();
+    }
     const token = randomBytes(32).toString('base64url');
     sessions.set(token, {
       email,
