@@ -13,7 +13,7 @@ import {
   type VerificationMethod,
 } from '../components/goldVerification';
 import { saveProfile } from '../authService';
-import { majors as majorOptions, universities } from '../data/educationOptions';
+import { majors as majorOptions, universities, universityNameForId, universityOptionId } from '../data/educationOptions';
 import { defaultInterestEmoji, interestEmojis, interests as interestOptions } from '../data/interestOptions';
 import { people } from '../data/mock';
 import { displayName } from '../data/userIdentity';
@@ -389,7 +389,9 @@ export function RoleChangePage() {
   const navigate = useNavigate();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
-  const [university, setUniversity] = useState(user?.university ?? '');
+  const [university, setUniversity] = useState(user?.role === 'prospective' && user.dreamUniversityId
+    ? universityNameForId(user.dreamUniversityId) ?? user.university ?? ''
+    : user?.university ?? '');
   const [major, setMajor] = useState(user?.major ?? '');
   const [graduationYear, setGraduationYear] = useState(user?.graduationYear?.toString() ?? '');
   const [requestGold, setRequestGold] = useState(false);
@@ -430,6 +432,7 @@ export function RoleChangePage() {
       const result = await saveProfile({
         role: selectedRole,
         university,
+        ...(selectedRole === 'prospective' ? { dreamUniversityId: universityOptionId(university) || null } : {}),
         major,
         graduationYear: selectedRole === 'scholar' ? Number(graduationYear) : null,
         requestGoldVerification: requestGold,
@@ -489,6 +492,9 @@ export function RoleChangePage() {
                   aria-pressed={selectedRole === role.id}
                   onClick={() => {
                     setSelectedRole(role.id);
+                    setUniversity(role.id === 'prospective'
+                      ? universityNameForId(user.dreamUniversityId ?? '') ?? ''
+                      : user.university ?? '');
                     setRequestGold(false);
                     setVerificationMethod('identity_document');
                     setIdentityDocument(null);
@@ -582,7 +588,9 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
   const [interestsOpen, setInterestsOpen] = useState(false);
   const [purpose, setPurpose] = useState(user.purpose);
   const [location, setLocation] = useState(user.location ?? '');
-  const [university, setUniversity] = useState(user.university ?? '');
+  const [university, setUniversity] = useState(user.role === 'prospective'
+    ? universityNameForId(user.dreamUniversityId ?? user.universityId ?? '') ?? user.university ?? ''
+    : user.university ?? '');
   const [major, setMajor] = useState(user.major ?? '');
   const [graduationYear, setGraduationYear] = useState((user.graduationYear ?? user.expectedGraduationYear)?.toString() ?? '');
   const [degreeLevel, setDegreeLevel] = useState(user.degreeLevel ?? 'bachelors');
@@ -696,6 +704,7 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
           purpose,
           location,
           university,
+          ...(user.role === 'prospective' ? { dreamUniversityId: universityOptionId(university) || null } : {}),
           major,
           graduationYear: graduationYear ? Number(graduationYear) : null,
           expectedGraduationYear: graduationYear ? Number(graduationYear) : null,

@@ -53,6 +53,7 @@ export interface AuthenticatedUser extends OnboardingProfile {
   location?: string;
   university?: string;
   universityId?: string;
+  dreamUniversityId?: string;
   major?: string;
   majorId?: string;
   graduationYear?: number;

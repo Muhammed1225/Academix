@@ -1,4 +1,5 @@
-import { majors, universities } from './data/educationOptions';
+import { majors, universities, universityOptionId } from './data/educationOptions';
+import demoUsersJson from '../data/demo_users.json?raw';
 import type { AuthenticatedUser } from './store';
 import type { SocialNetworks } from './components/SocialNetworks';
 
@@ -66,6 +67,8 @@ export interface PeopleResponse {
   };
 }
 
+const demoUsers = JSON.parse(demoUsersJson) as AuthenticatedUser[];
+
 const universityAliases: Record<string, string[]> = {
   'baku-higher-oil-school-bhos': ['BHOS', 'BANM', 'Baku Higher Oil School'],
   'ada-university': ['ADA'],
@@ -94,12 +97,20 @@ function currentStudy(user: AuthenticatedUser) {
 
 function accountMatches(user: AuthenticatedUser, filters: PeopleFilters, excluding?: keyof PeopleFilters) {
   const role = user.role === 'scholar' ? 'student' : user.role;
-  const universityId = user.universityId ?? (user.university ? peopleOptionId(user.university) : '');
+  const legacyUniversityId = user.universityId ?? (user.university ? universityOptionId(user.university) || peopleOptionId(user.university) : '');
+  const universityId = user.role === 'prospective' ? '' : legacyUniversityId;
+  const dreamUniversityId = user.role === 'prospective'
+    ? user.dreamUniversityId ?? legacyUniversityId
+    : '';
   const majorId = user.majorId ?? (user.major ? peopleOptionId(user.major) : '');
   const study = currentStudy(user);
   if (excluding !== 'roles' && filters.roles.length && !filters.roles.includes(role)) return false;
-  if (excluding !== 'universities' && filters.universities.length &&
-    (user.showUniversityInSearch === false || !filters.universities.includes(universityId))) return false;
+  if (excluding !== 'universities' && filters.universities.length) {
+    const matchesCurrentUniversity = user.showUniversityInSearch !== false && filters.universities.includes(universityId);
+    const matchesDreamUniversity = user.role === 'prospective' && user.showUniversityInSearch !== false &&
+      filters.universities.includes(dreamUniversityId);
+    if (!matchesCurrentUniversity && !matchesDreamUniversity) return false;
+  }
   if (excluding !== 'majors' && filters.majors.length && !filters.majors.includes(majorId)) return false;
   if (excluding !== 'years' && filters.years.length) {
     if (user.showYearInSearch === false) return false;
@@ -135,7 +146,9 @@ function localPeopleSearch(filters: PeopleFilters, currentUserId: string, cursor
   } catch {
     accounts = {};
   }
-  const allAccounts = Object.values(accounts);
+  const accountsById = new Map(demoUsers.map((account) => [account.id, account]));
+  for (const account of Object.values(accounts)) accountsById.set(account.id, account);
+  const allAccounts = [...accountsById.values()];
   const viewer = allAccounts.find((candidate) => candidate.id === currentUserId);
   const blockedUserIds = new Set(viewer?.blockedUserIds ?? []);
   const all = allAccounts.filter((user) =>
@@ -152,8 +165,18 @@ function localPeopleSearch(filters: PeopleFilters, currentUserId: string, cursor
     }
     return [...counts].map(([id, value]) => ({ id, count: value }));
   };
-  const universityCounts = count(all.filter((user) => accountMatches(user, filters, 'universities')),
-    (user) => user.showUniversityInSearch === false ? '' : user.universityId ?? (user.university ? peopleOptionId(user.university) : ''));
+  const universityCounts = new Map<string, number>();
+  for (const user of all.filter((candidate) => accountMatches(candidate, filters, 'universities'))) {
+    const legacyUniversityId = user.universityId ?? (user.university ? universityOptionId(user.university) || peopleOptionId(user.university) : '');
+    const currentUniversityId = user.role === 'prospective' ? '' : legacyUniversityId;
+    const accountUniversityIds = new Set([
+      ...(user.showUniversityInSearch !== false && currentUniversityId ? [currentUniversityId] : []),
+      ...(user.role === 'prospective' && user.showUniversityInSearch !== false
+        ? [user.dreamUniversityId ?? legacyUniversityId]
+        : []),
+    ]);
+    for (const id of accountUniversityIds) if (id) universityCounts.set(id, (universityCounts.get(id) ?? 0) + 1);
+  }
   const majorCounts = count(all.filter((user) => accountMatches(user, filters, 'majors')),
     (user) => user.majorId ?? (user.major ? peopleOptionId(user.major) : ''));
   const yearCounts = count(all.filter((user) => accountMatches(user, filters, 'years')), (user) => {
@@ -164,7 +187,9 @@ function localPeopleSearch(filters: PeopleFilters, currentUserId: string, cursor
   const universityLabels = new Map(universities.map((name) => [peopleOptionId(name), name]));
   const majorLabels = new Map(majors.map((name) => [peopleOptionId(name), name]));
   const items = matched.map((user): PeoplePerson => {
-    const universityId = user.universityId ?? (user.university ? peopleOptionId(user.university) : '');
+    const universityId = user.role === 'prospective'
+      ? user.dreamUniversityId ?? (user.university ? universityOptionId(user.university) || peopleOptionId(user.university) : '')
+      : user.universityId ?? (user.university ? universityOptionId(user.university) || peopleOptionId(user.university) : '');
     const majorId = user.majorId ?? (user.major ? peopleOptionId(user.major) : '');
     const study = currentStudy(user);
     return {
@@ -189,7 +214,9 @@ function localPeopleSearch(filters: PeopleFilters, currentUserId: string, cursor
     };
   });
   const sortBy = (first: PeoplePerson, second: PeoplePerson) => {
-    const viewerUniversityId = viewer?.universityId ?? (viewer?.university ? peopleOptionId(viewer.university) : '');
+    const viewerUniversityId = viewer?.role === 'prospective'
+      ? viewer.dreamUniversityId ?? (viewer.university ? universityOptionId(viewer.university) || peopleOptionId(viewer.university) : '')
+      : viewer?.universityId ?? (viewer?.university ? universityOptionId(viewer.university) || peopleOptionId(viewer.university) : '');
     const viewerMajorId = viewer?.majorId ?? (viewer?.major ? peopleOptionId(viewer.major) : '');
     if (filters.sort === 'same-university' && viewerUniversityId) {
       const difference = Number(second.universityId === viewerUniversityId) - Number(first.universityId === viewerUniversityId);
@@ -213,7 +240,7 @@ function localPeopleSearch(filters: PeopleFilters, currentUserId: string, cursor
     total: matched.length,
     nextCursor: offset + 20 < matched.length ? String(offset + 20) : null,
     facets: {
-      universities: universityCounts.map(({ id, count: value }) => ({ id, name: universityLabels.get(id) ?? id, shortName: id === 'baku-higher-oil-school-bhos' ? 'BHOS (BANM)' : id === 'ada-university' ? 'ADA' : universityLabels.get(id), count: value })),
+      universities: [...universityCounts].map(([id, value]) => ({ id, name: universityLabels.get(id) ?? id, shortName: id === 'baku-higher-oil-school-bhos' ? 'BHOS (BANM)' : id === 'ada-university' ? 'ADA' : universityLabels.get(id), count: value })),
       majors: majorCounts.map(({ id, count: value }) => ({ id, name: majorLabels.get(id) ?? id, count: value })),
       years: yearCounts.map(({ id, count: value }) => ({ id, count: value })),
     },
@@ -261,15 +288,20 @@ export async function getPublicPerson(id: string, currentUserId: string, signal?
     } catch {
       accounts = {};
     }
-    const viewer = Object.values(accounts).find((candidate) => candidate.id === currentUserId);
+    const accountsById = new Map(demoUsers.map((account) => [account.id, account]));
+    for (const account of Object.values(accounts)) accountsById.set(account.id, account);
+    const allAccounts = [...accountsById.values()];
+    const viewer = allAccounts.find((candidate) => candidate.id === currentUserId);
     const blockedUserIds = new Set(viewer?.blockedUserIds ?? []);
-    const user = Object.values(accounts).find((candidate) =>
+    const user = allAccounts.find((candidate) =>
       candidate.id === id && candidate.id !== currentUserId && candidate.discoverable === true &&
       candidate.name.trim() !== '' && !candidate.name.includes('@') &&
       !blockedUserIds.has(candidate.id) &&
       !candidate.blockedUserIds?.includes(currentUserId));
     if (!user) return null;
-    const universityId = user.universityId ?? (user.university ? peopleOptionId(user.university) : '');
+    const universityId = user.role === 'prospective'
+      ? user.dreamUniversityId ?? (user.university ? universityOptionId(user.university) || peopleOptionId(user.university) : '')
+      : user.universityId ?? (user.university ? universityOptionId(user.university) || peopleOptionId(user.university) : '');
     const majorId = user.majorId ?? (user.major ? peopleOptionId(user.major) : '');
     const study = currentStudy(user);
     const university = universities.find((name) => peopleOptionId(name) === universityId);

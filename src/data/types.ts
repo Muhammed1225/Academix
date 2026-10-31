@@ -82,6 +82,14 @@ export interface Stat {
 
 export type ConnectionRole = 'prospective' | 'scholar' | 'faculty';
 
+export interface OfferedCourse {
+  title: string;
+  description: string;
+  availableSlots: string[];
+  capacity: number;
+  enrolledCount: number;
+}
+
 export interface Mentor {
   id: string;
   name: string;
@@ -95,6 +103,10 @@ export interface Mentor {
   tags: string[];
   quote: string;
   responseTime: string;
+  coursesOffered?: number;
+  offeredCourses?: OfferedCourse[];
+  followers?: number;
+  feedbackComments?: Review[];
   /** TODO: Populate university and major directly from the mentor API. */
   major?: string;
   socialNetworks?: Partial<Record<'instagram' | 'linkedin' | 'facebook', string>>;
@@ -307,6 +319,7 @@ export interface MentorProfile {
   university?: string;
   tags?: string[];
   stats: { value: string; label: string }[];
+  offeredCourses?: OfferedCourse[];
   about: string[];
   wishIKnew: string[];
   tracks: TitledText[];

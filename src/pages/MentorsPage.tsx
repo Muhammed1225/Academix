@@ -140,7 +140,7 @@ export default function MentorsPage() {
               <p className="mt-4 text-sm font-medium text-on-surface">{mentor.university || 'University not listed'}</p>
               <p className="mt-1 text-sm text-on-surface-variant">{mentor.major || mentor.field || 'Academic mentor'}</p>
               <p className="mt-3 line-clamp-3 flex-1 text-sm leading-relaxed text-on-surface-variant">{mentor.bio || 'A verified mentor ready to share their academic experience.'}</p>
-              <div className="mt-5 flex flex-wrap gap-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 [@media(hover:none)]:!opacity-100">
+              <div className="mt-5 flex flex-wrap gap-2">
                 <Link
                   to={mentorProfilePath(mentor.id)}
                   aria-label={`View ${mentor.name || 'mentor'}'s profile`}

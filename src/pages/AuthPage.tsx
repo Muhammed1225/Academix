@@ -11,7 +11,7 @@ import {
   validateGoldVerification,
   type VerificationMethod,
 } from '../components/goldVerification';
-import { majors, universities } from '../data/educationOptions';
+import { majors, universities, universityOptionId } from '../data/educationOptions';
 
 type Role = 'scholar' | 'prospective' | 'faculty';
 type Errors = Record<string, string>;
@@ -104,7 +104,7 @@ export default function AuthPage() {
     try {
       const encoded = registration && requestGold && method === 'identity_document' && document ? await readIdentityDocument(document) : undefined;
       const result = await authenticate(registration ? 'register' : 'login', { email: email.trim().toLowerCase(), password, ...(registration ? {
-          name: name.trim(), role, university, major, graduationYear: graduationYear || undefined, confirmPassword: confirm,
+          name: name.trim(), role, university, ...(role === 'prospective' ? { dreamUniversityId: university ? universityOptionId(university) : null } : {}), major, graduationYear: graduationYear || undefined, confirmPassword: confirm,
           requestGoldVerification: requestGold, ...(requestGold ? { verificationMethod: method, ...(method === 'edu_email' ? { eduEmail: eduEmail.trim().toLowerCase() } : {}) } : {}),
           ...(encoded && document ? { identityDocument: { type: role === 'faculty' ? 'work_card' : 'student_card', mimeType: document.type, base64: encoded } } : {}),
         } : {}) });

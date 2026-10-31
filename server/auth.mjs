@@ -17,9 +17,10 @@ const [universityNames, majorNames] = await Promise.all([
   universitiesText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
   majorsText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
 ]);
+const demoUsers = JSON.parse(await readFile(resolve(catalogDirectory, 'demo_users.json'), 'utf8'));
 const sessions = new Map();
 const users = new Map();
-const peopleIndexes = { universities: new Map(), majors: new Map(), enrollmentYears: new Map() };
+const peopleIndexes = { universities: new Map(), dreamUniversities: new Map(), majors: new Map(), enrollmentYears: new Map() };
 let notificationData = { items: [], preferences: {}, readConversations: {} };
 let notificationSaveQueue = Promise.resolve();
 const profileBannerBackgrounds = new Set([
@@ -68,6 +69,8 @@ const majorById = new Map(majorNames.map((name) => [optionId(name), name]));
 const universityAliases = new Map([
   ['banm', 'Baku Higher Oil School (BHOS)'],
   ['bhos', 'Baku Higher Oil School (BHOS)'],
+  ['bhos (banm)', 'Baku Higher Oil School (BHOS)'],
+  ['bhos banm', 'Baku Higher Oil School (BHOS)'],
   ['baku higher oil school', 'Baku Higher Oil School (BHOS)'],
   ['ada', 'ADA University'],
 ]);
@@ -79,12 +82,20 @@ function universityId(value) {
   return canonical ? optionId(canonical) : '';
 }
 
+function allPeopleUsers() {
+  const usersById = new Map();
+  for (const user of demoUsers) usersById.set(user.id, user);
+  for (const user of users.values()) usersById.set(user.id, user);
+  return [...usersById.values()];
+}
+
 function refreshPeopleIndexes() {
   for (const index of Object.values(peopleIndexes)) index.clear();
-  for (const user of users.values()) {
+  for (const user of allPeopleUsers()) {
     if (!user.discoverable) continue;
     for (const [index, value] of [
       [peopleIndexes.universities, user.universityId],
+      [peopleIndexes.dreamUniversities, user.role === 'prospective' ? user.dreamUniversityId : undefined],
       [peopleIndexes.majors, user.majorId],
       [peopleIndexes.enrollmentYears, user.enrollmentYear],
     ]) {
@@ -106,6 +117,25 @@ try {
     }
     if (user.university && !user.universityId) {
       user.universityId = universityId(user.university) || optionId(user.university);
+      migrated = true;
+    }
+    if (user.role === 'prospective' && !user.dreamUniversityId && user.universityId && universityById.has(user.universityId)) {
+      user.dreamUniversityId = user.universityId;
+      migrated = true;
+    }
+    if (user.dreamUniversityId && !universityById.has(user.dreamUniversityId)) {
+      delete user.dreamUniversityId;
+      migrated = true;
+    }
+    if (user.role === 'prospective' && user.dreamUniversityId) {
+      const dreamUniversityName = universityById.get(user.dreamUniversityId);
+      if (user.university !== dreamUniversityName) {
+        user.university = dreamUniversityName;
+        migrated = true;
+      }
+    }
+    if (user.role === 'prospective' && user.universityId) {
+      delete user.universityId;
       migrated = true;
     }
     if (user.major && !user.majorId) {
@@ -175,6 +205,7 @@ function publicUser(user) {
     ...(user.location ? { location: user.location } : {}),
     ...(user.university ? { university: user.university } : {}),
     ...(user.universityId ? { universityId: user.universityId } : {}),
+    ...(user.dreamUniversityId ? { dreamUniversityId: user.dreamUniversityId } : {}),
     ...(user.major ? { major: user.major } : {}),
     ...(user.majorId ? { majorId: user.majorId } : {}),
     ...(user.graduationYear ? { graduationYear: user.graduationYear } : {}),
@@ -250,8 +281,9 @@ function peopleRole(user) {
 
 function serializePeoplePerson(candidate, viewerInterests) {
   const study = currentStudy(candidate);
+  const profileUniversityId = candidate.role === 'prospective' ? candidate.dreamUniversityId : candidate.universityId;
   const universityVisible = candidate.showUniversityInSearch !== false &&
-    candidate.universityId && universityById.has(candidate.universityId);
+    profileUniversityId && universityById.has(profileUniversityId);
   const majorVisible = candidate.majorId && majorById.has(candidate.majorId);
   return {
     id: candidate.id,
@@ -259,9 +291,9 @@ function serializePeoplePerson(candidate, viewerInterests) {
     avatar: candidate.photo || '',
     role: peopleRole(candidate),
     ...(universityVisible ? {
-      universityId: candidate.universityId,
-      university: universityById.get(candidate.universityId),
-      universityShortName: peopleShortUniversity(universityById.get(candidate.universityId)),
+      universityId: profileUniversityId,
+      university: universityById.get(profileUniversityId),
+      universityShortName: peopleShortUniversity(universityById.get(profileUniversityId)),
     } : {}),
     ...(majorVisible ? { majorId: candidate.majorId, major: majorById.get(candidate.majorId) } : {}),
     ...(candidate.showYearInSearch !== false && study ? {
@@ -330,7 +362,7 @@ async function handlePeople(req, res, url) {
   const viewerMajorId = viewer?.majorId || (viewer?.major ? optionId(viewer.major) : '');
   const currentUserId = viewer?.id;
   const blockedUserIds = new Set(Array.isArray(viewer?.blockedUserIds) ? viewer.blockedUserIds : []);
-  const commonCandidates = [...users.values()].filter((candidate) =>
+  const commonCandidates = allPeopleUsers().filter((candidate) =>
     candidate.discoverable === true &&
     candidate.id !== currentUserId &&
     !blockedUserIds.has(candidate.id) &&
@@ -343,8 +375,12 @@ async function handlePeople(req, res, url) {
   const baseMatches = (candidate, excludedFilter = '') => {
     const candidateRole = peopleRole(candidate);
     if (excludedFilter !== 'roles' && roles.length && !roles.some((role) => role === candidateRole || (role === 'scholar' && candidateRole === 'student'))) return false;
-    if (excludedFilter !== 'universities' && rawUniversities.length &&
-      (candidate.showUniversityInSearch === false || !rawUniversities.includes(candidate.universityId))) return false;
+    if (excludedFilter !== 'universities' && rawUniversities.length) {
+      const matchesCurrentUniversity = candidate.showUniversityInSearch !== false && rawUniversities.includes(candidate.universityId);
+      const matchesDreamUniversity = candidate.role === 'prospective' && candidate.showUniversityInSearch !== false &&
+        rawUniversities.includes(candidate.dreamUniversityId);
+      if (!matchesCurrentUniversity && !matchesDreamUniversity) return false;
+    }
     if (excludedFilter !== 'majors' && rawMajors.length && !rawMajors.includes(candidate.majorId)) return false;
     const study = currentStudy(candidate);
     if (excludedFilter !== 'years' && years.length) {
@@ -371,19 +407,24 @@ async function handlePeople(req, res, url) {
     return true;
   };
   let indexedCandidates = commonCandidates;
-  for (const [ids, index] of [
-    [rawUniversities, peopleIndexes.universities],
-    [rawMajors, peopleIndexes.majors],
-  ]) {
+  if (rawUniversities.length) {
+    const matchingIds = new Set(rawUniversities.flatMap((id) => [
+      ...(peopleIndexes.universities.get(id) ?? []),
+      ...(peopleIndexes.dreamUniversities.get(id) ?? []),
+    ]));
+    indexedCandidates = indexedCandidates.filter((candidate) => matchingIds.has(candidate.id));
+  }
+  for (const [ids, index] of [[rawMajors, peopleIndexes.majors]]) {
     if (!ids.length) continue;
     const matchingIds = new Set(ids.flatMap((id) => [...(index.get(id) ?? [])]));
     indexedCandidates = indexedCandidates.filter((candidate) => matchingIds.has(candidate.id));
   }
   if (years.length) {
     const matchingIds = new Set();
+    const candidatesById = new Map(commonCandidates.map((candidate) => [candidate.id, candidate]));
     for (const ids of peopleIndexes.enrollmentYears.values()) {
       for (const candidateId of ids) {
-        const candidate = [...users.values()].find((item) => item.id === candidateId);
+        const candidate = candidatesById.get(candidateId);
         const study = candidate && currentStudy(candidate);
         const candidateYear = study?.graduatedYear ? 'graduate' : study?.year ? (study.year >= 5 ? '5+' : String(study.year)) : '';
         if (candidateYear && years.includes(candidateYear)) matchingIds.add(candidateId);
@@ -403,8 +444,16 @@ async function handlePeople(req, res, url) {
     }
     return counts;
   };
-  const universityCounts = countFacets(commonCandidates.filter((candidate) => baseMatches(candidate, 'universities')), (candidate) =>
-    candidate.showUniversityInSearch === false ? '' : candidate.universityId);
+  const universityCounts = new Map();
+  for (const candidate of commonCandidates.filter((person) => baseMatches(person, 'universities'))) {
+    const universityIds = new Set([
+      ...(candidate.role !== 'prospective' && candidate.showUniversityInSearch !== false && candidate.universityId ? [candidate.universityId] : []),
+      ...(candidate.role === 'prospective' && candidate.showUniversityInSearch !== false && candidate.dreamUniversityId
+        ? [candidate.dreamUniversityId]
+        : []),
+    ]);
+    for (const id of universityIds) universityCounts.set(id, (universityCounts.get(id) ?? 0) + 1);
+  }
   const majorCounts = countFacets(commonCandidates.filter((candidate) => baseMatches(candidate, 'majors')), (candidate) => candidate.majorId);
   const yearCounts = countFacets(commonCandidates.filter((candidate) => baseMatches(candidate, 'years')), (candidate) => {
     if (candidate.showYearInSearch === false) return '';
@@ -416,8 +465,9 @@ async function handlePeople(req, res, url) {
     .filter((interest) => viewerInterests.has(interest.toLocaleLowerCase()));
   const sorted = [...filtered].sort((first, second) => {
     if (sort === 'same-university' && viewerUniversityId) {
-      const difference = Number(second.showUniversityInSearch !== false && second.universityId === viewerUniversityId) -
-        Number(first.showUniversityInSearch !== false && first.universityId === viewerUniversityId);
+      const universityIdForSort = (candidate) => candidate.role === 'prospective' ? candidate.dreamUniversityId : candidate.universityId;
+      const difference = Number(second.showUniversityInSearch !== false && universityIdForSort(second) === viewerUniversityId) -
+        Number(first.showUniversityInSearch !== false && universityIdForSort(first) === viewerUniversityId);
       if (difference) return difference;
     }
     if (sort === 'same-major' && viewerMajorId) {
@@ -464,7 +514,7 @@ function handlePublicPerson(req, res, personId) {
     return;
   }
   const { user: viewer } = authenticatedSession(req);
-  const candidate = [...users.values()].find((user) => user.id === personId);
+  const candidate = allPeopleUsers().find((user) => user.id === personId);
   if (!candidate || candidate.id === viewer?.id || candidate.discoverable !== true ||
     (Array.isArray(viewer?.blockedUserIds) && viewer.blockedUserIds.includes(candidate.id)) ||
     (Array.isArray(candidate.blockedUserIds) && candidate.blockedUserIds.includes(viewer?.id)) ||
@@ -946,6 +996,29 @@ const server = createServer(async (req, res) => {
         if (input[field].trim()) updated[field] = input[field].trim();
         else delete updated[field];
       }
+      const profileRole = input.role ?? updated.role;
+      if (input.dreamUniversityId !== undefined) {
+        if (input.dreamUniversityId === null || input.dreamUniversityId === '') {
+          delete updated.dreamUniversityId;
+          if (profileRole === 'prospective') {
+            delete updated.university;
+            delete updated.universityId;
+          }
+        } else if (typeof input.dreamUniversityId !== 'string' || !universityById.has(input.dreamUniversityId)) {
+          sendJson(res, 400, { error: 'Choose a valid dream university.' });
+          return;
+        } else {
+          updated.dreamUniversityId = input.dreamUniversityId;
+          if (profileRole === 'prospective') {
+            updated.university = universityById.get(input.dreamUniversityId);
+            delete updated.universityId;
+          }
+        }
+      } else if (profileRole === 'prospective' && (input.university !== undefined || input.role === 'prospective')) {
+        const selectedDreamUniversityId = updated.universityId || (updated.university ? universityId(updated.university) : '');
+        if (selectedDreamUniversityId) updated.dreamUniversityId = selectedDreamUniversityId;
+        else delete updated.dreamUniversityId;
+      }
       if (input.graduationYear !== undefined) {
         if (input.graduationYear === null || input.graduationYear === '') {
           delete updated.graduationYear;
@@ -1121,6 +1194,12 @@ const server = createServer(async (req, res) => {
           };
         }
       }
+      if (updated.role === 'prospective') {
+        if (updated.dreamUniversityId && universityById.has(updated.dreamUniversityId)) {
+          updated.university = universityById.get(updated.dreamUniversityId);
+        }
+        delete updated.universityId;
+      }
       if (updated.discoverable === true && updated.role === 'scholar' &&
         (!updated.universityId || !updated.majorId || !Number.isInteger(updated.enrollmentYear) || !Number.isInteger(updated.programmeDurationYears))) {
         sendJson(res, 400, { error: 'Add a valid university, major, enrollment year, and programme length before appearing in student search.' });
@@ -1223,6 +1302,11 @@ const server = createServer(async (req, res) => {
         sendJson(res, 400, { error: 'Choose a valid graduation year.' });
         return;
       }
+      if (input.role === 'prospective' && input.dreamUniversityId !== undefined && input.dreamUniversityId !== null &&
+        input.dreamUniversityId !== '' && (typeof input.dreamUniversityId !== 'string' || !universityById.has(input.dreamUniversityId))) {
+        sendJson(res, 400, { error: 'Choose a valid dream university.' });
+        return;
+      }
       const isVerificationRequest = input.requestGoldVerification === true;
       if (isVerificationRequest && !['scholar', 'faculty'].includes(input.role)) {
         sendJson(res, 400, { error: 'Gold verification is available for student / scholar and faculty / representative accounts.' });
@@ -1263,7 +1347,7 @@ const server = createServer(async (req, res) => {
         sendJson(res, 400, { error: 'Request verification to submit an identity document.' });
         return;
       }
-      if (users.has(email)) {
+      if (users.has(email) || demoUsers.some((user) => user.email === email)) {
         sendJson(res, 409, { error: 'An account with that email already exists. Try signing in.' });
         return;
       }
@@ -1277,14 +1361,26 @@ const server = createServer(async (req, res) => {
         await writeFile(resolve(verificationDirectory, fileName), identityDocument, { flag: 'wx', mode: 0o600 });
         verificationDocument = { fileName, type: input.identityDocument.type, submittedAt: new Date().toISOString() };
       }
+      const registeredUniversityId = typeof input.university === 'string' ? universityId(input.university) : '';
+      const requestedDreamUniversityId = input.role === 'prospective'
+        ? (typeof input.dreamUniversityId === 'string' && input.dreamUniversityId
+          ? input.dreamUniversityId
+          : registeredUniversityId)
+        : '';
+      const accountUniversityId = input.role === 'prospective' ? '' : registeredUniversityId;
+      const displayedUniversityId = input.role === 'prospective' ? requestedDreamUniversityId : accountUniversityId;
+      const accountUniversityName = displayedUniversityId
+        ? universityById.get(displayedUniversityId) ?? input.university
+        : input.university;
       const user = {
         id: randomUUID(),
         email,
         name,
         role: input.role,
-        ...(typeof input.university === 'string' && input.university ? { university: input.university } : {}),
+        ...(typeof accountUniversityName === 'string' && accountUniversityName ? { university: accountUniversityName } : {}),
         ...(typeof input.major === 'string' && input.major ? { major: input.major } : {}),
-        ...(typeof input.university === 'string' && universityId(input.university) ? { universityId: universityId(input.university) } : {}),
+        ...(accountUniversityId ? { universityId: accountUniversityId } : {}),
+        ...(requestedDreamUniversityId ? { dreamUniversityId: requestedDreamUniversityId } : {}),
         ...(typeof input.major === 'string' && majorById.has(optionId(input.major)) ? { majorId: optionId(input.major) } : {}),
         ...(input.role === 'scholar' ? { graduationYear: Number(input.graduationYear) } : {}),
         discoverable: false,

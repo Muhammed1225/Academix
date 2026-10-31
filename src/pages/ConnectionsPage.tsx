@@ -1,21 +1,26 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { Avatar, Icon, Tag, cx } from '../components/ui';
 import PeopleFilterSelect, { type PeopleFilterOption } from '../components/PeopleFilterSelect';
-import UserAvatar from '../components/UserAvatar';
-import { colleges } from '../data/mock';
+import { colleges, people } from '../data/mock';
 import { defaultInterestEmoji, interestEmojis, interests as signupInterests } from '../data/interestOptions';
-import { majors, universities } from '../data/educationOptions';
+import { majors, universities, universityOptionId } from '../data/educationOptions';
 import type { ConnectionRole } from '../data/types';
 import { peopleOptionId, searchPeople, universitySearchKeywords, type PeopleDegreeLevel, type PeopleFilters, type PeoplePerson, type PeopleResponse, type PeopleRole, type PeopleSort, type PeopleYear } from '../peopleService';
 import { useApp } from '../store';
 
-const connections = colleges.flatMap((college) =>
-  college.mentors.map((mentor) => ({ college, mentor })),
-);
 const initialPreferences = ['15-122 Rigor', 'SCS Supplemental Essay'];
 const interestsPerPage = 12;
+const sampleStudentAccounts = [
+  { person: people.sarahLin, role: 'prospective' as const },
+  { person: people.jordanVance, role: 'prospective' as const },
+  { person: people.alexRivera, role: 'scholar' as const },
+];
+const sampleStudentAccountsById = new Map(sampleStudentAccounts.map((account) => [account.person.id, account]));
+const mentorProfilesById = new Map(colleges.flatMap((college) =>
+  college.mentors.map((mentor) => [mentor.id, { college, mentor }] as const),
+));
 const connectionRoles: Record<ConnectionRole, { label: string; icon: string }> = {
   prospective: { label: 'Prospective student', icon: 'person_search' },
   scholar: { label: 'Student / Scholar', icon: 'school' },
@@ -69,7 +74,7 @@ export default function ConnectionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [rememberedParams] = useState(() => sessionStorage.getItem('academix.make-connections.filters') ?? '');
   const [restoredFilters, setRestoredFilters] = useState(false);
-  const [peopleResults, setPeopleResults] = useState<PeopleResponse | null>(null);
+  const [peopleResult, setPeopleResult] = useState<{ key: string; response: PeopleResponse } | null>(null);
   const [peopleLoading, setPeopleLoading] = useState(true);
   const [peopleLoadingMore, setPeopleLoadingMore] = useState(false);
   const loadMoreController = useRef<AbortController | null>(null);
@@ -128,21 +133,25 @@ export default function ConnectionsPage() {
     setSearchParams(params, { replace });
   };
   const selectedRoleParams = selectedRoles.map((role) => role === 'scholar' ? 'student' : role);
+  const selectedUniversityContext = searchParams.get('university');
+  const university = colleges.find((college) => college.id === selectedUniversityContext || universityOptionId(college.name) === selectedUniversityContext);
   const filters = useMemo<PeopleFilters>(() => {
     const params = new URLSearchParams(paramKey);
     const roles = csvParams(params, 'roles').filter((role): role is PeopleRole =>
       ['student', 'prospective', 'faculty'].includes(role));
     const querySort = params.get('sort');
+    const selectedUniversities = csvParams(params, 'universities');
+    const contextUniversityId = university ? universityOptionId(university.name) || peopleOptionId(university.name) : '';
     return {
       roles,
-      universities: csvParams(params, 'universities'),
+      universities: selectedUniversities.length ? selectedUniversities : contextUniversityId ? [contextUniversityId] : [],
       majors: csvParams(params, 'majors'),
       years: csvParams(params, 'years') as PeopleYear[],
       levels: csvParams(params, 'levels') as PeopleDegreeLevel[],
       interests: params.has('interests')
         ? csvParams(params, 'interests').filter((interest) => interest !== 'none')
         : params.has('university') ? [] : initialPreferences,
-      query: peopleQuery,
+      query: params.get('q') ?? '',
       sort: sortOptions.some((option) => option.value === querySort) ? querySort as PeopleSort : 'best-match',
       location: params.get('location') ?? '',
       graduationYears: csvParams(params, 'graduationYears'),
@@ -152,11 +161,30 @@ export default function ConnectionsPage() {
       openToMentoring: params.get('openToMentoring') === 'true',
       verifiedOnly: params.get('verified') === 'true',
     };
-  }, [paramKey, peopleQuery]);
+  }, [paramKey, university]);
+  const peopleRequestKey = JSON.stringify([
+    filters,
+    user?.id ?? '',
+    user?.universityId ?? '',
+    user?.dreamUniversityId ?? '',
+    user?.university ?? '',
+    user?.majorId ?? '',
+    user?.major ?? '',
+    user?.interests ?? [],
+    user?.blockedUserIds ?? [],
+  ]);
+  const peopleResults = peopleResult?.key === peopleRequestKey ? peopleResult.response : null;
+  const peopleSearchPending = peopleLoading || (!peopleResults && !peopleError);
+  useLayoutEffect(() => {
+    setPeopleResult(null);
+    setPeopleError('');
+    setPeopleLoading(true);
+    setPeopleLoadingMore(false);
+  }, [peopleRequestKey]);
   const universityFacetMap = new Map((peopleResults?.facets.universities ?? []).map((facet) => [facet.id, facet]));
   const majorFacetMap = new Map((peopleResults?.facets.majors ?? []).map((facet) => [facet.id, facet]));
   const universityFilterOptions: PeopleFilterOption[] = universities.map((name) => {
-    const id = peopleOptionId(name);
+    const id = universityOptionId(name) || peopleOptionId(name);
     const facet = universityFacetMap.get(id);
     const aliases = universitySearchKeywords(name);
     return { id, label: name, count: facet?.count ?? 0, keywords: aliases };
@@ -173,23 +201,10 @@ export default function ConnectionsPage() {
     selected: selectedByFilter[config.id],
     placeholder: config.id === 'universities' ? 'Any university' : 'Any major',
   }));
-  const university = colleges.find((college) => college.id === searchParams.get('university'));
-  const affiliatedConnections = university
-    ? connections.filter(({ college }) => college.id === university.id)
-    : connections;
   const filteredInterests = signupInterests.filter((interest) =>
     interest.toLocaleLowerCase().includes(interestSearch.trim().toLocaleLowerCase()),
   );
   const visibleInterests = filteredInterests.slice(0, visibleInterestCount);
-
-  const recommendations = affiliatedConnections
-    .filter(({ mentor }) => !selectedRoles.length || selectedRoles.includes(mentor.role))
-    .filter(({ mentor }) => !preferences.length || mentor.tags.some((tag) => preferences.includes(tag)))
-    .sort(
-      (a, b) =>
-        b.mentor.tags.filter((tag) => preferences.includes(tag)).length -
-        a.mentor.tags.filter((tag) => preferences.includes(tag)).length,
-    );
 
   const searchQueryParam = searchParams.get('q');
   const searchLocationParam = searchParams.get('location');
@@ -231,14 +246,15 @@ export default function ConnectionsPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    setPeopleLoading(true);
+    setPeopleLoadingMore(false);
+    setPeopleError('');
+    loadMoreController.current?.abort();
     const timer = window.setTimeout(() => {
-      setPeopleLoading(true);
-      setPeopleLoadingMore(false);
-      loadMoreController.current?.abort();
-      setPeopleError('');
       void searchPeople(filters, user?.id ?? '', controller.signal)
         .then((result) => {
-          setPeopleResults(result);
+          if (controller.signal.aborted) return;
+          setPeopleResult({ key: peopleRequestKey, response: result });
           setPeopleLoading(false);
         })
         .catch((error: unknown) => {
@@ -252,7 +268,7 @@ export default function ConnectionsPage() {
       controller.abort();
       loadMoreController.current?.abort();
     };
-  }, [filters, user?.id]);
+  }, [filters, peopleRequestKey, user?.id]);
 
   const togglePreference = (interest: string) => {
     const next = preferences.includes(interest)
@@ -270,6 +286,7 @@ export default function ConnectionsPage() {
     updateParams({
       roles: [],
       universities: [],
+      university: null,
       majors: [],
       years: [],
       levels: [],
@@ -288,12 +305,24 @@ export default function ConnectionsPage() {
 
   const loadMorePeople = async () => {
     if (!peopleResults?.nextCursor || peopleLoadingMore) return;
+    const requestKey = peopleRequestKey;
+    const cursor = peopleResults.nextCursor;
     setPeopleLoadingMore(true);
     const controller = new AbortController();
     loadMoreController.current = controller;
     try {
-      const next = await searchPeople(filters, user?.id ?? '', controller.signal, peopleResults.nextCursor);
-      setPeopleResults((current) => current ? { ...next, items: [...current.items, ...next.items] } : next);
+      const next = await searchPeople(filters, user?.id ?? '', controller.signal, cursor);
+      if (controller.signal.aborted) return;
+      setPeopleResult((current) => {
+        if (!current || current.key !== requestKey) return current;
+        const existingIds = new Set(current.response.items.map((person) => person.id));
+        const newItems = next.items.filter((person) => {
+          if (existingIds.has(person.id)) return false;
+          existingIds.add(person.id);
+          return true;
+        });
+        return { key: requestKey, response: { ...next, items: [...current.response.items, ...newItems] } };
+      });
     } catch (error) {
       if (controller.signal.aborted) return;
       setPeopleError(error instanceof Error ? error.message : 'Unable to load more people.');
@@ -304,7 +333,10 @@ export default function ConnectionsPage() {
 
   const removeFilter = (key: string, value: string) => {
     if (key === 'roles') updateParams({ roles: selectedRoleParams.filter((item) => item !== value) });
-    else if (key === 'universities') updateParams({ universities: selectedUniversities.filter((item) => item !== value) });
+    else if (key === 'universities') {
+      const nextUniversities = selectedUniversities.filter((item) => item !== value);
+      updateParams({ universities: nextUniversities, ...(nextUniversities.length ? {} : { university: null }) });
+    }
     else if (key === 'majors') updateParams({ majors: selectedMajors.filter((item) => item !== value) });
     else if (key === 'years') updateParams({ years: selectedYears.filter((item) => item !== value) });
     else if (key === 'levels') updateParams({ levels: selectedLevels.filter((item) => item !== value) });
@@ -337,7 +369,7 @@ export default function ConnectionsPage() {
   }));
   const selectedFilterChips = [
     ...roleFilterOptions,
-    ...selectedUniversities.map((id) => ({ key: 'universities', id, label: universities.find((name) => peopleOptionId(name) === id) ?? id })),
+    ...selectedUniversities.map((id) => ({ key: 'universities', id, label: universities.find((name) => (universityOptionId(name) || peopleOptionId(name)) === id) ?? id })),
     ...selectedMajors.map((id) => ({ key: 'majors', id, label: majors.find((name) => peopleOptionId(name) === id) ?? id })),
     ...selectedYears.map((id) => ({ key: 'years', id, label: yearOptions.find((option) => option.id === id)?.label ?? id })),
     ...selectedLevels.map((id) => ({ key: 'levels', id, label: degreeLevelOptions.find((option) => option.id === id)?.label ?? id })),
@@ -575,11 +607,11 @@ export default function ConnectionsPage() {
             </div>
           )}
           <p className="mt-4 text-sm font-semibold text-primary" aria-live="polite" aria-atomic="true">
-            {peopleLoading ? 'Updating people…' : `${peopleResults?.total ?? 0} ${peopleResults?.total === 1 ? 'person matches' : 'people match'}`}
+            {peopleSearchPending ? 'Updating people…' : `${peopleResults?.total ?? 0} ${peopleResults?.total === 1 ? 'person matches' : 'people match'}`}
           </p>
           <div className="fixed inset-x-0 bottom-0 z-[71] flex gap-3 border-t border-outline-variant bg-white p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:hidden">
             <button type="button" onClick={clearAll} className="btn-outline flex-1">Clear all</button>
-            <button type="button" onClick={() => setMobileFiltersOpen(false)} className="btn-primary flex-1">Apply ({peopleLoading ? '…' : peopleResults?.total ?? 0} results)</button>
+            <button type="button" onClick={() => setMobileFiltersOpen(false)} className="btn-primary flex-1">Apply ({peopleSearchPending ? '…' : peopleResults?.total ?? 0} results)</button>
           </div>
         </div>
       </section>
@@ -649,80 +681,107 @@ export default function ConnectionsPage() {
         </div>
       </section>
 
-      <section aria-labelledby="students-results-heading" className="scroll-mt-24">
+      <section aria-labelledby="recommended-connections-heading" className="scroll-mt-24 space-y-6">
+        <div>
+          <h2 id="recommended-connections-heading" className="font-headline text-xl font-semibold text-primary">
+            Recommended connections
+          </h2>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            {peopleResults?.total ?? 0} people to connect with
+          </p>
+        </div>
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 id="students-results-heading" className="font-headline text-xl font-semibold text-primary">People matching your filters</h2>
             <p className="mt-1 text-sm text-on-surface-variant" aria-live="polite">
-              {peopleLoading ? 'Searching people…' : `${peopleResults?.total ?? 0} ${peopleResults?.total === 1 ? 'person' : 'people'} match`}
+              {peopleSearchPending ? 'Searching people…' : `${peopleResults?.total ?? 0} ${peopleResults?.total === 1 ? 'person' : 'people'} match`}
             </p>
           </div>
         </div>
         {peopleError && <p role="alert" className="mb-3 rounded-lg bg-error-container px-4 py-3 text-sm text-on-error-container">{peopleError}</p>}
-        {peopleLoading ? (
-          <div className="grid gap-3 sm:grid-cols-2" aria-label="Loading people" role="status">
-            {[0, 1, 2, 3].map((item) => <div key={item} className="card flex animate-pulse gap-3 p-5"><div className="h-14 w-14 rounded-full bg-surface-container" /><div className="flex-1 space-y-3"><div className="h-4 w-2/3 rounded bg-surface-container" /><div className="h-3 w-1/2 rounded bg-surface-container" /><div className="h-8 w-full rounded bg-surface-container" /></div></div>)}
+        {peopleSearchPending ? (
+          <div className="space-y-3" aria-label="Loading people" role="status">
+            {[0, 1, 2, 3].map((item) => <div key={item} className="card flex animate-pulse gap-4 p-5 sm:p-6"><div className="h-14 w-14 shrink-0 rounded-xl bg-surface-container" /><div className="flex-1 space-y-3"><div className="h-4 w-2/3 rounded bg-surface-container" /><div className="h-3 w-1/2 rounded bg-surface-container" /><div className="h-8 w-3/4 rounded bg-surface-container" /></div></div>)}
           </div>
         ) : peopleResults?.items.length ? (
           <>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-3">
               {peopleResults.items.map((person) => {
                 const role = person.role === 'student' ? 'scholar' : person.role;
-                const sameUniversity = Boolean(user && (user.universityId ?? (user.university ? peopleOptionId(user.university) : '')) === person.universityId);
+                const mentorProfile = mentorProfilesById.get(person.id);
+                const sampleProfile = sampleStudentAccountsById.get(person.id)?.person;
+                const profilePath = mentorProfile ? `/mentors/${person.id}` : `/people/${person.id}`;
+                const viewerUniversityId = user?.role === 'prospective'
+                  ? user.dreamUniversityId ?? (user.university ? universityOptionId(user.university) || peopleOptionId(user.university) : '')
+                  : user?.universityId ?? (user?.university ? universityOptionId(user.university) || peopleOptionId(user.university) : '');
+                const sameUniversity = Boolean(viewerUniversityId && viewerUniversityId === person.universityId);
                 const sameMajor = Boolean(user && (user.majorId ?? (user.major ? peopleOptionId(user.major) : '')) === person.majorId);
-                const subtitle = [person.major, person.universityShortName].filter(Boolean).join(' · ');
+                const subtitle = sampleProfile?.subtitle ?? [person.major, person.universityShortName].filter(Boolean).join(' · ');
+                const profileInterests = mentorProfile?.mentor.tags ?? sampleProfile?.interests ?? person.sharedInterests;
+                const highlightedInterests = profileInterests.filter((interest) => preferences.includes(interest));
                 return (
-                  <article key={person.id} className="card flex min-w-0 flex-col gap-3 p-4 sm:p-5">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <UserAvatar
-                        src={person.avatar || undefined}
-                        name={person.name}
-                        size={52}
-                        profileHref={`/people/${person.id}`}
-                        showName
-                        nameClassName="text-sm"
-                        subtitle={undefined}
-                        disableProfilePreview
-                        className="min-w-0 flex-1"
-                      />
-                      <Tag tone={person.verified ? 'green' : 'neutral'}>{connectionRoles[role].label}</Tag>
-                    </div>
-                    <div className="min-h-[4.5rem] space-y-1 text-sm text-on-surface-variant">
-                      {person.university && (
-                        <p title={person.university}>
-                          <Icon name="account_balance" className="mr-1 !text-[16px]" />
-                          <span className="font-medium text-on-surface">{person.universityShortName}</span>
-                          <span className="sr-only">, {person.university}</span>
-                        </p>
-                      )}
-                      {person.major && <p><Icon name="school" className="mr-1 !text-[16px]" />{person.major}</p>}
-                      <p><Icon name={person.role === 'faculty' ? 'work' : 'calendar_month'} className="mr-1 !text-[16px]" />{getPersonStudyLabel(person)}</p>
-                    </div>
-                    {(sameUniversity || sameMajor || person.sharedInterests.length > 0) && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {sameUniversity && <Tag tone="blue">Same university</Tag>}
-                        {sameMajor && <Tag tone="blue">Same major</Tag>}
-                        {person.sharedInterests.length > 0 && <Tag tone="blue">{person.sharedInterests.length} shared {person.sharedInterests.length === 1 ? 'interest' : 'interests'}</Tag>}
+                  <article key={person.id} className="card p-5 sm:p-6">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                      <Link
+                        to={profilePath}
+                        aria-label={`View ${person.name}'s profile`}
+                        className="shrink-0 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary"
+                      >
+                        <Avatar src={person.avatar || undefined} name={person.name} size={56} />
+                      </Link>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold text-primary">
+                            <Link to={profilePath} className="rounded-sm hover:text-secondary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary">
+                              {person.name}
+                            </Link>
+                          </h3>
+                          <Tag tone={person.verified ? 'green' : 'neutral'}>{connectionRoles[role].label}</Tag>
+                        </div>
+                        {person.university && (
+                          <p className="mt-1 text-sm text-on-surface-variant" title={person.university}>
+                            <Icon name="account_balance" className="mr-1 !text-[16px]" />
+                            <span>{person.universityShortName}</span>
+                            <span className="sr-only">, {person.university}</span>
+                          </p>
+                        )}
+                        {person.major && <p className="text-sm text-on-surface-variant"><Icon name="school" className="mr-1 !text-[16px]" />{person.major}</p>}
+                        <p className="text-sm text-on-surface-variant"><Icon name={person.role === 'faculty' ? 'work' : 'calendar_month'} className="mr-1 !text-[16px]" />{getPersonStudyLabel(person)}</p>
+                        {sampleProfile?.education && <p className="text-sm text-on-surface-variant">{sampleProfile.education}</p>}
+                        {sampleProfile?.location && <p className="text-sm text-on-surface-variant"><Icon name="location_on" className="mr-1 !text-[16px]" />{sampleProfile.location}</p>}
+                        {sampleProfile?.about && <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">{sampleProfile.about}</p>}
+                        {mentorProfile && <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">{mentorProfile.mentor.quote}</p>}
+                        {(sameUniversity || sameMajor || profileInterests.length > 0) && (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {sameUniversity && <Tag tone="blue">Same university</Tag>}
+                            {sameMajor && <Tag tone="blue">Same major</Tag>}
+                            {profileInterests.map((interest) => <Tag key={interest} tone={highlightedInterests.includes(interest) ? 'blue' : 'neutral'}>{interest}</Tag>)}
+                          </div>
+                        )}
+                        {mentorProfile && <p className="mt-3 flex items-center gap-1 text-xs text-on-surface-variant"><Icon name="star" fill className="!text-[15px] text-gold" />{mentorProfile.mentor.rating.toFixed(1)} · {mentorProfile.mentor.reviews} reviews · Usually responds {mentorProfile.mentor.responseTime}</p>}
                       </div>
-                    )}
-                    <div className="mt-auto flex gap-2 border-t border-outline-variant/50 pt-3">
-                      <button
-                        type="button"
-                        disabled={requested.includes(person.id)}
-                        onClick={() => requestConnection(person.id, person.name)}
-                        className={requested.includes(person.id) ? 'btn-outline flex-1 !text-on-surface-variant' : 'btn-primary flex-1'}
-                      >
-                        <Icon name={requested.includes(person.id) ? 'check' : 'person_add'} />
-                        {requested.includes(person.id) ? 'Request sent' : 'Connect'}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={person.id === user?.id}
-                        onClick={() => openMiniChatForPerson({ id: person.id, name: person.name, subtitle, avatar: person.avatar })}
-                        className="btn-outline flex-1"
-                      >
-                        <Icon name="mail" /> Message
-                      </button>
+                      <div className="flex shrink-0 gap-2 sm:flex-col">
+                        <button
+                          type="button"
+                          disabled={requested.includes(person.id)}
+                          onClick={() => requestConnection(person.id, person.name)}
+                          className={requested.includes(person.id) ? 'btn-outline !text-on-surface-variant' : 'btn-primary'}
+                        >
+                          <Icon name={requested.includes(person.id) ? 'check' : 'person_add'} />
+                          {requested.includes(person.id) ? 'Request sent' : 'Connect'}
+                        </button>
+                        {mentorProfile ? (
+                          <Link to={`/colleges/${mentorProfile.college.id}`} className="btn-ghost justify-center">View college</Link>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={person.id === user?.id}
+                            onClick={() => openMiniChatForPerson({ id: person.id, name: person.name, subtitle, avatar: person.avatar })}
+                            className="btn-ghost justify-center"
+                          >
+                            <Icon name="mail" /> Message
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </article>
                 );
@@ -736,83 +795,13 @@ export default function ConnectionsPage() {
               </div>
             )}
           </>
-        ) : !peopleLoading && (
-          <div className="card p-8 text-center">
-            <Icon name="person_search" className="text-secondary" />
-            <p className="mt-2 font-semibold text-primary">No students match these filters</p>
-            <p className="mt-1 text-sm text-on-surface-variant">Try removing one filter to broaden your search.</p>
-            <button type="button" onClick={clearAll} className="btn-primary mt-4">Clear filters</button>
-          </div>
-        )}
-      </section>
-
-      <section aria-labelledby="recommendations-heading">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h2 id="recommendations-heading" className="font-headline text-xl font-semibold text-primary">
-              People you may like to meet
-            </h2>
-            <p className="mt-1 text-sm text-on-surface-variant">
-              {recommendations.length} {recommendations.length === 1 ? 'recommendation' : 'recommendations'}
-              {preferences.length ? ' matching your interests' : ' across the community'}
-            </p>
-          </div>
-        </div>
-        {recommendations.length ? (
-          <div className="space-y-3">
-            {recommendations.map(({ college, mentor }) => {
-              const sharedInterests = mentor.tags.filter((tag) => preferences.includes(tag));
-              const hasRequested = requested.includes(mentor.id);
-              return (
-                <article key={mentor.id} className="card p-5 sm:p-6">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                    <Avatar src={mentor.avatar} name={mentor.name} size={56} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-semibold text-primary">{mentor.name}</h3>
-                        <Tag tone="green">{connectionRoles[mentor.role].label}</Tag>
-                      </div>
-                      <p className="mt-1 text-sm text-on-surface-variant">{mentor.program}</p>
-                      <p className="text-sm text-on-surface-variant">{college.name}</p>
-                      <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">{mentor.quote}</p>
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {(sharedInterests.length ? sharedInterests : mentor.tags).map((tag) => (
-                          <Tag key={tag} tone={sharedInterests.includes(tag) ? 'blue' : 'neutral'}>{tag}</Tag>
-                        ))}
-                      </div>
-                      <p className="mt-3 flex items-center gap-1 text-xs text-on-surface-variant">
-                        <Icon name="star" fill className="!text-[15px] text-gold" />
-                        {mentor.rating.toFixed(1)} · {mentor.reviews} reviews
-                        <span className="mx-1">·</span>
-                        Usually responds {mentor.responseTime}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 gap-2 sm:flex-col">
-                      <button
-                        type="button"
-                        disabled={hasRequested}
-                        onClick={() => requestConnection(mentor.id, mentor.name)}
-                        className={hasRequested ? 'btn-outline !text-on-surface-variant' : 'btn-primary'}
-                      >
-                        <Icon name={hasRequested ? 'check' : 'person_add'} />
-                        {hasRequested ? 'Request sent' : 'Connect'}
-                      </button>
-                      <Link to={`/colleges/${college.id}`} className="btn-ghost justify-center">
-                        View college
-                      </Link>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
+        ) : !peopleError ? (
           <div className="card p-8 text-center">
             <Icon name="person_search" className="text-secondary" />
             <p className="mt-2 font-semibold text-primary">No matches for those filters yet</p>
             <p className="mt-1 text-sm text-on-surface-variant">Try selecting different roles or topics, or clear your preferences to browse everyone.</p>
           </div>
-        )}
+        ) : null}
       </section>
     </div>
   );

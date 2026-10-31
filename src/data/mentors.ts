@@ -34,11 +34,12 @@ const directoryProfile = (mentor: DirectoryMentor): MentorProfile => ({
   languages: 'English',
   tags: mentor.tags,
   socialNetworks: mentor.socialNetworks,
+  offeredCourses: mentor.offeredCourses ?? [],
   stats: [
-    { value: '—', label: 'Major GPA' },
+    { value: mentor.followers === undefined ? '—' : String(mentor.followers), label: 'Followers' },
     { value: mentor.rating.toFixed(1), label: 'Helpful Rating' },
     { value: String(mentor.reviews), label: 'Scholars Mentored' },
-    { value: mentor.responseTime, label: 'Response Time' },
+    { value: mentor.coursesOffered === undefined ? '—' : String(mentor.coursesOffered), label: 'Courses Offered' },
   ],
   about: [mentor.bio],
   wishIKnew: [],
@@ -50,7 +51,7 @@ const directoryProfile = (mentor: DirectoryMentor): MentorProfile => ({
   rating: mentor.rating,
   reviewCount: mentor.reviews,
   ratingBreakdown: [0.8, 0.15, 0.05, 0, 0],
-  reviews: [],
+  reviews: mentor.feedbackComments ?? [],
 });
 
 // TODO: Replace these front-end profile records with complete mentor data from the back end.

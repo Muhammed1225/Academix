@@ -1,10 +1,12 @@
 import type { AuthenticatedUser } from './store';
 import type { SocialNetworks } from './components/SocialNetworks';
+import { universityNameForId, universityOptionId } from './data/educationOptions';
 
 type AuthMode = 'login' | 'register';
 type ProfileChanges = Omit<Partial<Pick<AuthenticatedUser, 'name' | 'photo' | 'biography' | 'interests' | 'purpose' | 'location' | 'university' | 'major' | 'role' | 'bannerBackground' | 'degreeLevel' | 'programmeDurationYears' | 'discoverable' | 'showUniversityInSearch' | 'showYearInSearch' | 'languages' | 'openToMessages' | 'openToMentoring' | 'title' | 'department'>>, 'programmeDurationYears'> & {
   socialNetworks?: SocialNetworks;
   programmeDurationYears?: number | null;
+  dreamUniversityId?: string | null;
   enrollmentYear?: number | null;
   expectedGraduationYear?: number | null;
   yearOfStudyOverride?: number | null;
@@ -51,6 +53,16 @@ function writeTestUser(user: AuthenticatedUser) {
   localStorage.setItem(sessionKey, user.email);
 }
 
+function migrateTestUser(user: AuthenticatedUser) {
+  if (user.role !== 'prospective') return user;
+  const dreamUniversityId = user.dreamUniversityId ?? user.universityId ?? universityOptionId(user.university ?? '');
+  if (!dreamUniversityId) return user;
+  if (user.dreamUniversityId === dreamUniversityId && !user.universityId) return user;
+  const migratedUser = { ...user, dreamUniversityId };
+  delete migratedUser.universityId;
+  return migratedUser;
+}
+
 function fallbackDisplayName() {
   return 'Academix member';
 }
@@ -63,26 +75,34 @@ function testAuthenticate(mode: AuthMode, input: Record<string, unknown>): AuthR
   const savedUser = accounts[email];
   const role = input.role === 'scholar' || input.role === 'faculty' ? input.role : 'prospective';
   const graduationYear = Number(input.graduationYear);
-  const user: AuthenticatedUser = mode === 'register' || !savedUser
+  const existingUser = savedUser ? migrateTestUser(savedUser) : undefined;
+  const registeredDreamUniversityId = typeof input.dreamUniversityId === 'string' && universityNameForId(input.dreamUniversityId)
+    ? input.dreamUniversityId
+    : role === 'prospective' && typeof input.university === 'string'
+      ? universityOptionId(input.university)
+      : '';
+  const user: AuthenticatedUser = mode === 'register' || !existingUser
     ? {
-        id: savedUser?.id ?? `test-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
+        id: existingUser?.id ?? `test-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
         email,
         name: typeof input.name === 'string' && input.name.trim() ? input.name.trim() : fallbackDisplayName(),
         role,
-        ...(typeof input.university === 'string' && input.university ? { university: input.university } : {}),
+        ...(typeof input.university === 'string' && input.university ? { university: universityNameForId(universityOptionId(input.university)) ?? input.university } : {}),
+        ...(role !== 'prospective' && typeof input.university === 'string' && input.university && universityOptionId(input.university) ? { universityId: universityOptionId(input.university) } : {}),
+        ...(registeredDreamUniversityId ? { dreamUniversityId: registeredDreamUniversityId } : {}),
         ...(typeof input.major === 'string' && input.major ? { major: input.major } : {}),
         ...(Number.isInteger(graduationYear) && graduationYear > 0 ? { graduationYear } : {}),
         verificationStatus: mode === 'register' && input.requestGoldVerification === true && role !== 'prospective'
           ? 'pending'
           : 'unverified',
-        photo: savedUser?.photo ?? '',
-        biography: savedUser?.biography ?? '',
-        interests: savedUser?.interests ?? [],
-        purpose: savedUser?.purpose ?? '',
-        ...(savedUser?.bannerBackground ? { bannerBackground: savedUser.bannerBackground } : {}),
-        ...(savedUser?.location ? { location: savedUser.location } : {}),
+        photo: existingUser?.photo ?? '',
+        biography: existingUser?.biography ?? '',
+        interests: existingUser?.interests ?? [],
+        purpose: existingUser?.purpose ?? '',
+        ...(existingUser?.bannerBackground ? { bannerBackground: existingUser.bannerBackground } : {}),
+        ...(existingUser?.location ? { location: existingUser.location } : {}),
       }
-    : savedUser;
+    : existingUser;
 
   writeTestUser(user);
   return { ok: true, user, verificationStatus: user.verificationStatus === 'pending' ? 'pending' : 'unverified' };
@@ -108,7 +128,12 @@ export async function authenticate(mode: AuthMode, input: Record<string, unknown
 export async function loadAuthSession(): Promise<AuthenticatedUser | null> {
   if (testAuthEnabled) {
     const email = localStorage.getItem(sessionKey);
-    return email ? readAccounts()[email] ?? null : null;
+    if (!email) return null;
+    const user = readAccounts()[email];
+    if (!user) return null;
+    const migratedUser = migrateTestUser(user);
+    if (migratedUser !== user) writeTestUser(migratedUser);
+    return migratedUser;
   }
 
   const response = await fetch('/api/auth/session', { credentials: 'same-origin' });
@@ -201,6 +226,7 @@ export async function saveProfile(changes: ProfileChanges): Promise<AuthResult> 
       ...(changes.purpose !== undefined ? { purpose: changes.purpose } : {}),
       ...(changes.location !== undefined ? { location: changes.location } : {}),
       ...(changes.university !== undefined ? { university: changes.university } : {}),
+      ...(changes.dreamUniversityId !== undefined && changes.dreamUniversityId ? { dreamUniversityId: changes.dreamUniversityId } : {}),
       ...(changes.major !== undefined ? { major: changes.major } : {}),
       ...(changes.role !== undefined ? { role: changes.role } : {}),
       ...(changes.degreeLevel !== undefined ? { degreeLevel: changes.degreeLevel } : {}),
@@ -219,8 +245,31 @@ export async function saveProfile(changes: ProfileChanges): Promise<AuthResult> 
       ...(changes.socialNetworks !== undefined ? { socialNetworks: changes.socialNetworks } : {}),
     };
     const updated = { ...user, ...profile };
-    if (updated.university) updated.universityId = profileOptionId(updated.university);
-    else delete updated.universityId;
+    if (changes.dreamUniversityId !== undefined || (updated.role === 'prospective' && changes.university !== undefined)) {
+      const selectedDreamId = changes.dreamUniversityId !== undefined
+        ? changes.dreamUniversityId ?? ''
+        : universityOptionId(changes.university ?? '');
+      const selectedDreamName = selectedDreamId ? universityNameForId(selectedDreamId) : undefined;
+      if (selectedDreamId && !selectedDreamName) return { ok: false, error: 'Choose a valid dream university.' };
+      if (selectedDreamName) {
+        updated.dreamUniversityId = selectedDreamId;
+        if (updated.role === 'prospective') {
+          updated.university = selectedDreamName;
+          delete updated.universityId;
+        }
+      } else {
+        delete updated.dreamUniversityId;
+        if (updated.role === 'prospective') {
+          delete updated.university;
+          delete updated.universityId;
+        }
+      }
+    }
+    if (updated.university) {
+      const canonicalUniversityId = universityOptionId(updated.university) || profileOptionId(updated.university);
+      updated.university = universityNameForId(canonicalUniversityId) ?? updated.university;
+      updated.universityId = canonicalUniversityId;
+    } else delete updated.universityId;
     if (updated.major) updated.majorId = profileOptionId(updated.major);
     else delete updated.majorId;
     if (updated.discoverable === true && updated.role === 'scholar' &&
@@ -236,6 +285,11 @@ export async function saveProfile(changes: ProfileChanges): Promise<AuthResult> 
       if (major) updated.major = major;
       else delete updated.major;
       updated.verificationStatus = changes.requestGoldVerification ? 'pending' : 'unverified';
+    }
+    if (updated.role === 'prospective') {
+      const dreamUniversityName = updated.dreamUniversityId ? universityNameForId(updated.dreamUniversityId) : undefined;
+      if (dreamUniversityName) updated.university = dreamUniversityName;
+      delete updated.universityId;
     }
     if (requestingVerification && changes.role === undefined) updated.verificationStatus = 'pending';
     if (graduationYear === null || (changes.role !== undefined && changes.role !== 'scholar')) delete updated.graduationYear;

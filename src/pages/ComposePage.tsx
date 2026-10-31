@@ -156,7 +156,8 @@ export default function ComposePage() {
   const updateActiveFormats = useCallback(() => {
     const editor = bodyRef.current;
     const selection = window.getSelection();
-    if (!editor || !selection?.anchorNode || !editor.contains(selection.anchorNode)) {
+    const anchorNode = selection?.anchorNode;
+    if (!editor || !anchorNode || !editor.contains(anchorNode)) {
       setActiveFormats({ bold: false, italic: false, quote: false, code: false, heading: false });
       return;
     }
@@ -164,7 +165,7 @@ export default function ComposePage() {
     if (range && editor.contains(range.startContainer)) editorSelectionRef.current = range.cloneRange();
 
     const hasAncestor = (tags: string[]) => {
-      let node: Node | null = selection.anchorNode;
+      let node: Node | null = anchorNode;
       if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
       while (node && node !== editor) {
         if (node instanceof HTMLElement && tags.includes(node.tagName)) return true;

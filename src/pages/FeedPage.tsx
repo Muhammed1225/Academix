@@ -4,7 +4,9 @@ import { Link, useLocation, useOutletContext, useSearchParams } from 'react-rout
 import PostCard from '../components/PostCard';
 import { Avatar, Icon, Tag, cx } from '../components/ui';
 import { amas, channels, colleges } from '../data/mock';
-import type { Ama, PostAuthorType } from '../data/types';
+import { majors as majorOptions, universities } from '../data/educationOptions';
+import { mentorProfilesById } from '../data/mentors';
+import type { Ama, Post, Verification } from '../data/types';
 import { displayName } from '../data/userIdentity';
 import { useApp } from '../store';
 import type { FeedSearchContext } from '../components/Layout';
@@ -13,16 +15,52 @@ function normalized(value: string) {
   return value.normalize('NFC').toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-const authorTypes: PostAuthorType[] = ['Prospective', 'Student Scholar', 'Faculty Representative'];
-const authorTypeSlugs: Record<PostAuthorType, string> = {
-  Prospective: 'prospective',
-  'Student Scholar': 'student-scholar',
-  'Faculty Representative': 'faculty-representative',
-};
+type FeedAuthorFilter = 'prospective' | 'student-alumni' | 'faculty-representative' | 'mentors';
 
-function authorTypesFromSearch(searchParams: URLSearchParams): PostAuthorType[] {
+const authorFilters: { id: FeedAuthorFilter; label: string }[] = [
+  { id: 'prospective', label: 'Prospective students' },
+  { id: 'student-alumni', label: 'Students / Alumni' },
+  { id: 'faculty-representative', label: 'Faculty representatives' },
+  { id: 'mentors', label: 'Mentors' },
+];
+const feedMajorOptions = [...new Set([
+  ...majorOptions,
+  ...colleges.flatMap((college) => [
+    ...college.majorCategories.filter((category) => category !== 'All Disciplines'),
+    ...college.majors.map((major) => major.name),
+  ]),
+])].sort((first, second) => first.localeCompare(second));
+const verificationFilters: { id: Verification; label: string }[] = [
+  { id: 'gold', label: 'Gold verified' },
+  { id: 'edu', label: 'Institution verified' },
+  { id: 'unverified', label: 'Unverified accounts' },
+];
+const currentYear = new Date().getFullYear();
+const graduationYearOptions = Array.from({ length: 12 }, (_, index) => String(currentYear - 5 + index));
+
+function authorFiltersFromSearch(searchParams: URLSearchParams): FeedAuthorFilter[] {
   const slugs = searchParams.getAll('postsFrom');
-  return authorTypes.filter((type) => slugs.includes(authorTypeSlugs[type]));
+  return authorFilters.map((filter) => filter.id).filter((id) =>
+    slugs.includes(id) || (id === 'student-alumni' && slugs.includes('student-scholar')),
+  );
+}
+
+function postMatchesAuthorFilter(post: Post, filter: FeedAuthorFilter) {
+  const isMentor = Boolean(mentorProfilesById[post.author.id]);
+  if (filter === 'mentors') return isMentor;
+  if (filter === 'student-alumni') return post.authorType === 'Student Scholar';
+  if (filter === 'faculty-representative') return post.authorType === 'Faculty Representative';
+  return post.authorType === 'Prospective';
+}
+
+function postGraduationYear(post: Post) {
+  const details = `${post.author.education ?? ''} ${post.author.subtitle}`;
+  const fullYear = details.match(/(?:class of\s*)?(20\d{2})/i)?.[1];
+  if (fullYear) return fullYear;
+  const shortYear = details.match(/(?:class of\s*)?['’](\d{2})\b/i)?.[1];
+  if (!shortYear) return '';
+  const year = Number(shortYear);
+  return String(year >= 70 ? 1900 + year : 2000 + year);
 }
 
 const protocol = [
@@ -135,25 +173,54 @@ export function InstitutionSpotlight() {
 export default function FeedPage() {
   const posts = useApp((s) => s.posts);
   const [channel, setChannel] = useState('all');
-  const [selectedAuthorTypes, setSelectedAuthorTypes] = useState<PostAuthorType[]>([]);
+  const [selectedAuthorFilters, setSelectedAuthorFilters] = useState<FeedAuthorFilter[]>([]);
+  const [selectedVerifications, setSelectedVerifications] = useState<Verification[]>([]);
+  const [selectedGraduationYears, setSelectedGraduationYears] = useState<string[]>([]);
+  const [universitySearch, setUniversitySearch] = useState('');
+  const [majorSearch, setMajorSearch] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const [authorFilterOpen, setAuthorFilterOpen] = useState(false);
-  const { query, selectedUniversities, selectedMajors, removeUniversity, removeMajor } = useOutletContext<FeedSearchContext>();
+  const {
+    query,
+    selectedUniversities,
+    selectedMajors,
+    setSelectedUniversities,
+    setSelectedMajors,
+    removeUniversity,
+    removeMajor,
+  } = useOutletContext<FeedSearchContext>();
   const authorFilterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setSelectedAuthorTypes(authorTypesFromSearch(new URLSearchParams(location.search)));
+    setSelectedAuthorFilters(authorFiltersFromSearch(new URLSearchParams(location.search)));
   }, [location.search]);
 
-  const updateAuthorTypes = (update: (current: PostAuthorType[]) => PostAuthorType[]) => {
-    const next = update(selectedAuthorTypes);
-    setSelectedAuthorTypes(next);
+  const updateAuthorFilters = (update: (current: FeedAuthorFilter[]) => FeedAuthorFilter[]) => {
+    const next = update(selectedAuthorFilters);
+    setSelectedAuthorFilters(next);
     const params = new URLSearchParams(searchParams);
     params.delete('postsFrom');
-    next.forEach((type) => params.append('postsFrom', authorTypeSlugs[type]));
+    next.forEach((filter) => params.append('postsFrom', filter));
     setSearchParams(params, { replace: true });
   };
+
+  const clearAllFilters = () => {
+    updateAuthorFilters(() => []);
+    setSelectedVerifications([]);
+    setSelectedGraduationYears([]);
+    setSelectedUniversities([]);
+    setSelectedMajors([]);
+    setUniversitySearch('');
+    setMajorSearch('');
+  };
+
+  const visibleUniversities = universities
+    .filter((name) => normalized(name).includes(normalized(universitySearch)))
+    .slice(0, 80);
+  const visibleMajors = feedMajorOptions
+    .filter((name) => normalized(name).includes(normalized(majorSearch)))
+    .slice(0, 80);
 
   useEffect(() => {
     if (!authorFilterOpen) return;
@@ -174,7 +241,9 @@ export default function FeedPage() {
   const normalizedQuery = normalized(query);
   const visible = posts.filter((post) => {
     if (channel !== 'all' && post.channelId !== channel) return false;
-    if (selectedAuthorTypes.length && (!post.authorType || !selectedAuthorTypes.some((type) => type === post.authorType))) return false;
+    if (selectedAuthorFilters.length && !selectedAuthorFilters.some((filter) => postMatchesAuthorFilter(post, filter))) return false;
+    if (selectedVerifications.length && !selectedVerifications.includes(post.author.verification)) return false;
+    if (selectedGraduationYears.length && !selectedGraduationYears.includes(postGraduationYear(post))) return false;
     const searchableText = normalized(`${post.title ?? ''} ${post.body} ${post.insight ?? ''} ${post.author.name} ${post.author.subtitle}`);
     if (normalizedQuery && !normalizedQuery.split(/\s+/).every((term) => searchableText.includes(term))) return false;
     if (selectedUniversities.length) {
@@ -213,6 +282,7 @@ export default function FeedPage() {
     }
     return true;
   });
+  const activeFilterCount = selectedAuthorFilters.length + selectedUniversities.length + selectedMajors.length + selectedGraduationYears.length + selectedVerifications.length;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)_300px]">
@@ -245,25 +315,44 @@ export default function FeedPage() {
               aria-expanded={authorFilterOpen}
               className={cx(
                 'inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary',
-                selectedAuthorTypes.length
+                activeFilterCount
                   ? 'border-secondary bg-secondary-fixed text-secondary'
                   : 'border-outline-variant bg-white text-on-surface-variant hover:bg-surface-container-low',
               )}
             >
-              Posts from{selectedAuthorTypes.length > 0 && ` (${selectedAuthorTypes.length})`}
+              Posts from{activeFilterCount > 0 && ` (${activeFilterCount})`}
               <Icon name="expand_more" className="!text-[18px]" />
             </button>
-            {selectedAuthorTypes.length > 0 && (
-              <div className="flex max-w-full flex-wrap justify-end gap-1.5" aria-label="Selected post author filters">
-                {selectedAuthorTypes.map((type) => (
-                  <span key={type} className="inline-flex max-w-full items-center gap-1 rounded-full bg-secondary-fixed px-2.5 py-1 text-xs font-semibold text-on-secondary-fixed">
-                    <span className="truncate">{type}</span>
+            {(selectedAuthorFilters.length > 0 || selectedVerifications.length > 0 || selectedGraduationYears.length > 0) && (
+              <div className="flex max-w-full flex-wrap justify-end gap-1.5" aria-label="Selected post filters">
+                {selectedAuthorFilters.map((filter) => (
+                  <span key={filter} className="inline-flex max-w-full items-center gap-1 rounded-full bg-secondary-fixed px-2.5 py-1 text-xs font-semibold text-on-secondary-fixed">
+                    <span className="truncate">{authorFilters.find((option) => option.id === filter)?.label ?? filter}</span>
                     <button
                       type="button"
-                      onClick={() => updateAuthorTypes((current) => current.filter((item) => item !== type))}
-                      aria-label={`Remove ${type} filter`}
+                      onClick={() => updateAuthorFilters((current) => current.filter((item) => item !== filter))}
+                      aria-label={`Remove ${filter} filter`}
                       className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary"
                     >
+                      <Icon name="close" className="!text-[13px]" />
+                    </button>
+                  </span>
+                ))}
+                {selectedVerifications.map((verification) => {
+                  const option = verificationFilters.find((filter) => filter.id === verification);
+                  return (
+                    <span key={verification} className="inline-flex max-w-full items-center gap-1 rounded-full bg-secondary-fixed px-2.5 py-1 text-xs font-semibold text-on-secondary-fixed">
+                      <span className="truncate">{option?.label ?? verification}</span>
+                      <button type="button" onClick={() => setSelectedVerifications((current) => current.filter((item) => item !== verification))} aria-label={`Remove ${option?.label ?? verification} filter`} className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full hover:bg-white/70">
+                        <Icon name="close" className="!text-[13px]" />
+                      </button>
+                    </span>
+                  );
+                })}
+                {selectedGraduationYears.map((year) => (
+                  <span key={year} className="inline-flex items-center gap-1 rounded-full bg-secondary-fixed px-2.5 py-1 text-xs font-semibold text-on-secondary-fixed">
+                    Class of {year}
+                    <button type="button" onClick={() => setSelectedGraduationYears((current) => current.filter((item) => item !== year))} aria-label={`Remove class of ${year} filter`} className="inline-flex h-5 w-5 items-center justify-center rounded-full hover:bg-white/70">
                       <Icon name="close" className="!text-[13px]" />
                     </button>
                   </span>
@@ -273,36 +362,105 @@ export default function FeedPage() {
             {authorFilterOpen && (
               <div
                 role="dialog"
-                aria-label="Filter posts by author type"
-                className="absolute right-0 top-full z-30 mt-1 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-outline-variant/60 bg-white p-2 shadow-float"
+                aria-label="Filter posts"
+                className="absolute right-0 top-full z-40 mt-2 max-h-[80vh] w-[min(42rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-outline-variant/60 bg-white p-4 shadow-float"
               >
-                <div className="space-y-0.5">
-                  {authorTypes.map((type) => {
-                    const checked = selectedAuthorTypes.includes(type);
-                    return (
-                      <label key={type} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-on-surface transition-colors hover:bg-surface-container-low focus-within:bg-surface-container-low">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => updateAuthorTypes((current) =>
-                            checked ? current.filter((item) => item !== type) : [...current, type],
-                          )}
-                          className="h-4 w-4 accent-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary"
-                        />
-                        <span>{type}</span>
-                      </label>
-                    );
-                  })}
+                <div className="flex items-center justify-between gap-3 border-b border-outline-variant/50 pb-3">
+                  <div>
+                    <h2 className="font-headline text-lg font-semibold text-primary">Customize your feed</h2>
+                    <p className="mt-0.5 text-xs text-on-surface-variant">Choose who and what you want to see.</p>
+                  </div>
+                  <button type="button" onClick={clearAllFilters} className="shrink-0 rounded-lg px-3 py-2 text-sm font-semibold text-secondary hover:bg-surface-container-low">Clear all</button>
                 </div>
-                <div className="mt-1 flex justify-end border-t border-outline-variant/40 pt-1">
-                  <button
-                    type="button"
-                    disabled={selectedAuthorTypes.length === 0}
-                    onClick={() => updateAuthorTypes(() => [])}
-                    className="rounded-lg px-3 py-2 text-sm font-semibold text-secondary transition-colors hover:bg-surface-container-low focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Clear
-                  </button>
+                <div className="grid gap-3 pt-3 sm:grid-cols-2">
+                  <fieldset className="rounded-xl border border-outline-variant/50 p-3">
+                    <legend className="px-1 text-sm font-semibold text-primary">People</legend>
+                    <div className="grid gap-1 sm:grid-cols-2">
+                      {authorFilters.map((filter) => (
+                        <label key={filter.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm hover:bg-surface-container-low">
+                          <input
+                            type="checkbox"
+                            checked={selectedAuthorFilters.includes(filter.id)}
+                            onChange={() => updateAuthorFilters((current) => current.includes(filter.id)
+                              ? current.filter((item) => item !== filter.id)
+                              : [...current, filter.id])}
+                            className="h-4 w-4 accent-secondary"
+                          />
+                          {filter.label}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+
+                  <fieldset className="rounded-xl border border-outline-variant/50 p-3">
+                    <legend className="px-1 text-sm font-semibold text-primary">Account verification</legend>
+                    <div className="space-y-1">
+                      {verificationFilters.map((filter) => (
+                        <label key={filter.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm hover:bg-surface-container-low">
+                          <input
+                            type="checkbox"
+                            checked={selectedVerifications.includes(filter.id)}
+                            onChange={() => setSelectedVerifications((current) => current.includes(filter.id)
+                              ? current.filter((item) => item !== filter.id)
+                              : [...current, filter.id])}
+                            className="h-4 w-4 accent-secondary"
+                          />
+                          {filter.label}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+
+                  <fieldset className="min-w-0 rounded-xl border border-outline-variant/50 p-3">
+                    <legend className="px-1 text-sm font-semibold text-primary">Universities</legend>
+                    <input value={universitySearch} onChange={(event) => setUniversitySearch(event.target.value)} placeholder="Search universities" aria-label="Search universities" className="input !py-2 text-sm" />
+                    <div className="mt-2 max-h-40 space-y-0.5 overflow-y-auto" aria-label="University choices">
+                      {visibleUniversities.map((name) => (
+                        <label key={name} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-surface-container-low">
+                          <input type="checkbox" checked={selectedUniversities.includes(name)} onChange={() => setSelectedUniversities(selectedUniversities.includes(name) ? selectedUniversities.filter((item) => item !== name) : [...selectedUniversities, name])} className="h-4 w-4 accent-secondary" />
+                          <span className="truncate">{name}</span>
+                        </label>
+                      ))}
+                      {!visibleUniversities.length && <p className="px-2 py-3 text-xs text-on-surface-variant">No universities found.</p>}
+                    </div>
+                  </fieldset>
+
+                  <fieldset className="min-w-0 rounded-xl border border-outline-variant/50 p-3">
+                    <legend className="px-1 text-sm font-semibold text-primary">Majors</legend>
+                    <input value={majorSearch} onChange={(event) => setMajorSearch(event.target.value)} placeholder="Search majors" aria-label="Search majors" className="input !py-2 text-sm" />
+                    <div className="mt-2 max-h-40 space-y-0.5 overflow-y-auto" aria-label="Major choices">
+                      {visibleMajors.map((name) => (
+                        <label key={name} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-surface-container-low">
+                          <input type="checkbox" checked={selectedMajors.includes(name)} onChange={() => setSelectedMajors(selectedMajors.includes(name) ? selectedMajors.filter((item) => item !== name) : [...selectedMajors, name])} className="h-4 w-4 accent-secondary" />
+                          <span className="truncate">{name}</span>
+                        </label>
+                      ))}
+                      {!visibleMajors.length && <p className="px-2 py-3 text-xs text-on-surface-variant">No majors found.</p>}
+                    </div>
+                  </fieldset>
+
+                  <fieldset className="rounded-xl border border-outline-variant/50 p-3 sm:col-span-2">
+                    <legend className="px-1 text-sm font-semibold text-primary">Graduation year</legend>
+                    <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+                      {graduationYearOptions.map((year) => (
+                        <label key={year} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm hover:bg-surface-container-low">
+                          <input
+                            type="checkbox"
+                            checked={selectedGraduationYears.includes(year)}
+                            onChange={() => setSelectedGraduationYears((current) => current.includes(year)
+                              ? current.filter((item) => item !== year)
+                              : [...current, year])}
+                            className="h-4 w-4 accent-secondary"
+                          />
+                          Class of {year}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                </div>
+                <div className="mt-3 flex items-center justify-between border-t border-outline-variant/50 pt-3">
+                  <p className="text-xs text-on-surface-variant" aria-live="polite">{visible.length} posts match your filters</p>
+                  <button type="button" onClick={() => setAuthorFilterOpen(false)} className="btn-primary !px-4 !py-2 text-sm">Done</button>
                 </div>
               </div>
             )}

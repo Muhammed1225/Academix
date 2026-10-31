@@ -4,6 +4,8 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { DiscussionCard } from '../components/CollegeCards';
 import PostCard from '../components/PostCard';
 import { Avatar, Icon, SectionHeader, Tag, cx } from '../components/ui';
+import { saveProfile } from '../authService';
+import { universityOptionId } from '../data/educationOptions';
 import { colleges } from '../data/mock';
 import bhosInfo from '../../data/bhosinfo.txt?raw';
 import type { College, Post } from '../data/types';
@@ -126,7 +128,7 @@ function Sidebar({ college, onViewInsights }: { college: College; onViewInsights
           ))}
         </div>
         <Link
-          to={`/connections?university=${encodeURIComponent(college.id)}`}
+          to={`/connections?university=${encodeURIComponent(universityOptionId(college.name))}&universities=${encodeURIComponent(universityOptionId(college.name))}`}
           className="mt-3 flex items-center justify-center gap-1 border-t border-outline-variant/40 pt-3 text-sm font-semibold text-secondary hover:underline"
         >
           Connect with more {college.shortName} people <Icon name="arrow_forward" className="!text-[18px]" />
@@ -203,11 +205,45 @@ function SuggestedConnection({ mentor }: { mentor: College['mentors'][number] })
 export default function CollegeHubPage() {
   const { collegeId } = useParams();
   const college = colleges.find((c) => c.id === collegeId);
-  const saved = useApp((s) => (college ? s.savedColleges.includes(college.id) : false));
-  const toggleSaved = useApp((s) => s.toggleSavedCollege);
+  const user = useApp((s) => s.user);
+  const setAuthenticatedUser = useApp((s) => s.setAuthenticatedUser);
+  const setAuthOpen = useApp((s) => s.setAuthOpen);
   const showToast = useApp((s) => s.showToast);
   const posts = useApp((s) => s.posts);
   const [tab, setTab] = useState<HubTab>('overview');
+  const [savingDreamUniversity, setSavingDreamUniversity] = useState(false);
+  const dreamUniversityId = college ? universityOptionId(college.name) : '';
+  const isDreamUniversity = Boolean(user && dreamUniversityId && (
+    user.dreamUniversityId ?? (user.role === 'prospective' ? user.universityId : undefined)
+  ) === dreamUniversityId);
+
+  const toggleDreamUniversity = async () => {
+    if (!college || !dreamUniversityId || savingDreamUniversity) return;
+    if (!user) {
+      setAuthOpen(true);
+      return;
+    }
+    setSavingDreamUniversity(true);
+    const nextDreamUniversityId = isDreamUniversity ? null : dreamUniversityId;
+    try {
+      const result = await saveProfile({
+        dreamUniversityId: nextDreamUniversityId,
+        ...(user.role === 'prospective' ? { university: nextDreamUniversityId ? college.name : '' } : {}),
+      });
+      if (!result.ok || !result.user) {
+        showToast(result.error ?? 'Unable to update your dream university. Please try again.', 'error');
+        return;
+      }
+      setAuthenticatedUser({ ...result.user, socialNetworks: user.socialNetworks });
+      showToast(isDreamUniversity
+        ? `Removed ${college.name} as your dream university`
+        : `${college.name} set as your dream university`, 'star');
+    } catch {
+      showToast('Unable to update your dream university. Please try again.', 'error');
+    } finally {
+      setSavingDreamUniversity(false);
+    }
+  };
 
   if (!college) return <Navigate to="/colleges" replace />;
 
@@ -250,14 +286,12 @@ export default function CollegeHubPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              aria-pressed={saved}
-              className={cx(saved ? 'btn-outline' : 'btn-primary')}
-              onClick={() => {
-                toggleSaved(college.id);
-                showToast(saved ? `Removed ${college.name} from your dream universities` : `${college.name} added to your dream universities`, 'star');
-              }}
+              aria-pressed={isDreamUniversity}
+              disabled={savingDreamUniversity}
+              className={cx(isDreamUniversity ? 'btn-outline' : 'btn-primary')}
+              onClick={() => void toggleDreamUniversity()}
             >
-              <Icon name="star" fill={saved} /> Dream University
+              <Icon name="star" fill={isDreamUniversity} /> {savingDreamUniversity ? 'Saving…' : 'Dream University'}
             </button>
             <Link to="/compose" className="btn-outline">
               <Icon name="question_answer" /> Ask Campus Community

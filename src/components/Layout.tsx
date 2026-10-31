@@ -28,6 +28,8 @@ export interface FeedSearchContext {
   query: string;
   selectedUniversities: string[];
   selectedMajors: string[];
+  setSelectedUniversities: (value: string[]) => void;
+  setSelectedMajors: (value: string[]) => void;
   removeUniversity: (name: string) => void;
   removeMajor: (name: string) => void;
 }
@@ -203,7 +205,8 @@ function Header({
       <div className="mx-auto flex h-16 max-w-content items-center justify-between gap-1 px-3 sm:gap-2 sm:px-4">
         <div className="flex min-w-0 flex-[0_1_30rem] items-center gap-1.5">
           <Link to="/" className="shrink-0 text-white" aria-label={`${BRAND} feed`}>
-            <span className="inline-flex items-center gap-1.5 font-headline text-2xl font-bold tracking-tight text-white">
+            <span className="inline-flex items-center gap-2 font-headline text-2xl font-bold tracking-tight text-white">
+              <img src="/images/academix-header-logo.png" alt="" aria-hidden="true" className="h-[45px] w-[45px] shrink-0 object-contain" />
               {BRAND}
             </span>
           </Link>
@@ -1602,9 +1605,11 @@ export default function Layout() {
     query,
     selectedUniversities,
     selectedMajors,
+    setSelectedUniversities,
+    setSelectedMajors,
     removeUniversity: (name) => setSelectedUniversities((current) => current.filter((university) => university !== name)),
     removeMajor: (name) => setSelectedMajors((current) => current.filter((major) => major !== name)),
-  }), [query, selectedMajors, selectedUniversities]);
+  }), [query, selectedMajors, selectedUniversities, setSelectedMajors, setSelectedUniversities]);
 
   return (
     <div className="min-h-screen">
