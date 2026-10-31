@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, type KeyboardEvent } from 'react';
 
-import { cx } from './ui';
+import { cx, Icon } from './ui';
 
 type SearchableSelectProps = {
   label: string;
@@ -31,16 +31,17 @@ export default function SearchableSelect({ label, value, onChange, options, opti
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       setIsOpen(true);
-      setActiveIndex((index) => Math.min(index + 1, filteredOptions.length - 1));
+      setActiveIndex((index) => filteredOptions.length ? Math.min(index + 1, filteredOptions.length - 1) : 0);
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       setIsOpen(true);
-      setActiveIndex((index) => Math.max(index - 1, 0));
+      setActiveIndex((index) => filteredOptions.length ? Math.max(index - 1, 0) : 0);
     } else if (event.key === 'Enter' && isOpen && filteredOptions[activeIndex]) {
       event.preventDefault();
       chooseOption(filteredOptions[activeIndex]);
     } else if (event.key === 'Escape') {
       setIsOpen(false);
+      setQuery(value);
     }
   };
 
@@ -52,6 +53,7 @@ export default function SearchableSelect({ label, value, onChange, options, opti
 
   return <div className="relative block min-w-0 text-sm font-semibold">
     <label htmlFor={id}>{label}{optional && <span className="font-normal text-on-surface-variant"> (optional)</span>}</label>
+    <span className="relative mt-2 block">
     <input
       id={id}
       type="text"
@@ -70,13 +72,22 @@ export default function SearchableSelect({ label, value, onChange, options, opti
         setActiveIndex(0);
         setIsOpen(true);
       }}
-      onFocus={() => setIsOpen(true)}
-      onBlur={() => setIsOpen(false)}
+      onFocus={() => {
+        setQuery('');
+        setActiveIndex(0);
+        setIsOpen(true);
+      }}
+      onBlur={() => {
+        setIsOpen(false);
+        setQuery(value);
+      }}
       onKeyDown={handleKeyDown}
       placeholder={placeholder}
-      className="input mt-2 !bg-surface-container-low/40 !py-[9px]"
+      className="input w-full !bg-surface-container-low/40 !py-[9px] pr-10"
     />
-    {isOpen && <ul id={`${id}-options`} role="listbox" className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-outline-variant bg-white py-1 shadow-float">
+    <Icon name={isOpen ? 'expand_less' : 'expand_more'} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+    </span>
+    {isOpen && <ul id={`${id}-options`} role="listbox" className="absolute left-0 right-0 z-30 mt-1 max-h-60 overflow-y-auto rounded-lg border border-outline-variant bg-white py-1 shadow-float">
       {filteredOptions.length ? filteredOptions.map((option, index) => <li
           key={option}
           id={`${id}-option-${index}`}

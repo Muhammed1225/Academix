@@ -23,6 +23,7 @@ export const people: Record<string, Person> = {
     avatar: img('avatar_aris_thorne.jpg'),
     badge: 'Gold Verified Dean',
     interests: ['Computer Science', 'Admissions', 'Mentorship'],
+    socialNetworks: { linkedin: 'https://www.linkedin.com/in/aris-thorne-academix' },
   },
   sarahLin: {
     id: 'sarah-lin',
@@ -33,6 +34,7 @@ export const people: Record<string, Person> = {
     location: 'United States',
     education: 'Applying Early Decision',
     interests: ['Computer Science', 'Admissions'],
+    socialNetworks: { instagram: 'https://instagram.com/sarah.lin.academix' },
   },
   jordanVance: {
     id: 'jordan-vance',
@@ -53,6 +55,7 @@ export const people: Record<string, Person> = {
     location: 'Pittsburgh, PA',
     education: 'Sophomore',
     interests: ['Computer Science', 'Research'],
+    socialNetworks: { linkedin: 'https://www.linkedin.com/in/alex-rivera-academix' },
   },
   kevLin: {
     id: 'kevlin',
@@ -433,6 +436,11 @@ export const colleges: College[] = [
         quote: 'Happy to unpack the real workload of SCS freshmen year, choosing between AI vs CS track, and optimizing portfolio projects.',
         responseTime: '~2h',
         major: 'Artificial Intelligence',
+        socialNetworks: {
+          instagram: 'https://www.instagram.com/evelyn.chen',
+          linkedin: 'https://www.linkedin.com/in/evelyn-chen',
+          facebook: 'https://www.facebook.com/evelyn.chen',
+        },
       },
       {
         id: 'marcus',
@@ -448,6 +456,11 @@ export const colleges: College[] = [
         quote: 'Can detail how Tepper blends hardcore analytics into business. Interned at Morgan Stanley & McKinsey.',
         responseTime: '~45m',
         major: 'Statistics',
+        socialNetworks: {
+          instagram: 'https://www.instagram.com/marcus.vance',
+          linkedin: 'https://www.linkedin.com/in/marcus-vance',
+          facebook: 'https://www.facebook.com/marcus.vance',
+        },
       },
       {
         id: 'aarohi',
@@ -463,6 +476,11 @@ export const colleges: College[] = [
         quote: 'Ask me about hands-on prototyping facilities, maker pass access, and landing hardware engineering co-ops early.',
         responseTime: '~1h',
         major: 'Mechanical Engineering',
+        socialNetworks: {
+          instagram: 'https://www.instagram.com/aarohi.nair',
+          linkedin: 'https://www.linkedin.com/in/aarohi-nair',
+          facebook: 'https://www.facebook.com/aarohi.nair',
+        },
       },
       {
         id: 'julian',
@@ -478,6 +496,11 @@ export const colleges: College[] = [
         quote: 'Dietrich allows you to connect behavioral psych with bleeding-edge UX engineering. Ask me how to build this hybrid minor.',
         responseTime: '~5h',
         major: 'Information Systems',
+        socialNetworks: {
+          instagram: 'https://www.instagram.com/julian.rossi',
+          linkedin: 'https://www.linkedin.com/in/julian-rossi',
+          facebook: 'https://www.facebook.com/julian.rossi',
+        },
       },
     ],
     discussions: [
@@ -683,6 +706,7 @@ export const mentorProfiles: Record<string, MentorProfile> = {
     degree: 'B.S. in Computer Science • Minor in Human-Computer Interaction',
     location: 'Pittsburgh, PA',
     languages: 'English, Gujarati, French',
+    socialNetworks: { linkedin: 'https://www.linkedin.com/in/maya-patel-academix', instagram: 'https://instagram.com/maya.patel.academix' },
     stats: [
       { value: '4.00', label: 'Major GPA' },
       { value: '98%', label: 'Helpful Rating' },

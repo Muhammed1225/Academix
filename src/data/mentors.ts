@@ -33,6 +33,7 @@ const directoryProfile = (mentor: DirectoryMentor): MentorProfile => ({
   location: 'Azerbaijan',
   languages: 'English',
   tags: mentor.tags,
+  socialNetworks: mentor.socialNetworks,
   stats: [
     { value: '—', label: 'Major GPA' },
     { value: mentor.rating.toFixed(1), label: 'Helpful Rating' },

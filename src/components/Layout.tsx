@@ -14,6 +14,7 @@ import UserAvatar from './UserAvatar';
 import { BrandMark, Icon, Tag, cx } from './ui';
 import AskMentorModal from './AskMentorModal';
 import FilterButton from './FilterButton';
+import SettingsModal from './SettingsModal';
 
 const navItems = [
   { to: '/', label: 'Feed', icon: 'dynamic_feed', end: true },
@@ -71,6 +72,7 @@ function Header({
   const [draftMajors, setDraftMajors] = useState<string[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const searchCatalog = useMemo(() => createSearchCatalog(posts), [posts]);
   const filterRootRef = useRef<HTMLDivElement>(null);
   const filteredUniversities = useMemo(
@@ -541,7 +543,7 @@ function Header({
                   role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
-                    showToast('Settings are coming soon', 'settings');
+                    setSettingsOpen(true);
                   }}
                   className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-surface-container-low"
                 >
@@ -562,7 +564,7 @@ function Header({
           <div className="relative">
             <button
               type="button"
-              className="relative rounded-full p-2 text-on-surface-variant hover:bg-surface-container-low"
+              className="relative rounded-full p-2 text-white hover:bg-white/15 hover:text-white active:text-white focus-visible:text-white"
               aria-label={unreadNotifications ? `Notifications, ${unreadNotifications} unread` : 'Notifications'}
               aria-haspopup="dialog"
               aria-expanded={notificationsOpen}
@@ -582,6 +584,7 @@ function Header({
           )}
         </div>
       </div>
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </header>
   );
 }

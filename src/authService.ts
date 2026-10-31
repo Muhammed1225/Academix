@@ -1,7 +1,9 @@
 import type { AuthenticatedUser } from './store';
+import type { SocialNetworks } from './components/SocialNetworks';
 
 type AuthMode = 'login' | 'register';
 type ProfileChanges = Omit<Partial<Pick<AuthenticatedUser, 'name' | 'photo' | 'biography' | 'interests' | 'purpose' | 'location' | 'university' | 'major' | 'role' | 'bannerBackground' | 'degreeLevel' | 'programmeDurationYears' | 'discoverable' | 'showUniversityInSearch' | 'showYearInSearch' | 'languages' | 'openToMessages' | 'openToMentoring' | 'title' | 'department'>>, 'programmeDurationYears'> & {
+  socialNetworks?: SocialNetworks;
   programmeDurationYears?: number | null;
   enrollmentYear?: number | null;
   expectedGraduationYear?: number | null;
@@ -214,6 +216,7 @@ export async function saveProfile(changes: ProfileChanges): Promise<AuthResult> 
       ...(changes.openToMentoring !== undefined ? { openToMentoring: changes.openToMentoring } : {}),
       ...(changes.title !== undefined ? { title: changes.title } : {}),
       ...(changes.department !== undefined ? { department: changes.department } : {}),
+      ...(changes.socialNetworks !== undefined ? { socialNetworks: changes.socialNetworks } : {}),
     };
     const updated = { ...user, ...profile };
     if (updated.university) updated.universityId = profileOptionId(updated.university);

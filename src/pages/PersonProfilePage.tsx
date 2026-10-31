@@ -4,6 +4,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import ConnectionRequestModal from '../components/ConnectionRequestModal';
 import PostCard from '../components/PostCard';
 import UserAvatar from '../components/UserAvatar';
+import { SocialNetworksProfileControl } from '../components/SocialNetworks';
 import { Avatar, Icon, Tag, VerificationBadge } from '../components/ui';
 import { people, posts } from '../data/mock';
 import { getPublicPerson, type PeoplePerson } from '../peopleService';
@@ -65,6 +66,9 @@ export default function PersonProfilePage() {
               {directoryPerson.major && <p className="mt-1 text-sm text-on-surface-variant">{directoryPerson.major}</p>}
               {yearLabel && <p className="mt-1 text-sm text-on-surface-variant">{yearLabel}</p>}
               {directoryPerson.sharedInterests.length > 0 && <p className="mt-3 text-sm text-on-surface-variant">{directoryPerson.sharedInterests.length} shared interests</p>}
+              <div className="mt-3">
+                <SocialNetworksProfileControl values={directoryPerson.socialNetworks} />
+              </div>
               <div className="mt-5 flex flex-wrap gap-2">
                 <button type="button" disabled={connectionRequested} onClick={() => {
                   setConnectionRequested(true);
@@ -169,10 +173,13 @@ export default function PersonProfilePage() {
           </div>
         </section>
 
-        {person.about && (
+        {(person.about || person.socialNetworks) && (
           <section className="card p-5 sm:p-6">
-            <h2 className="font-headline text-xl font-semibold text-primary">About</h2>
-            <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-on-surface-variant">{person.about}</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-headline text-xl font-semibold text-primary">About</h2>
+              <SocialNetworksProfileControl values={person.socialNetworks} />
+            </div>
+            {person.about && <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-on-surface-variant">{person.about}</p>}
           </section>
         )}
 

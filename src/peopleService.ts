@@ -1,5 +1,6 @@
 import { majors, universities } from './data/educationOptions';
 import type { AuthenticatedUser } from './store';
+import type { SocialNetworks } from './components/SocialNetworks';
 
 export type PeopleRole = 'student' | 'prospective' | 'faculty';
 export type PeopleYear = '1' | '2' | '3' | '4' | '5+' | 'graduate';
@@ -41,6 +42,7 @@ export interface PeoplePerson {
   title?: string;
   department?: string;
   sharedInterests: string[];
+  socialNetworks?: SocialNetworks;
   openToMessages: boolean;
   openToMentoring: boolean;
   verified: boolean;

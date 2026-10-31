@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { BookingPanel } from '../components/BookingModal';
 import PostCard from '../components/PostCard';
+import { SocialNetworksProfileControl } from '../components/SocialNetworks';
 import { Avatar, Icon, SectionHeader, Tag, cx } from '../components/ui';
 import { BRAND } from '../data/mock';
 import { mentorProfilesById } from '../data/mentors';
@@ -27,7 +28,10 @@ function PostsTab({ profile }: { profile: MentorProfile }) {
   return (
     <div className="space-y-4">
       <section className="card p-6">
-        <SectionHeader title="About My College Journey" />
+        <SectionHeader
+          title="About My College Journey"
+          action={<SocialNetworksProfileControl values={profile.socialNetworks} />}
+        />
         {profile.about.map((p) => (
           <p key={p} className="mb-3 leading-relaxed text-on-surface-variant">
             {p}

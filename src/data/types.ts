@@ -20,6 +20,7 @@ export interface Person {
   about?: string;
   location?: string;
   education?: string;
+  socialNetworks?: Partial<Record<'instagram' | 'linkedin' | 'facebook', string>>;
 }
 
 export interface Comment {
@@ -96,6 +97,7 @@ export interface Mentor {
   responseTime: string;
   /** TODO: Populate university and major directly from the mentor API. */
   major?: string;
+  socialNetworks?: Partial<Record<'instagram' | 'linkedin' | 'facebook', string>>;
 }
 
 export interface Discussion {
@@ -317,4 +319,5 @@ export interface MentorProfile {
   reviewCount: number;
   ratingBreakdown: number[];
   reviews: Review[];
+  socialNetworks?: Partial<Record<'instagram' | 'linkedin' | 'facebook', string>>;
 }

@@ -4,6 +4,7 @@ import { people, posts as initialPosts, conversations as initialConversations } 
 import type { GroupMember, Post, Conversation } from './data/types';
 import { displayName } from './data/userIdentity';
 import { createNotification, markConversationNotificationsRead } from './notificationsService';
+import type { SocialNetworks } from './components/SocialNetworks';
 
 interface Toast {
   id: number;
@@ -17,6 +18,7 @@ export interface OnboardingProfile {
   biography: string;
   interests: string[];
   purpose: string;
+  socialNetworks?: SocialNetworks;
 }
 
 export type ProfileBannerBackground =

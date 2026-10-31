@@ -18,6 +18,7 @@ import { defaultInterestEmoji, interestEmojis, interests as interestOptions } fr
 import { people } from '../data/mock';
 import { displayName } from '../data/userIdentity';
 import { useApp, type AuthenticatedUser, type ProfileBannerBackground } from '../store';
+import { SocialNetworksEditor, SocialNetworksProfileControl, type SocialNetworks } from '../components/SocialNetworks';
 
 const bannerBackgrounds: { id: ProfileBannerBackground; label: string; background: string }[] = [
   { id: 'academix', label: 'Academix blue', background: 'linear-gradient(135deg, #315f91, #5aa6ad, #86c7ce)' },
@@ -582,11 +583,8 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
   const [purpose, setPurpose] = useState(user.purpose);
   const [location, setLocation] = useState(user.location ?? '');
   const [university, setUniversity] = useState(user.university ?? '');
-  const [universitiesOpen, setUniversitiesOpen] = useState(false);
   const [major, setMajor] = useState(user.major ?? '');
-  const [majorsOpen, setMajorsOpen] = useState(false);
   const [graduationYear, setGraduationYear] = useState((user.graduationYear ?? user.expectedGraduationYear)?.toString() ?? '');
-  const [graduationYearsOpen, setGraduationYearsOpen] = useState(false);
   const [degreeLevel, setDegreeLevel] = useState(user.degreeLevel ?? 'bachelors');
   const [programmeDurationYears, setProgrammeDurationYears] = useState(user.programmeDurationYears?.toString() ?? '');
   const [enrollmentYear, setEnrollmentYear] = useState(user.enrollmentYear?.toString() ?? '');
@@ -599,6 +597,7 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
   const [title, setTitle] = useState(user.title ?? '');
   const [department, setDepartment] = useState(user.department ?? '');
   const [profileLanguages, setProfileLanguages] = useState(user.languages ?? []);
+  const [profileSocialNetworks, setProfileSocialNetworks] = useState<SocialNetworks>(user.socialNetworks ?? {});
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [requestGold, setRequestGold] = useState(false);
@@ -712,12 +711,13 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
           title,
           department,
           languages: profileLanguages,
+          socialNetworks: profileSocialNetworks,
       });
       if (!result.ok || !result.user) {
         setError(result.error ?? 'Unable to save your profile. Please try again.');
         return;
       }
-      setAuthenticatedUser(result.user);
+      setAuthenticatedUser({ ...result.user, socialNetworks: profileSocialNetworks });
       onClose();
     } catch {
       setError('Unable to reach the profile service. Please try again.');
@@ -790,130 +790,36 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
           </div>
           <label className="block text-sm font-semibold">What brings you to Academix<textarea maxLength={200} value={purpose} onChange={(event) => setPurpose(event.target.value)} rows={2} className="input mt-1.5 resize-y" /></label>
           <div className="grid gap-4 sm:grid-cols-2">
+            <SearchableSelect label={user.role === 'prospective' ? 'Dream university' : 'University'} value={university} onChange={setUniversity} options={universities} optional={user.role === 'prospective'} />
+            <SearchableSelect label="Major / subject" value={major} onChange={setMajor} options={availableMajors} optional={user.role === 'prospective'} />
+            <SearchableSelect label="Expected graduation year" value={graduationYear} onChange={setGraduationYear} options={graduationYears} optional />
+            <SearchableSelect
+              label="Degree level"
+              value={{ bachelors: "Bachelor's", masters: "Master's", phd: 'PhD', other: 'Other' }[degreeLevel]}
+              onChange={(value) => {
+                const next = ({ "Bachelor's": 'bachelors', "Master's": 'masters', PhD: 'phd', Other: 'other' } as Record<string, typeof degreeLevel>)[value];
+                if (next) setDegreeLevel(next);
+              }}
+              options={["Bachelor's", "Master's", 'PhD', 'Other']}
+            />
+            <SearchableSelect
+              label="Programme length"
+              value={programmeDurationYears ? `${programmeDurationYears} ${programmeDurationYears === '1' ? 'year' : 'years'}` : ''}
+              onChange={(value) => setProgrammeDurationYears(value.split(' ')[0])}
+              options={Array.from({ length: 12 }, (_, index) => `${index + 1} ${index === 0 ? 'year' : 'years'}`)}
+              optional
+            />
+            <SearchableSelect label="Enrollment year" value={enrollmentYear} onChange={setEnrollmentYear} options={Array.from({ length: 42 }, (_, index) => String(new Date().getFullYear() - index + 1))} optional />
             <div>
-              <span className="block text-sm font-semibold">{user.role === 'prospective' ? 'Dream university' : 'University'}</span>
-              <button
-                type="button"
-                aria-expanded={universitiesOpen}
-                aria-controls="profile-university-options"
-                onClick={() => setUniversitiesOpen((open) => !open)}
-                className="input mt-1.5 flex min-h-11 items-center justify-between gap-3 text-left"
-              >
-                <span className={university ? 'text-on-surface' : 'text-on-surface-variant'}>
-                  {university || (user.role === 'prospective' ? 'Choose your dream university' : 'Choose your university')}
-                </span>
-                <Icon name={universitiesOpen ? 'expand_less' : 'expand_more'} className="shrink-0 text-on-surface-variant" />
-              </button>
-              {universitiesOpen && (
-                <div id="profile-university-options" className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-outline-variant/70 bg-white p-2 shadow-header">
-                  <ul aria-label="Choose university" className="space-y-1">
-                    {universities.map((option) => (
-                      <li key={option}>
-                        <button
-                          type="button"
-                          aria-pressed={university === option}
-                          onClick={() => { setUniversity(option); setUniversitiesOpen(false); }}
-                          className={`w-full rounded-lg px-2.5 py-2 text-left text-xs font-medium transition ${university === option ? 'bg-secondary-fixed text-secondary' : 'text-on-surface hover:bg-surface-container-low'}`}
-                        >
-                          {option}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-            <div>
-              <span className="block text-sm font-semibold">Major / subject</span>
-              <button
-                type="button"
-                aria-expanded={majorsOpen}
-                aria-controls="profile-major-options"
-                onClick={() => setMajorsOpen((open) => !open)}
-                className="input mt-1.5 flex min-h-11 items-center justify-between gap-3 text-left"
-              >
-                <span className={major ? 'text-on-surface' : 'text-on-surface-variant'}>{major || 'Choose your major'}</span>
-                <Icon name={majorsOpen ? 'expand_less' : 'expand_more'} className="shrink-0 text-on-surface-variant" />
-              </button>
-              {majorsOpen && (
-                <div id="profile-major-options" className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-outline-variant/70 bg-white p-2 shadow-header">
-                  <ul aria-label="Choose major" className="space-y-1">
-                    {availableMajors.map((option) => (
-                      <li key={option}>
-                        <button
-                          type="button"
-                          aria-pressed={major === option}
-                          onClick={() => { setMajor(option); setMajorsOpen(false); }}
-                          className={`w-full rounded-lg px-2.5 py-2 text-left text-xs font-medium transition ${major === option ? 'bg-secondary-fixed text-secondary' : 'text-on-surface hover:bg-surface-container-low'}`}
-                        >
-                          {option}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-            <div>
-              <span className="block text-sm font-semibold">Expected graduation year</span>
-              <button
-                type="button"
-                aria-expanded={graduationYearsOpen}
-                aria-controls="profile-graduation-year-options"
-                onClick={() => setGraduationYearsOpen((open) => !open)}
-                className="input mt-1.5 flex min-h-11 items-center justify-between gap-3 text-left"
-              >
-                <span className={graduationYear ? 'text-on-surface' : 'text-on-surface-variant'}>
-                  {graduationYear || 'Choose graduation year'}
-                </span>
-                <Icon name={graduationYearsOpen ? 'expand_less' : 'expand_more'} className="shrink-0 text-on-surface-variant" />
-              </button>
-              {graduationYearsOpen && (
-                <div id="profile-graduation-year-options" className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-outline-variant/70 bg-white p-2 shadow-header">
-                  <ul aria-label="Choose graduation year" className="space-y-1">
-                    {graduationYears.map((year) => (
-                      <li key={year}>
-                        <button
-                          type="button"
-                          aria-pressed={graduationYear === year}
-                          onClick={() => { setGraduationYear(year); setGraduationYearsOpen(false); }}
-                          className={`w-full rounded-lg px-2.5 py-2 text-left text-xs font-medium transition ${graduationYear === year ? 'bg-secondary-fixed text-secondary' : 'text-on-surface hover:bg-surface-container-low'}`}
-                        >
-                          {year}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-            <label className="block text-sm font-semibold">Degree level
-              <select value={degreeLevel} onChange={(event) => setDegreeLevel(event.target.value as typeof degreeLevel)} className="input mt-1.5">
-                <option value="bachelors">Bachelor&apos;s</option>
-                <option value="masters">Master&apos;s</option>
-                <option value="phd">PhD</option>
-                <option value="other">Other</option>
-              </select>
-            </label>
-            <label className="block text-sm font-semibold">Programme length
-              <select value={programmeDurationYears} onChange={(event) => setProgrammeDurationYears(event.target.value)} className="input mt-1.5">
-                <option value="">Select programme length</option>
-                {Array.from({ length: 12 }, (_, index) => String(index + 1)).map((year) => <option key={year} value={year}>{year} {year === '1' ? 'year' : 'years'}</option>)}
-              </select>
-            </label>
-            <label className="block text-sm font-semibold">Enrollment year
-              <select value={enrollmentYear} onChange={(event) => setEnrollmentYear(event.target.value)} className="input mt-1.5">
-                <option value="">Select enrollment year</option>
-                {Array.from({ length: 42 }, (_, index) => String(new Date().getFullYear() - index + 1)).map((year) => <option key={year}>{year}</option>)}
-              </select>
-            </label>
-            <label className="block text-sm font-semibold">Year of study (manual override, optional)
-              <select value={yearOfStudyOverride} onChange={(event) => setYearOfStudyOverride(event.target.value)} className="input mt-1.5">
-                <option value="">Calculate from enrollment year</option>
-                {Array.from({ length: 12 }, (_, index) => String(index + 1)).map((year) => <option key={year} value={year}>Year {year}</option>)}
-              </select>
+              <SearchableSelect
+                label="Year of study (manual override)"
+                value={yearOfStudyOverride ? `Year ${yearOfStudyOverride}` : ''}
+                onChange={(value) => setYearOfStudyOverride(value.replace('Year ', ''))}
+                options={Array.from({ length: 12 }, (_, index) => `Year ${index + 1}`)}
+                optional
+              />
               <span className="mt-1 block text-xs font-normal text-on-surface-variant">Calculated from your enrollment year using an academic year that starts in September.</span>
-            </label>
+            </div>
             {user.role === 'faculty' && <>
               <label className="block text-sm font-semibold">Title<input maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} className="input mt-1.5" placeholder="e.g. Associate Professor" /></label>
               <label className="block text-sm font-semibold">Department<input maxLength={120} value={department} onChange={(event) => setDepartment(event.target.value)} className="input mt-1.5" /></label>
@@ -995,6 +901,11 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
                   Change my role
             </button>
           </div>
+          <section className="border-t border-outline-variant/50 pt-5">
+            <h3 className="font-headline text-lg font-semibold text-primary">Social Networks</h3>
+            <p className="mt-1 text-sm text-on-surface-variant">Add links where people can connect with you.</p>
+            <SocialNetworksEditor values={profileSocialNetworks} onChange={setProfileSocialNetworks} />
+          </section>
           {error && <p role="alert" className="text-sm font-medium text-error">{error}</p>}
           <div className="flex justify-end gap-2 border-t border-outline-variant/50 pt-4">
             <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
@@ -1344,7 +1255,10 @@ export default function OwnProfilePage() {
           </section>
 
           <section className="card p-5 sm:p-6">
-            <h2 className="font-headline text-xl font-semibold text-primary">About</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-headline text-xl font-semibold text-primary">About</h2>
+              <SocialNetworksProfileControl values={user.socialNetworks} />
+            </div>
             {user.biography ? <RichText text={user.biography} className="mt-3 whitespace-pre-line text-sm leading-relaxed text-on-surface-variant" /> : (
               <div className="mt-3 rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
                 Add a biography to introduce yourself to the academic community.
