@@ -9,19 +9,20 @@ type SearchableSelectProps = {
   options: string[];
   optional?: boolean;
   error?: string;
+  placeholder?: string;
 };
 
 function normalizeSearch(value: string) {
   return value.normalize('NFC').toLocaleLowerCase('az').replace(/[ıİ]/g, 'i');
 }
 
-export default function SearchableSelect({ label, value, onChange, options, optional = false, error }: SearchableSelectProps) {
+export default function SearchableSelect({ label, value, onChange, options, optional = false, error, placeholder }: SearchableSelectProps) {
   const id = useId();
   const [query, setQuery] = useState(value);
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const filteredOptions = options.filter((option) => normalizeSearch(option).includes(normalizeSearch(query)));
-  const placeholder = `Select ${label.toLowerCase()}${optional ? ' (optional)' : ''}`;
+  const inputPlaceholder = placeholder ?? `Select ${label.toLowerCase()}${optional ? ' (optional)' : ''}`;
 
   useEffect(() => {
     if (!isOpen) setQuery(value);
@@ -82,7 +83,7 @@ export default function SearchableSelect({ label, value, onChange, options, opti
         setQuery(value);
       }}
       onKeyDown={handleKeyDown}
-      placeholder={placeholder}
+      placeholder={inputPlaceholder}
       className="input w-full !bg-surface-container-low/40 !py-[9px] pr-10"
     />
     <Icon name={isOpen ? 'expand_less' : 'expand_more'} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />

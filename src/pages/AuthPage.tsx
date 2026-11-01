@@ -1,9 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { authenticate } from '../authService';
 import { useApp } from '../store';
-import { BrandMark, Icon, cx } from '../components/ui';
+import { BrandMark, Icon, Modal, cx } from '../components/ui';
 import SearchableSelect from '../components/SearchableSelect';
 import GoldVerificationSection from '../components/GoldVerificationSection';
 import {
@@ -13,13 +13,14 @@ import {
 } from '../components/goldVerification';
 import { majors, universities, universityOptionId } from '../data/educationOptions';
 
-type Role = 'scholar' | 'prospective' | 'faculty';
+type Role = 'scholar' | 'prospective' | 'faculty' | 'mentor';
 type Errors = Record<string, string>;
 
 const roles: { id: Role; label: string; icon: string }[] = [
   { id: 'scholar', label: 'Student / Scholar', icon: 'school' },
   { id: 'prospective', label: 'Prospective', icon: 'person_search' },
   { id: 'faculty', label: 'Faculty Representative', icon: 'account_balance' },
+  { id: 'mentor', label: 'Mentors', icon: 'workspace_premium' },
 ];
 const requirements = [
   { label: 'At least 12 characters', test: (value: string) => value.length >= 12 },
@@ -45,14 +46,29 @@ export default function AuthPage() {
   const [university, setUniversity] = useState('');
   const [major, setMajor] = useState('');
   const [graduationYear, setGraduationYear] = useState('');
+  const [mentorField, setMentorField] = useState('');
   const [requestGold, setRequestGold] = useState(false);
   const [method, setMethod] = useState<VerificationMethod>('identity_document');
   const [document, setDocument] = useState<File | null>(null);
+  const [goldModalOpen, setGoldModalOpen] = useState(false);
+  const [diploma, setDiploma] = useState<File | null>(null);
+  const [diplomaPreview, setDiplomaPreview] = useState('');
+  const [diplomaConfirmation, setDiplomaConfirmation] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const setAuthenticatedUser = useApp((s) => s.setAuthenticatedUser);
   const showToast = useApp((s) => s.showToast);
   const registration = mode === 'register';
+
+  useEffect(() => {
+    if (!diploma) {
+      setDiplomaPreview('');
+      return;
+    }
+    const previewUrl = URL.createObjectURL(diploma);
+    setDiplomaPreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [diploma]);
 
   const switchMode = (next: 'login' | 'register') => {
     setModeValue(next);
@@ -87,10 +103,11 @@ export default function AuthPage() {
     if (!password) next.password = 'Enter your password.';
     else if (registration && requirements.some((item) => !item.test(password))) next.password = 'Password must meet every requirement listed below.';
     if (registration && confirm !== password) next.confirm = 'Passwords do not match.';
-    if (registration && role !== 'prospective' && !university) next.university = 'Choose your university.';
-    if (registration && role !== 'prospective' && !major) next.major = role === 'faculty' ? 'Choose the subject you teach.' : 'Choose your major.';
+    if (registration && role !== 'prospective' && role !== 'mentor' && !university) next.university = 'Choose your university.';
+    if (registration && role !== 'prospective' && role !== 'mentor' && !major) next.major = role === 'faculty' ? 'Choose the subject you teach.' : 'Choose your major.';
     if (registration && role === 'scholar' && !graduationYear) next.graduationYear = 'Choose your graduation year.';
-    if (registration && role !== 'prospective') Object.assign(next, validateGoldVerification({
+    if (registration && role === 'mentor' && !mentorField) next.mentorField = 'Choose the field you teach in.';
+    if (registration && role !== 'prospective' && role !== 'mentor') Object.assign(next, validateGoldVerification({
       role,
       requestGold,
       method,
@@ -99,6 +116,11 @@ export default function AuthPage() {
     }));
     setErrors(next);
     if (Object.keys(next).length) return;
+
+    if (registration && role === 'mentor') {
+      showToast(diplomaConfirmation ? 'Mentor registration request submitted' : 'Mentor registration is ready for backend connection');
+      return;
+    }
 
     setBusy(true);
     try {
@@ -152,19 +174,23 @@ export default function AuthPage() {
         <p className="eyebrow text-secondary">{registration ? 'Join the academic network' : 'Welcome back'}</p>
         <h1 className="mt-2 font-headline text-3xl font-semibold text-primary">{registration ? 'Create your account' : 'Log in to Academix'}</h1>
         <p className="mt-2 text-sm text-on-surface-variant">{registration ? 'Choose how you’ll take part in the community.' : 'Continue your academic journey with your community.'}</p>
-        {registration && <div role="tablist" aria-label="Account role" className="mx-auto mt-7 grid max-w-[640px] grid-cols-1 gap-2 sm:grid-cols-3">{roles.map((item) => <button key={item.id} type="button" role="tab" aria-selected={role === item.id} onClick={() => { setRole(item.id); setRequestGold(false); setDocument(null); setErrors({}); }} className={cx('flex items-center justify-center gap-2 rounded-xl border p-3 text-sm font-semibold transition', role === item.id ? 'border-secondary bg-secondary-fixed text-secondary' : 'border-outline-variant text-on-surface-variant hover:bg-surface-container-low')}><Icon name={item.icon}/>{item.label}</button>)}</div>}
+        {registration && <div role="tablist" aria-label="Account role" className="mx-auto mt-7 grid max-w-[640px] grid-cols-2 gap-3">{roles.map((item) => <button key={item.id} type="button" role="tab" aria-selected={role === item.id} onClick={() => { setRole(item.id); setRequestGold(false); setDocument(null); setMentorField(''); setDiplomaConfirmation(false); setErrors({}); }} className={cx('relative flex min-h-16 w-full min-w-0 items-center justify-start gap-3 rounded-xl border px-4 py-3 text-left text-sm font-semibold transition', role === item.id ? 'border-secondary bg-secondary-fixed text-secondary' : 'border-outline-variant text-on-surface-variant hover:bg-surface-container-low')}><Icon name={item.icon} className="shrink-0" /><span className={cx('min-w-0 flex-1 leading-tight', item.id === 'mentor' && 'pr-14')}>{item.label}</span>{item.id === 'mentor' && <span className="absolute right-2 top-2 inline-flex items-center gap-0.5 rounded-full bg-gold-container px-1.5 py-0.5 text-[10px] text-gold"><Icon name="star" className="!text-[12px]" />Premium</span>}</button>)}</div>}
         <form onSubmit={submit} noValidate className={cx('mt-7', registration ? 'mx-auto max-w-[640px] space-y-6' : 'space-y-5')}>
           {registration && <div className="space-y-5">
             <label className="block text-sm font-semibold">Full Legal Name<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" className="input mt-2 !bg-surface-container-low/40 !py-[9px]" aria-invalid={Boolean(errors.name)}/>{errors.name && <span className="mt-1 block text-xs text-error">{errors.name}</span>}</label>
             <label className="block text-sm font-semibold">Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" className="input mt-2 !bg-surface-container-low/40 !py-[9px]" aria-invalid={Boolean(errors.email)}/>{errors.email && <span className="mt-1 block text-xs text-error">{errors.email}</span>}</label>
             {passwordInput('password')}
             {passwordInput('confirm')}
-            {role === 'prospective' ? <div className="grid gap-5 sm:grid-cols-2"><SearchableSelect label="Dream University" value={university} onChange={setUniversity} options={universities} optional/><SearchableSelect label="Dream Major" value={major} onChange={setMajor} options={majors} optional/></div> : <div className={cx('grid gap-5', role === 'scholar' ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
+            {role === 'mentor' ? <SearchableSelect label="What field do you teach in?" value={mentorField} onChange={setMentorField} options={[]} placeholder="Select your field" error={errors.mentorField} /> : role === 'prospective' ? <div className="grid gap-5 sm:grid-cols-2"><SearchableSelect label="Dream University" value={university} onChange={setUniversity} options={universities} optional/><SearchableSelect label="Dream Major" value={major} onChange={setMajor} options={majors} optional/></div> : <div className={cx('grid gap-5', role === 'scholar' ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
               <SearchableSelect label="University" value={university} onChange={setUniversity} options={universities} error={errors.university}/>
               <SearchableSelect label={role === 'faculty' ? 'Major / Subject taught' : 'Major'} value={major} onChange={setMajor} options={majors} error={errors.major}/>
               {role === 'scholar' && <label className="block text-sm font-semibold">Graduation year<select value={graduationYear} onChange={(e) => setGraduationYear(e.target.value)} className="input mt-2 !bg-surface-container-low/40 !py-[9px]" aria-invalid={Boolean(errors.graduationYear)}><option value="">Select graduation year</option>{Array.from({ length: 32 }, (_, index) => String(2000 + index)).map((year) => <option key={year}>{year}</option>)}</select>{errors.graduationYear && <span className="mt-1 block text-xs text-error">{errors.graduationYear}</span>}</label>}
             </div>}
-            {role !== 'prospective' && <GoldVerificationSection
+            {role === 'mentor' ? <button type="button" onClick={() => setGoldModalOpen(true)} className="w-full rounded-xl border border-gold/40 bg-gold-container/40 p-4 text-left transition hover:bg-gold-container/70">
+              <span className="flex items-center gap-2 text-sm font-semibold text-primary"><Icon name="workspace_premium" className="text-gold" />Request Gold Verification</span>
+              <span className="mt-1 block text-xs text-on-surface-variant">Upload your diploma to get the Gold Verified badge. Optional during sign-up.</span>
+              {diplomaConfirmation && <span role="status" className="mt-2 block text-xs font-semibold text-green-700">Diploma uploaded – pending review</span>}
+            </button> : role !== 'prospective' && <GoldVerificationSection
               role={role}
               requestGold={requestGold}
               setRequestGold={setRequestGold}
@@ -195,5 +221,25 @@ export default function AuthPage() {
         </>}
       </section>
     </main>
+    <Modal open={goldModalOpen} onClose={() => setGoldModalOpen(false)} label="Gold Verification">
+      <div className="p-6 sm:p-8">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="eyebrow text-gold">Premium verification</p>
+            <h2 className="mt-1 font-headline text-2xl font-semibold text-primary">Gold Verification</h2>
+          </div>
+          <button type="button" onClick={() => setGoldModalOpen(false)} className="rounded-full p-1.5 hover:bg-surface-container-low" aria-label="Close"><Icon name="close" /></button>
+        </div>
+        <label className="mt-6 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-outline-variant bg-surface-container-low/40 px-4 py-6 text-center">
+          <Icon name="upload_file" className="text-gold" />
+          <span className="mt-2 text-sm font-semibold">Upload your diploma</span>
+          <span className="mt-1 text-xs text-on-surface-variant">JPG or PNG</span>
+          <span className="mt-4 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white">Choose file</span>
+          <input type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" className="sr-only" onChange={(event) => setDiploma(event.target.files?.[0] ?? null)} />
+        </label>
+        {diplomaPreview && <div className="mt-4 rounded-xl border border-outline-variant p-3"><img src={diplomaPreview} alt="Selected diploma preview" className="max-h-48 w-full rounded-lg object-contain" /><div className="mt-2 flex justify-end gap-3"><button type="button" onClick={() => setDiploma(null)} className="text-xs font-semibold text-error">Remove</button><label className="cursor-pointer text-xs font-semibold text-secondary">Replace<input type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" className="sr-only" onChange={(event) => setDiploma(event.target.files?.[0] ?? null)} /></label></div></div>}
+        <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setGoldModalOpen(false)} className="rounded-lg border border-outline-variant px-4 py-2 text-sm font-semibold text-on-surface-variant">Cancel</button><button type="button" disabled={!diploma} onClick={() => { setDiplomaConfirmation(true); setRequestGold(true); setGoldModalOpen(false); }} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">Submit</button></div>
+      </div>
+    </Modal>
   </div>;
 }
