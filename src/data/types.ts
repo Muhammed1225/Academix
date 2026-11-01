@@ -41,7 +41,6 @@ export interface Post {
   body: string;
   channelId: string;
   universityId?: string;
-  insight?: string;
   attachment?: { fileName: string; meta: string };
   image?: { fileName: string; src: string };
   votes: number;
@@ -53,7 +52,6 @@ export interface Post {
   bookmarked: boolean;
   tabs: FeedTab[];
   /** Doğrulanmamış iddialar için topluluk denetim notu. */
-  auditNote?: string;
 }
 
 export interface Channel {

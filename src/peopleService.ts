@@ -138,6 +138,12 @@ function accountMatches(user: AuthenticatedUser, filters: PeopleFilters, excludi
   return !query || [user.name, user.university, user.major].some((value) => value?.toLocaleLowerCase().includes(query));
 }
 
+const localPeopleEnabled = import.meta.env.DEV && import.meta.env.VITE_AUTH_BYPASS !== 'false';
+
+function isJsonResponse(response: Response) {
+  return response.headers.get('content-type')?.includes('application/json') ?? false;
+}
+
 function localPeopleSearch(filters: PeopleFilters, currentUserId: string, cursor?: string): PeopleResponse {
   let accounts: Record<string, AuthenticatedUser> = {};
   try {
@@ -253,9 +259,7 @@ export async function searchPeople(
   signal?: AbortSignal,
   cursor?: string,
 ): Promise<PeopleResponse> {
-  if (import.meta.env.DEV && import.meta.env.VITE_AUTH_BYPASS !== 'false') {
-    return localPeopleSearch(filters, currentUserId, cursor);
-  }
+  if (localPeopleEnabled) return localPeopleSearch(filters, currentUserId, cursor);
   const params = new URLSearchParams();
   for (const role of filters.roles) params.append('roles', role);
   for (const id of filters.universities) params.append('universities', id);
@@ -274,60 +278,65 @@ export async function searchPeople(
   params.set('sort', filters.sort);
   if (cursor) params.set('cursor', cursor);
   const response = await fetch(`/api/people?${params.toString()}`, { credentials: 'same-origin', signal });
+  if (!isJsonResponse(response)) return localPeopleSearch(filters, currentUserId, cursor);
   const result = await response.json() as PeopleResponse | { error?: string };
   if (!response.ok) throw new Error('error' in result ? result.error : 'Unable to search people.');
   return result as PeopleResponse;
 }
 
-export async function getPublicPerson(id: string, currentUserId: string, signal?: AbortSignal): Promise<PeoplePerson | null> {
-  if (import.meta.env.DEV && import.meta.env.VITE_AUTH_BYPASS !== 'false') {
-    let accounts: Record<string, AuthenticatedUser> = {};
-    try {
-      const raw: unknown = JSON.parse(localStorage.getItem('academix.test.accounts') ?? '{}');
-      if (raw && typeof raw === 'object' && !Array.isArray(raw)) accounts = raw as Record<string, AuthenticatedUser>;
-    } catch {
-      accounts = {};
-    }
-    const accountsById = new Map(demoUsers.map((account) => [account.id, account]));
-    for (const account of Object.values(accounts)) accountsById.set(account.id, account);
-    const allAccounts = [...accountsById.values()];
-    const viewer = allAccounts.find((candidate) => candidate.id === currentUserId);
-    const blockedUserIds = new Set(viewer?.blockedUserIds ?? []);
-    const user = allAccounts.find((candidate) =>
-      candidate.id === id && candidate.id !== currentUserId && candidate.discoverable === true &&
-      candidate.name.trim() !== '' && !candidate.name.includes('@') &&
-      !blockedUserIds.has(candidate.id) &&
-      !candidate.blockedUserIds?.includes(currentUserId));
-    if (!user) return null;
-    const universityId = user.role === 'prospective'
-      ? user.dreamUniversityId ?? (user.university ? universityOptionId(user.university) || peopleOptionId(user.university) : '')
-      : user.universityId ?? (user.university ? universityOptionId(user.university) || peopleOptionId(user.university) : '');
-    const majorId = user.majorId ?? (user.major ? peopleOptionId(user.major) : '');
-    const study = currentStudy(user);
-    const university = universities.find((name) => peopleOptionId(name) === universityId);
-    const major = majors.find((name) => peopleOptionId(name) === majorId);
-    return {
-      id: user.id,
-      name: user.name,
-      avatar: user.photo || '',
-      role: user.role === 'scholar' ? 'student' : user.role,
-      ...(user.showUniversityInSearch !== false && university ? {
-        universityId,
-        university,
-        universityShortName: universityId === 'baku-higher-oil-school-bhos' ? 'BHOS (BANM)' : universityId === 'ada-university' ? 'ADA' : university,
-      } : {}),
-      ...(major ? { majorId, major } : {}),
-      ...(user.showYearInSearch !== false && 'year' in study ? { year: study.year, programmeDurationYears: user.programmeDurationYears } : {}),
-      ...(user.showYearInSearch !== false && 'graduatedYear' in study ? { graduatedYear: study.graduatedYear } : {}),
-      ...(user.degreeLevel ? { degreeLevel: user.degreeLevel } : {}),
-      ...(user.role === 'faculty' ? { title: user.title ?? '', department: user.department ?? '' } : {}),
-      sharedInterests: user.interests.filter((interest) => viewer?.interests.includes(interest)),
-      openToMessages: user.openToMessages === true,
-      openToMentoring: user.openToMentoring === true,
-      verified: user.verificationStatus === 'verified',
-    };
+function localPublicPerson(id: string, currentUserId: string): PeoplePerson | null {
+  let accounts: Record<string, AuthenticatedUser> = {};
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem('academix.test.accounts') ?? '{}');
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) accounts = raw as Record<string, AuthenticatedUser>;
+  } catch {
+    accounts = {};
   }
+  const accountsById = new Map(demoUsers.map((account) => [account.id, account]));
+  for (const account of Object.values(accounts)) accountsById.set(account.id, account);
+  const allAccounts = [...accountsById.values()];
+  const viewer = allAccounts.find((candidate) => candidate.id === currentUserId);
+  const blockedUserIds = new Set(viewer?.blockedUserIds ?? []);
+  const user = allAccounts.find((candidate) =>
+    candidate.id === id && candidate.id !== currentUserId && candidate.discoverable === true &&
+    candidate.name.trim() !== '' && !candidate.name.includes('@') &&
+    !blockedUserIds.has(candidate.id) &&
+    !candidate.blockedUserIds?.includes(currentUserId));
+  if (!user) return null;
+  const universityId = user.role === 'prospective'
+    ? user.dreamUniversityId ?? (user.university ? universityOptionId(user.university) || peopleOptionId(user.university) : '')
+    : user.universityId ?? (user.university ? universityOptionId(user.university) || peopleOptionId(user.university) : '');
+  const majorId = user.majorId ?? (user.major ? peopleOptionId(user.major) : '');
+  const study = currentStudy(user);
+  const university = universities.find((name) => peopleOptionId(name) === universityId);
+  const major = majors.find((name) => peopleOptionId(name) === majorId);
+  return {
+    id: user.id,
+    name: user.name,
+    avatar: user.photo || '',
+    role: user.role === 'scholar' ? 'student' : user.role,
+    ...(user.showUniversityInSearch !== false && university ? {
+      universityId,
+      university,
+      universityShortName: universityId === 'baku-higher-oil-school-bhos' ? 'BHOS (BANM)' : universityId === 'ada-university' ? 'ADA' : university,
+    } : {}),
+    ...(major ? { majorId, major } : {}),
+    ...(user.showYearInSearch !== false && 'year' in study ? { year: study.year, programmeDurationYears: user.programmeDurationYears } : {}),
+    ...(user.showYearInSearch !== false && 'graduatedYear' in study ? { graduatedYear: study.graduatedYear } : {}),
+    ...(user.degreeLevel ? { degreeLevel: user.degreeLevel } : {}),
+    ...(user.role === 'faculty' ? { title: user.title ?? '', department: user.department ?? '' } : {}),
+    sharedInterests: user.interests.filter((interest) => viewer?.interests.includes(interest)),
+    openToMessages: user.openToMessages === true,
+    openToMentoring: user.openToMentoring === true,
+    verified: user.verificationStatus === 'verified',
+  };
+}
+
+export async function getPublicPerson(id: string, currentUserId: string, signal?: AbortSignal): Promise<PeoplePerson | null> {
+  if (localPeopleEnabled) return localPublicPerson(id, currentUserId);
   const response = await fetch(`/api/people/${encodeURIComponent(id)}`, { credentials: 'same-origin', signal });
+  // Static hosting (e.g. Netlify) has no API server and answers with an HTML page instead of JSON.
+  if (!isJsonResponse(response)) return localPublicPerson(id, currentUserId);
   if (response.status === 404) return null;
   const result = await response.json() as PeoplePerson | { error?: string };
   if (!response.ok) throw new Error('error' in result ? result.error : 'Unable to load this profile.');

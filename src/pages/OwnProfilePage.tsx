@@ -1099,7 +1099,7 @@ export default function OwnProfilePage() {
   };
 
   const authoredPosts = useMemo(
-    () => user ? posts.filter((post) => post.author.id === user.id && !post.auditNote) : [],
+    () => user ? posts.filter((post) => post.author.id === user.id) : [],
     [posts, user],
   );
 

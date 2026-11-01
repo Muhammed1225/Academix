@@ -9,53 +9,6 @@ import RichText from './RichText';
 import { Avatar, Icon, VerificationBadge, cx } from './ui';
 import UserAvatar from './UserAvatar';
 
-function FlaggedClaim({ post }: { post: Post }) {
-  const showToast = useApp((s) => s.showToast);
-  const user = useApp((s) => s.user);
-  const profileHref = post.author.id === user?.id
-    ? '/profile'
-    : post.author.id === 'maya' ? '/mentors/maya' : `/people/${post.author.id}`;
-  return (
-    <article className="card overflow-hidden border-l-4 !border-l-error p-5">
-      <div className="flex items-start gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface-container-low text-outline">
-          <Icon name="person_off" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <UserAvatar
-            src={post.author.avatar}
-            name={post.author.name}
-            size={40}
-            profileHref={profileHref}
-            subtitle={post.author.subtitle}
-            verification={post.author.verification}
-            badge={post.author.badge}
-            messagePerson={post.author.id === user?.id ? undefined : {
-              id: post.author.id,
-              name: post.author.name,
-              subtitle: post.author.subtitle || 'Academix community member',
-              ...(post.author.avatar ? { avatar: post.author.avatar } : {}),
-            }}
-            showName
-            nameClassName="text-sm"
-          />
-        </div>
-        <span className="text-xs font-semibold text-error">Community Audit Active</span>
-      </div>
-      <p className="mt-4 text-[15px] leading-relaxed text-on-surface">{post.body}</p>
-      {post.auditNote && (
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg bg-error-container/60 px-4 py-3 text-sm text-on-error-container">
-          <Icon name="gavel" className="text-error" />
-          <span className="flex-1">{post.auditNote}</span>
-          <button type="button" className="font-semibold text-error hover:underline" onClick={() => showToast('Counter-proof request sent to auditors', 'gavel')}>
-            Submit Counter-Proof
-          </button>
-        </div>
-      )}
-    </article>
-  );
-}
-
 export default function PostCard({ post, interactive = true }: { post: Post; interactive?: boolean }) {
   const vote = useApp((s) => s.vote);
   const toggleBookmark = useApp((s) => s.toggleBookmark);
@@ -65,8 +18,6 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
   const [threadOpen, setThreadOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const university = colleges.find((college) => college.id === post.universityId);
-
-  if (post.auditNote) return <FlaggedClaim post={post} />;
 
   const latest = post.comments[post.comments.length - 1];
   const visibleComments = threadOpen ? post.comments : latest ? [latest] : [];
@@ -135,16 +86,6 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
             loading="lazy"
             className="mt-4 max-h-[32rem] w-full rounded-lg bg-surface-container-low object-contain"
           />
-        )}
-
-        {post.insight && (
-          <div className="mt-4 flex gap-2.5 rounded-lg border border-secondary-fixed bg-surface-container-low px-4 py-3 text-sm text-on-surface">
-            <Icon name="lightbulb" className="text-secondary" />
-            <p>
-              <span className="font-semibold">Admissions Rubric Insight: </span>
-              {post.insight}
-            </p>
-          </div>
         )}
 
         {post.attachment && (

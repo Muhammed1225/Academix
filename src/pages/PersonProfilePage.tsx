@@ -99,7 +99,7 @@ export default function PersonProfilePage() {
   }
   if (person.id === 'maya') return <Navigate to="/mentors/maya" replace />;
 
-  const authoredPosts = posts.filter((post) => post.author.id === person.id && !post.auditNote);
+  const authoredPosts = posts.filter((post) => post.author.id === person.id);
   const recommendations = Object.values(people)
     .filter((candidate) => candidate.id !== person.id && candidate.id !== 'anon' && candidate.id !== 'anon-ivy')
     .map((candidate) => ({

@@ -244,7 +244,7 @@ export default function FeedPage() {
     if (selectedAuthorFilters.length && !selectedAuthorFilters.some((filter) => postMatchesAuthorFilter(post, filter))) return false;
     if (selectedVerifications.length && !selectedVerifications.includes(post.author.verification)) return false;
     if (selectedGraduationYears.length && !selectedGraduationYears.includes(postGraduationYear(post))) return false;
-    const searchableText = normalized(`${post.title ?? ''} ${post.body} ${post.insight ?? ''} ${post.author.name} ${post.author.subtitle}`);
+    const searchableText = normalized(`${post.title ?? ''} ${post.body} ${post.author.name} ${post.author.subtitle}`);
     if (normalizedQuery && !normalizedQuery.split(/\s+/).every((term) => searchableText.includes(term))) return false;
     if (selectedUniversities.length) {
       const college = colleges.find((item) => item.id === post.universityId);

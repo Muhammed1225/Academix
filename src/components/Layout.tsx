@@ -203,7 +203,7 @@ function Header({
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-white/25 bg-[#0051D5] text-white shadow-header">
       <div className="mx-auto flex h-16 max-w-content items-center justify-between gap-1 px-3 sm:gap-2 sm:px-4">
-        <div className="flex min-w-0 flex-[0_1_30rem] items-center gap-1.5">
+        <div className="flex min-w-0 flex-[0_1_30rem] items-center gap-1.5 md:gap-6">
           <Link to="/" className="shrink-0 text-white" aria-label={`${BRAND} feed`}>
             <span className="inline-flex items-center gap-2 font-headline text-2xl font-bold tracking-tight text-white">
               <img src="/images/academix-header-logo.png" alt="" aria-hidden="true" className="h-[45px] w-[45px] shrink-0 object-contain" />

@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       '/api/auth': 'http://localhost:3001',
       '/api/notifications': 'http://localhost:3001',
+      '/api/people': 'http://localhost:3001',
     },
   },
 })

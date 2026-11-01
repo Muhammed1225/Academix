@@ -113,9 +113,6 @@ export const posts: Post[] = [
       'Python at age twelve...". This is biographical noise. We already know your timeline from the activities list. ' +
       'What we evaluate is epistemic curiosity under failure. Detail a problem where your hypothesis completely ' +
       'collapsed and how you calibrated your formal logic.',
-    insight:
-      'We rank essays along three orthogonal axes: Cognitive Persistence (40%), Domain Nuance (35%), and Collegiate ' +
-      'Generosity (25%).',
     votes: 482,
     likes: 482,
     dislikes: 0,
@@ -169,7 +166,6 @@ export const posts: Post[] = [
     body:
       '"I heard directly from a Cornell CS advisor that if you submit a test-optional application with a 3.8 GPA you ' +
       'are automatically routed to the transfer option pool."',
-    auditNote: '3 Verified Admissions Mentors flagged this claim as inaccurate.',
     votes: 12,
     likes: 12,
     dislikes: 0,
