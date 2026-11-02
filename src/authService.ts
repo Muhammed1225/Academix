@@ -3,7 +3,7 @@ import type { SocialNetworks } from './components/SocialNetworks';
 import { universityNameForId, universityOptionId } from './data/educationOptions';
 
 type AuthMode = 'login' | 'register';
-type ProfileChanges = Omit<Partial<Pick<AuthenticatedUser, 'name' | 'photo' | 'biography' | 'interests' | 'purpose' | 'location' | 'university' | 'major' | 'role' | 'bannerBackground' | 'degreeLevel' | 'programmeDurationYears' | 'discoverable' | 'showUniversityInSearch' | 'showYearInSearch' | 'languages' | 'openToMessages' | 'openToMentoring' | 'title' | 'department'>>, 'programmeDurationYears'> & {
+type ProfileChanges = Omit<Partial<Pick<AuthenticatedUser, 'name' | 'photo' | 'biography' | 'interests' | 'purpose' | 'location' | 'university' | 'major' | 'role' | 'bannerBackground' | 'degreeLevel' | 'programmeDurationYears' | 'discoverable' | 'showUniversityInSearch' | 'showYearInSearch' | 'languages' | 'openToMessages' | 'openToMentoring' | 'title' | 'department' | 'onboardingStep'>>, 'programmeDurationYears'> & {
   socialNetworks?: SocialNetworks;
   programmeDurationYears?: number | null;
   dreamUniversityId?: string | null;
@@ -87,6 +87,11 @@ function testAuthenticate(mode: AuthMode, input: Record<string, unknown>): AuthR
         email,
         name: typeof input.name === 'string' && input.name.trim() ? input.name.trim() : fallbackDisplayName(),
         role,
+        plan: existingUser?.plan ?? 'free',
+        planStatus: existingUser?.planStatus ?? 'free',
+        onboardingStep: existingUser?.onboardingStep ?? 1,
+        ...(existingUser?.subscriptionStepCompletedAt ? { subscriptionStepCompletedAt: existingUser.subscriptionStepCompletedAt } : {}),
+        ...(existingUser?.subscriptionSkippedAt ? { subscriptionSkippedAt: existingUser.subscriptionSkippedAt } : {}),
         ...(typeof input.university === 'string' && input.university ? { university: universityNameForId(universityOptionId(input.university)) ?? input.university } : {}),
         ...(role !== 'prospective' && typeof input.university === 'string' && input.university && universityOptionId(input.university) ? { universityId: universityOptionId(input.university) } : {}),
         ...(registeredDreamUniversityId ? { dreamUniversityId: registeredDreamUniversityId } : {}),
@@ -242,6 +247,7 @@ export async function saveProfile(changes: ProfileChanges): Promise<AuthResult> 
       ...(changes.openToMentoring !== undefined ? { openToMentoring: changes.openToMentoring } : {}),
       ...(changes.title !== undefined ? { title: changes.title } : {}),
       ...(changes.department !== undefined ? { department: changes.department } : {}),
+      ...(changes.onboardingStep !== undefined ? { onboardingStep: changes.onboardingStep } : {}),
       ...(changes.socialNetworks !== undefined ? { socialNetworks: changes.socialNetworks } : {}),
     };
     const updated = { ...user, ...profile };

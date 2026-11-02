@@ -1,0 +1,39 @@
+{
+  "subscriptionStepEnabled": true,
+  "subscriptionStepRoles": ["faculty", "scholar", "prospective"],
+  "plans": [
+    {
+      "id": "starter",
+      "name": "Starter",
+      "price": 7.99,
+      "currency": "usd",
+      "interval": "month",
+      "enabled": true,
+      "recommended": false,
+      "limits": { "maxStudentsPerClass": 40 },
+      "features": { "customization": true, "newsBoard": false }
+    },
+    {
+      "id": "plus",
+      "name": "Pro",
+      "price": 12.99,
+      "currency": "usd",
+      "interval": "month",
+      "enabled": true,
+      "recommended": true,
+      "limits": { "maxStudentsPerClass": 100 },
+      "features": { "customization": true, "newsBoard": true }
+    },
+    {
+      "id": "pro",
+      "name": "Premium",
+      "price": 21.99,
+      "currency": "usd",
+      "interval": "month",
+      "enabled": true,
+      "recommended": false,
+      "limits": { "maxStudentsPerClass": null },
+      "features": { "customization": true, "newsBoard": true }
+    }
+  ]
+}

@@ -55,7 +55,13 @@ function NotificationRows({
               >
                 {item.type === 'message'
                   ? <UserAvatar src={item.senderAvatar} name={item.senderName} size={40} />
-                  : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-container text-secondary"><Icon name="notifications" /></span>}
+                  : <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                    item.category === 'payment_successful'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : item.category === 'payment_failed'
+                        ? 'bg-amber-50 text-amber-800'
+                        : 'bg-surface-container text-secondary'
+                  }`}><Icon name={item.category === 'payment_successful' ? 'check_circle' : item.category === 'payment_failed' ? 'warning' : 'notifications'} /></span>}
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm leading-5 text-on-surface">
                     <strong className="font-semibold">{item.senderName}</strong> {item.text}

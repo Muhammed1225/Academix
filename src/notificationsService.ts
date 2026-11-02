@@ -4,6 +4,7 @@ import type { AuthenticatedUser } from './store';
 export interface NotificationItem {
   id: string;
   type: 'message' | 'system';
+  category?: 'payment_successful' | 'payment_failed';
   senderName: string;
   senderAvatar?: string;
   text: string;
@@ -39,6 +40,7 @@ export interface NotificationPage {
 export interface NotificationInput {
   id: string;
   type: NotificationItem['type'];
+  category?: NotificationItem['category'];
   senderName: string;
   senderAvatar?: string;
   text: string;

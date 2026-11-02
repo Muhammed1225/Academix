@@ -21,6 +21,8 @@ import { useApp } from './store';
 import AdmissionResultsPage from './pages/AdmissionResultsPage';
 import NotificationsPage from './pages/NotificationsPage';
 import MentorsPage from './pages/MentorsPage';
+import SubscriptionPage from './pages/SubscriptionPage';
+import CheckoutPage from './pages/CheckoutPage';
 
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
@@ -58,6 +60,8 @@ export default function App() {
       <Routes>
         <Route path="auth" element={<AuthPage />} />
         <Route path="onboarding" element={<OnboardingPage />} />
+        <Route path="subscription" element={<SubscriptionPage />} />
+        <Route path="checkout" element={<CheckoutPage />} />
         <Route element={<Layout />}>
           <Route index element={<FeedPage />} />
           <Route path="colleges" element={<CollegesPage />} />

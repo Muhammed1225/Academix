@@ -16,6 +16,68 @@
   .btn-ghost { @apply btn text-on-surface-variant hover:bg-surface-container-low; }
   .input { @apply w-full rounded-lg bg-surface-container-low px-3.5 py-2.5 text-sm placeholder:text-outline border border-transparent focus:outline-none focus:border-secondary/50 focus:ring-2 focus:ring-secondary/20 focus:bg-white transition; }
   .chip { @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors; }
+  .subscription-gold-button {
+    @apply relative isolate inline-flex h-10 w-full items-center justify-center gap-2 overflow-hidden rounded-lg border border-[#bd8711] px-4 text-sm font-bold text-[#3A2A00] shadow-sm transition duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3A2A00] active:scale-[0.98] lg:w-auto;
+    background: linear-gradient(110deg, #F5C84B 0%, #FFE58A 42%, #D9A21B 100%);
+    box-shadow: 0 3px 10px rgba(145, 100, 8, 0.2);
+  }
+  .subscription-gold-button::after {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    content: '';
+    transform: translateX(-140%) skewX(-20deg);
+    background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.62) 50%, transparent 70%);
+  }
+  .subscription-gold-button:hover {
+    transform: scale(1.03);
+    background: linear-gradient(110deg, #FFDA68 0%, #FFF0AC 42%, #E8B52B 100%);
+  }
+  .subscription-gold-button:hover::after { animation: subscription-button-shine 400ms ease-out; }
+  .subscription-gold-button-warning {
+    @apply border-[#bd8711];
+    background: linear-gradient(110deg, #FFF1C7 0%, #FFE29A 100%);
+  }
+  .subscription-gold-button-warning:hover {
+    background: linear-gradient(110deg, #FFF6D8 0%, #FFE9B0 100%);
+  }
+  .payment-success-content { animation: payment-content-fade 300ms ease-out both; }
+  .payment-success-mark { width: 7rem; height: 7rem; margin-inline: auto; }
+  .payment-success-mark svg { display: block; overflow: visible; }
+  .payment-success-ring {
+    fill: none;
+    stroke: #22C55E;
+    stroke-width: 2;
+    opacity: 0;
+    transform-origin: center;
+    animation: payment-ring-pulse 650ms 450ms ease-out both;
+  }
+  .payment-success-circle {
+    fill: #22C55E;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: payment-circle-pop 400ms cubic-bezier(.2, 1.5, .5, 1) both;
+  }
+  .payment-success-check {
+    fill: none;
+    stroke: white;
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 58;
+    stroke-dashoffset: 58;
+    animation: payment-check-draw 500ms 360ms ease-out forwards;
+  }
+  .payment-spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 9999px;
+    animation: payment-spinner-rotate 700ms linear infinite;
+  }
+  .payment-spinner-large { width: 2rem; height: 2rem; color: #0B5BD3; }
   .eyebrow { @apply text-[11px] font-bold uppercase tracking-wider text-on-surface-variant; }
   .editor-content:empty::before { content: attr(data-placeholder); @apply text-outline; }
   .rich-text p { @apply mb-2; }
@@ -37,3 +99,26 @@
 
 @keyframes slide-up { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 .animate-slide-up { animation: slide-up 0.2s ease-out; }
+@keyframes subscription-button-shine {
+  from { transform: translateX(-140%) skewX(-20deg); }
+  to { transform: translateX(140%) skewX(-20deg); }
+}
+@keyframes payment-circle-pop {
+  from { transform: scale(0); }
+  75% { transform: scale(1.12); }
+  to { transform: scale(1); }
+}
+@keyframes payment-check-draw { to { stroke-dashoffset: 0; } }
+@keyframes payment-ring-pulse {
+  from { opacity: .6; transform: scale(.85); }
+  to { opacity: 0; transform: scale(1.28); }
+}
+@keyframes payment-content-fade {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes payment-spinner-rotate { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

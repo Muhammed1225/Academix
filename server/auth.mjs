@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { handleSubscriptions, hasSubscriptionFeature } from './subscriptions.mjs';
 
 const scrypt = promisify(scryptCallback);
 const dataFile = resolve(process.env.AUTH_DATA_FILE || resolve(dirname(fileURLToPath(import.meta.url)), 'data', 'users.json'));
@@ -138,6 +139,11 @@ try {
       delete user.universityId;
       migrated = true;
     }
+    if (!user.plan) {
+      user.plan = 'free';
+      user.planStatus = 'free';
+      migrated = true;
+    }
     if (user.major && !user.majorId) {
       user.majorId = optionId(user.major);
       migrated = true;
@@ -202,6 +208,11 @@ function publicUser(user) {
     email: user.email,
     name: user.name,
     role: user.role,
+    plan: user.plan ?? 'free',
+    planStatus: user.planStatus ?? 'free',
+    onboardingStep: user.onboardingStep ?? 1,
+    ...(user.subscriptionStepCompletedAt ? { subscriptionStepCompletedAt: user.subscriptionStepCompletedAt } : {}),
+    ...(user.subscriptionSkippedAt ? { subscriptionSkippedAt: user.subscriptionSkippedAt } : {}),
     ...(user.location ? { location: user.location } : {}),
     ...(user.university ? { university: user.university } : {}),
     ...(user.universityId ? { universityId: user.universityId } : {}),
@@ -614,10 +625,15 @@ async function handleNotifications(req, res, url) {
       const senderName = typeof input.senderName === 'string' ? input.senderName.trim() : '';
       const text = typeof input.text === 'string' ? input.text.trim() : '';
       const type = input.type === 'message' || input.type === 'system' ? input.type : '';
-      const href = typeof input.href === 'string' && /^\/(inbox|people|notifications)(\/[\w-]+)?$/.test(input.href) ? input.href : '';
+      const category = input.category === 'payment_successful' || input.category === 'payment_failed'
+        ? input.category
+        : '';
+      const href = typeof input.href === 'string' && (/^\/(inbox|people|notifications)(\/[\w-]+)?$/.test(input.href) ||
+        input.href === '/subscription#billing') ? input.href : '';
       const conversationId = input.conversationId ?? input.ticketId;
       if (!id || !senderName || senderName.length > 100 || senderName.includes('@') ||
           !text || text.length > 240 || !type || !href ||
+          (input.category !== undefined && !category) ||
           (input.senderAvatar !== undefined && (typeof input.senderAvatar !== 'string' || input.senderAvatar.length > 2048)) ||
           (conversationId !== undefined && (typeof conversationId !== 'string' || conversationId.length > 120))) {
         sendJson(res, 400, { error: 'Invalid notification.' });
@@ -632,6 +648,7 @@ async function handleNotifications(req, res, url) {
       const notification = existing ?? {
         id,
         type,
+        ...(category ? { category } : {}),
         senderName,
         ...(input.senderAvatar ? { senderAvatar: input.senderAvatar } : {}),
         text,
@@ -769,6 +786,7 @@ function decodeIdentityDocument(document) {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  if (await handleSubscriptions(req, res, url, authenticatedSession(req).user, users, saveUsers, publicUser)) return;
   if (url.pathname.startsWith('/api/people/')) {
     handlePublicPerson(req, res, url.pathname.slice('/api/people/'.length));
     return;
@@ -803,7 +821,19 @@ const server = createServer(async (req, res) => {
         sendJson(res, 400, { error: 'Invalid profile update.' });
         return;
       }
+      if (['bannerBackground', 'bannerImage', 'bannerImagePosition', 'bannerImageZoom'].some((field) => input[field] !== undefined) &&
+        !hasSubscriptionFeature(user, 'customization')) {
+        sendJson(res, 403, { error: 'Profile banner customization is available with a paid plan. Choose a plan to unlock it.' });
+        return;
+      }
       const updated = { ...user };
+      if (input.onboardingStep !== undefined) {
+        if (!Number.isInteger(input.onboardingStep) || input.onboardingStep < 1 || input.onboardingStep > 4) {
+          sendJson(res, 400, { error: 'Choose a valid onboarding step.' });
+          return;
+        }
+        updated.onboardingStep = input.onboardingStep;
+      }
       if (input.name !== undefined) {
         if (typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 100) {
           sendJson(res, 400, { error: 'Enter a name no longer than 100 characters.' });
@@ -1377,6 +1407,9 @@ const server = createServer(async (req, res) => {
         email,
         name,
         role: input.role,
+        plan: 'free',
+        planStatus: 'free',
+        onboardingStep: 1,
         ...(typeof accountUniversityName === 'string' && accountUniversityName ? { university: accountUniversityName } : {}),
         ...(typeof input.major === 'string' && input.major ? { major: input.major } : {}),
         ...(accountUniversityId ? { universityId: accountUniversityId } : {}),
@@ -1426,6 +1459,9 @@ const server = createServer(async (req, res) => {
             email,
             name: displayName,
             role: 'prospective',
+            plan: 'free',
+            planStatus: 'free',
+            onboardingStep: 1,
             verificationStatus: 'unverified',
             photo: '',
             biography: '',

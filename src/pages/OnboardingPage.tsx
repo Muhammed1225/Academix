@@ -5,6 +5,8 @@ import { BrandMark, Icon, cx } from '../components/ui';
 import { sanitizeRichText } from '../components/RichText';
 import { defaultInterestEmoji, interestEmojis, interests } from '../data/interestOptions';
 import { saveProfile } from '../authService';
+import { skipSubscription, subscriptionConfig } from '../subscriptionService';
+import SubscriptionPage from './SubscriptionPage';
 import { useApp } from '../store';
 
 const purposes = [
@@ -27,7 +29,9 @@ export default function OnboardingPage() {
   const navigate = useNavigate();
   const user = useApp((state) => state.user);
   const setAuthenticatedUser = useApp((state) => state.setAuthenticatedUser);
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(() =>
+    new URLSearchParams(window.location.search).get('step') === '4' || user?.onboardingStep === 4 ? 4 : 1,
+  );
   const [photo, setPhoto] = useState('');
   const [biography, setBiography] = useState('');
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
@@ -42,24 +46,34 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (!user) return;
+    if (user.subscriptionStepCompletedAt) {
+      navigate('/', { replace: true });
+      return;
+    }
     setPhoto(user.photo);
     setBiography(user.biography);
     setSelectedInterests(user.interests);
     setPurpose(user.purpose);
     if (editor.current) editor.current.innerHTML = sanitizeRichText(user.biography);
-  }, [user]);
+  }, [navigate, user]);
 
-  const saveAndFinish = async () => {
+  const saveAndContinue = async () => {
     setSaving(true);
     setSaveError('');
     try {
-      const result = await saveProfile({ photo, biography, interests: selectedInterests, purpose });
+      const result = await saveProfile({ photo, biography, interests: selectedInterests, purpose, onboardingStep: 4 });
       if (!result.ok || !result.user) {
         setSaveError(result.error ?? 'Unable to save your profile. Please try again.');
         return;
       }
       setAuthenticatedUser(result.user);
-      navigate('/profile');
+      if (!subscriptionConfig.subscriptionStepEnabled || !subscriptionConfig.subscriptionStepRoles.includes(result.user.role)) {
+        const updated = await skipSubscription();
+        setAuthenticatedUser(updated);
+        navigate('/profile', { replace: true });
+      } else {
+        setStep(4);
+      }
     } catch {
       setSaveError('Unable to reach the profile service. Please try again.');
     } finally {
@@ -102,6 +116,8 @@ export default function OnboardingPage() {
     interest.toLocaleLowerCase().includes(interestSearch.trim().toLocaleLowerCase()),
   );
 
+  if (step === 4) return <SubscriptionPage onboarding onBack={() => setStep(3)} />;
+
   const toggleInterest = (interest: string) => {
     setSelectedInterests((selected) => selected.includes(interest)
       ? selected.filter((item) => item !== interest)
@@ -115,8 +131,8 @@ export default function OnboardingPage() {
     </header>
     <main className="mx-auto mt-7 max-w-5xl">
       <nav aria-label="Onboarding progress" className="mb-7">
-        <ol className="grid grid-cols-3 gap-2">
-          {['Create your profile', 'Interests', 'Your purpose'].map((label, index) => {
+        <ol className="grid grid-cols-4 gap-2">
+          {['Create your profile', 'Interests', 'Your purpose', 'Choose your plan'].map((label, index) => {
             const number = index + 1;
             const completed = step > number;
             const active = step === number;
@@ -218,7 +234,7 @@ export default function OnboardingPage() {
 
         {step === 3 && <>
           <div className="mb-7">
-            <p className="eyebrow text-secondary">Step 3 of 3</p>
+            <p className="eyebrow text-secondary">Step 3 of 4</p>
             <h1 className="mt-2 font-headline text-3xl font-semibold text-primary">What is your purpose for using the platform?</h1>
             <p className="mt-2 text-sm text-on-surface-variant">Choose what brings you to Academix.</p>
           </div>
@@ -233,20 +249,14 @@ export default function OnboardingPage() {
           </div>
           <div className="mt-8 flex flex-col-reverse justify-between gap-3 border-t border-outline-variant/50 pt-5 sm:flex-row">
             <div className="flex flex-col-reverse gap-2 sm:flex-row">
-              <button type="button" onClick={() => setStep(4)} className="btn-ghost">Skip</button>
+              <button type="button" disabled={saving} onClick={() => void saveAndContinue()} className="btn-ghost">Skip</button>
               <button type="button" onClick={() => setStep(2)} className="btn-ghost"><Icon name="arrow_back" /> Back</button>
             </div>
-            <button type="button" disabled={!purpose} onClick={() => setStep(4)} className="btn-primary">Continue <Icon name="arrow_forward" /></button>
+            <button type="button" disabled={!purpose || saving} onClick={() => void saveAndContinue()} className="btn-primary">{saving ? 'Saving…' : 'Continue'} <Icon name="arrow_forward" /></button>
           </div>
+          {saveError && <p role="alert" className="mt-4 text-sm font-medium text-error">{saveError}</p>}
         </>}
 
-        {step === 4 && <div className="flex min-h-[420px] flex-col items-center justify-center py-8 text-center">
-          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-secondary-fixed text-secondary"><Icon name="north_east" className="!text-3xl" /></span>
-          <h1 className="mt-6 font-headline text-4xl font-bold text-primary">Your profile is ready.</h1>
-          <p className="mt-3 text-lg italic text-on-surface-variant">Let the adventure begin!</p>
-          {saveError && <p role="alert" className="mt-4 text-sm font-medium text-error">{saveError}</p>}
-          <button type="button" disabled={saving} onClick={() => void saveAndFinish()} className="btn-primary mt-10 min-w-48">{saving ? 'Saving…' : 'Go to profile'} <Icon name="arrow_forward" /></button>
-        </div>}
       </section>
     </main>
   </div>;

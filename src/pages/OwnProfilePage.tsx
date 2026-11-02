@@ -6,6 +6,8 @@ import RichText, { sanitizeRichText } from '../components/RichText';
 import { Avatar, Icon, Tag, VerificationBadge } from '../components/ui';
 import SearchableSelect from '../components/SearchableSelect';
 import GoldVerificationSection from '../components/GoldVerificationSection';
+import SubscriptionButton, { SubscriptionPlanBadge } from '../components/SubscriptionButton';
+import { useSubscriptionStore } from '../subscriptionStore';
 import {
   readIdentityDocument,
   validateGoldVerification,
@@ -928,11 +930,15 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
 
 export default function OwnProfilePage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const user = useApp((state) => state.user);
   const authChecked = useApp((state) => state.authChecked);
   const posts = useApp((state) => state.posts);
   const showToast = useApp((state) => state.showToast);
   const setAuthenticatedUser = useApp((state) => state.setAuthenticatedUser);
+  const subscriptionDetails = useSubscriptionStore((state) => state.details);
+  const subscriptionUserId = useSubscriptionStore((state) => state.userId);
+  const canCustomize = user?.plan !== 'free' && ['active', 'trialing', 'past_due'].includes(user?.planStatus ?? '');
   const savedBannerBackground = user?.bannerBackground ?? 'academix';
   const savedBannerImage = user?.bannerImage ?? '';
   const savedImagePosition = user?.bannerImagePosition ?? '50% 50%';
@@ -1151,10 +1157,14 @@ export default function OwnProfilePage() {
               <div className="absolute bottom-0 left-0 h-12 w-full bg-gradient-to-t from-primary/20 to-transparent" />
               <button
                 type="button"
-                title="Change background"
-                aria-label="Change background"
+                title={canCustomize ? 'Change background' : 'Upgrade to customize your profile'}
+                aria-label={canCustomize ? 'Change background' : 'Upgrade to customize your profile'}
                 aria-expanded={backgroundPickerOpen}
                 onClick={() => {
+                  if (!canCustomize) {
+                    navigate('/subscription');
+                    return;
+                  }
                   if (!backgroundPickerOpen) {
                     setBannerBackground(savedBannerBackground);
                     setBannerImage(savedBannerImage);
@@ -1166,7 +1176,7 @@ export default function OwnProfilePage() {
                 }}
                 className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/15 text-white shadow-sm backdrop-blur-md transition duration-200 hover:scale-105 hover:bg-white/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
-                <Icon name="palette" className="!text-[19px]" />
+                <Icon name={canCustomize ? 'palette' : 'lock'} className="!text-[19px]" />
               </button>
             </div>
             {backgroundPickerOpen && (
@@ -1237,9 +1247,13 @@ export default function OwnProfilePage() {
                 </div>
               </div>
               <div className="mt-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="font-headline text-2xl font-semibold text-primary sm:text-3xl">{userDisplayName}</h1>
-                  <Tag tone="blue">Your profile</Tag>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <h1 className="font-headline text-2xl font-semibold text-primary sm:text-3xl">{userDisplayName}</h1>
+                    <Tag tone="blue">Your profile</Tag>
+                    {subscriptionUserId === user.id && <SubscriptionPlanBadge planId={subscriptionDetails?.planId ?? ''} />}
+                  </div>
+                  <SubscriptionButton user={user} />
                 </div>
                 <p className="mt-1 text-sm text-on-surface-variant sm:text-base">
                   {educationFor(user) || 'Academix community member'}

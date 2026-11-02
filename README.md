@@ -9,6 +9,10 @@ Identity documents are stored separately in `server/data/verification-documents`
 
 For a production deployment, run `node server/auth.mjs` as the API service and route `/api/auth` to it from the same origin as the frontend. Set `NODE_ENV=production` so session cookies use the Secure flag. The included API is a small single-process service; its sessions are held in memory and clear when it restarts, so a production multi-instance deployment should replace that session store with a shared persistent store.
 
+## Subscriptions
+
+The optional fourth onboarding step, Starter/Pro/Premium plan catalog, Stripe Payment Element checkout, and Settings billing screen are described in [docs/subscriptions.md](./docs/subscriptions.md). Configure Stripe and publish the legal-policy pages before enabling paid checkout in production.
+
 ## Find students
 
 The Make Connections page searches discoverable accounts through `GET /api/people`. Search filters are combined with AND across fields; multiple values within a field are ORed. University and major IDs are normalized slugs from `data/universities.txt` and `data/majors.txt` (for example, `baku-higher-oil-school-bhos` and `computer-engineering`). University search also recognizes the aliases BHOS, BANM, and ADA.

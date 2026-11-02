@@ -139,7 +139,9 @@ export default function AuthPage() {
         return;
       }
       showToast('Signed in successfully');
-      navigate('/', { replace: true });
+      navigate(result.user.onboardingStep === 4 && !result.user.subscriptionStepCompletedAt
+        ? '/subscription?flow=onboarding'
+        : '/', { replace: true });
     } catch {
       setErrors({ form: 'Unable to reach the authentication service. Please try again.' });
     } finally { setBusy(false); }

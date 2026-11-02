@@ -46,6 +46,11 @@ export interface AuthenticatedUser extends OnboardingProfile {
   id: string;
   email: string;
   role: 'scholar' | 'prospective' | 'faculty';
+  plan?: 'free' | 'starter' | 'plus' | 'pro';
+  planStatus?: 'free' | 'incomplete' | 'active' | 'trialing' | 'past_due' | 'canceled';
+  onboardingStep?: number;
+  subscriptionStepCompletedAt?: string;
+  subscriptionSkippedAt?: string;
   bannerBackground?: ProfileBannerBackground;
   bannerImage?: string;
   bannerImagePosition?: string;

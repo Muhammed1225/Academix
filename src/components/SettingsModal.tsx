@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { displayName } from '../data/userIdentity';
 import { mentorDirectory } from '../data/mentors';
@@ -6,12 +7,12 @@ import { people } from '../data/mock';
 import { useApp } from '../store';
 import { Avatar, Icon, Modal } from './ui';
 
-type SettingsSection = 'account' | 'premium' | 'privacy' | 'display' | 'languages';
+type SettingsSection = 'account' | 'subscription' | 'privacy' | 'display' | 'languages';
 type PrivacyTab = 'muted' | 'blocked';
 
 const sections: { id: SettingsSection; label: string }[] = [
   { id: 'account', label: 'Your Account' },
-  { id: 'premium', label: 'Premium' },
+  { id: 'subscription', label: 'Subscription' },
   { id: 'privacy', label: 'Privacy and Safety' },
   { id: 'display', label: 'Display' },
   { id: 'languages', label: 'Languages' },
@@ -295,15 +296,22 @@ function LanguagesSection() {
 }
 
 export default function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const navigate = useNavigate();
+  const user = useApp((state) => state.user);
   const [section, setSection] = useState<SettingsSection>('account');
   useEffect(() => { if (open) setSection('account'); }, [open]);
-  const content = section === 'account' ? <AccountSection /> : section === 'privacy' ? <PrivacySection /> : section === 'display' ? <DisplaySection /> : section === 'languages' ? <LanguagesSection /> : <><h3 className="font-headline text-xl font-semibold text-primary">Premium</h3><p className="mt-2 text-sm text-on-surface-variant">Premium features will be available soon.</p></>;
+  const content = section === 'account' ? <AccountSection /> : section === 'privacy' ? <PrivacySection /> : section === 'display' ? <DisplaySection /> : section === 'languages' ? <LanguagesSection /> : <section>
+    <h3 className="font-headline text-xl font-semibold text-primary">Subscription</h3>
+    <p className="mt-2 text-sm text-on-surface-variant">Current plan: <span className="font-semibold capitalize text-primary">{user?.plan ?? 'Free'}</span></p>
+    <p className="mt-1 text-sm text-on-surface-variant">Manage your plan, payment method, and billing history securely.</p>
+    <button type="button" onClick={() => { onClose(); navigate('/subscription'); }} className="btn-primary mt-4">Manage subscription <Icon name="arrow_forward" /></button>
+  </section>;
   return (
     <Modal open={open} onClose={onClose} label="Settings" width="max-w-4xl">
       <div className="flex max-h-[92vh] flex-col sm:flex-row">
         <aside className="border-b border-outline-variant/60 p-4 sm:w-56 sm:shrink-0 sm:border-b-0 sm:border-r sm:p-5">
           <div className="flex items-center justify-between"><h2 className="font-headline text-xl font-semibold text-primary">Settings</h2><button type="button" onClick={onClose} aria-label="Close settings" className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-low"><Icon name="close" /></button></div>
-          <nav className="mt-4 flex gap-1 overflow-x-auto sm:block sm:space-y-1">{sections.map((item) => item.id === 'premium' ? <span key={item.id} className="inline-flex whitespace-nowrap px-3 py-2 text-sm font-semibold text-on-surface-variant sm:flex" aria-disabled="true">{item.label}</span> : <button key={item.id} type="button" onClick={() => setSection(item.id)} className={`inline-flex w-full whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm font-semibold ${section === item.id ? 'bg-secondary-fixed text-secondary' : 'text-on-surface-variant hover:bg-surface-container-low'}`}>{item.label}</button>)}</nav>
+          <nav className="mt-4 flex gap-1 overflow-x-auto sm:block sm:space-y-1">{sections.map((item) => <button key={item.id} type="button" onClick={() => setSection(item.id)} className={`inline-flex w-full whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm font-semibold ${section === item.id ? 'bg-secondary-fixed text-secondary' : 'text-on-surface-variant hover:bg-surface-container-low'}`}>{item.label}</button>)}</nav>
         </aside>
         <main className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">{content}</main>
       </div>
