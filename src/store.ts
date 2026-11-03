@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { people, posts as initialPosts, conversations as initialConversations } from './data/mock';
 import type { GroupMember, Post, Conversation } from './data/types';
 import { displayName } from './data/userIdentity';
+import { canUseProfileFrames } from './data/profileFrames';
 import { createNotification, markConversationNotificationsRead } from './notificationsService';
 import type { SocialNetworks } from './components/SocialNetworks';
 
@@ -15,6 +16,7 @@ interface Toast {
 export interface OnboardingProfile {
   name: string;
   photo: string;
+  profileFrame?: string;
   biography: string;
   interests: string[];
   purpose: string;
@@ -45,7 +47,7 @@ export type ProfileBannerBackground =
 export interface AuthenticatedUser extends OnboardingProfile {
   id: string;
   email: string;
-  role: 'scholar' | 'prospective' | 'faculty';
+  role: 'scholar' | 'prospective' | 'faculty' | 'mentor';
   plan?: 'free' | 'starter' | 'plus' | 'pro';
   planStatus?: 'free' | 'incomplete' | 'active' | 'trialing' | 'past_due' | 'canceled';
   onboardingStep?: number;
@@ -115,7 +117,7 @@ interface AppState {
   setMiniChatMinimized: (minimized: boolean) => void;
   setMiniChatHidden: (hidden: boolean) => void;
   setMessageSoundsEnabled: (enabled: boolean) => void;
-  openMiniChatForPerson: (person: { id: string; name: string; subtitle: string; avatar?: string }) => string;
+  openMiniChatForPerson: (person: { id: string; name: string; subtitle: string; avatar?: string; profileFrame?: string }) => string;
   receiveMessage: (conversationId: string, message: Conversation['messages'][number]) => void;
   showToast: (message: string, icon?: string) => void;
 }
@@ -189,6 +191,7 @@ export const useApp = create<AppState>((set, get) => ({
           subtitle: s.user.university && s.user.major ? `${s.user.major} • ${s.user.university}` : 'Academix community member',
           verification: s.user.verificationStatus === 'verified' ? 'edu' : s.user.role === 'prospective' ? 'prospective' : 'unverified',
           ...(s.user.photo ? { avatar: s.user.photo } : {}),
+          ...(canUseProfileFrames(s.user) && s.user.profileFrame ? { profileFrame: s.user.profileFrame } : {}),
           interests: s.user.interests,
           about: s.user.biography,
           education: s.user.university && s.user.major
@@ -210,6 +213,7 @@ export const useApp = create<AppState>((set, get) => ({
             subtitle: s.user.university && s.user.major ? `${s.user.major} • ${s.user.university}` : 'Academix community member',
             verification: s.user.verificationStatus === 'verified' ? 'edu' : s.user.role === 'prospective' ? 'prospective' : 'unverified',
             ...(s.user.photo ? { avatar: s.user.photo } : {}),
+            ...(canUseProfileFrames(s.user) && s.user.profileFrame ? { profileFrame: s.user.profileFrame } : {}),
             interests: s.user.interests,
             about: s.user.biography,
             education: s.user.university && s.user.major
@@ -265,6 +269,7 @@ export const useApp = create<AppState>((set, get) => ({
       id: currentUserId,
       name: currentUserName,
       ...(state.user?.photo ? { avatar: state.user.photo } : {}),
+      ...(canUseProfileFrames(state.user) && state.user?.profileFrame ? { profileFrame: state.user.profileFrame } : {}),
       universityOrRole: [state.user?.university, state.user?.role === 'faculty' ? 'Faculty' : state.user?.role === 'scholar' ? 'Student' : 'Applicant']
         .filter(Boolean)
         .join(' · ') || 'Group admin',
@@ -426,6 +431,7 @@ export const useApp = create<AppState>((set, get) => ({
           id: conversationId,
           contactId: person.id,
           ...(person.avatar ? { contactAvatar: person.avatar } : {}),
+          ...(person.profileFrame ? { contactProfileFrame: person.profileFrame } : {}),
           category: 'Direct message',
           timeAgo: 'Just now',
           title: `Conversation with ${person.name}`,

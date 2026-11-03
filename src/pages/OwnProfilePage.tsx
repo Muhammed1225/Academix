@@ -7,6 +7,8 @@ import { Avatar, Icon, Tag, VerificationBadge } from '../components/ui';
 import SearchableSelect from '../components/SearchableSelect';
 import GoldVerificationSection from '../components/GoldVerificationSection';
 import SubscriptionButton, { SubscriptionPlanBadge } from '../components/SubscriptionButton';
+import ProfileFramesPicker from '../components/ProfileFramesPicker';
+import { canUseProfileFrames, type ProfileFrameId } from '../data/profileFrames';
 import { useSubscriptionStore } from '../subscriptionStore';
 import {
   readIdentityDocument,
@@ -335,7 +337,7 @@ function BackgroundPickerPanel({
   );
 }
 
-type Role = AuthenticatedUser['role'];
+type Role = Exclude<AuthenticatedUser['role'], 'mentor'>;
 
 const roles: { id: Role; label: string; icon: string }[] = [
   { id: 'scholar', label: 'Student / Scholar', icon: 'school' },
@@ -379,8 +381,8 @@ function biographyForEditor(biography: string) {
   return document.body.textContent ?? '';
 }
 
-function roleLabel(role: Role) {
-  return roles.find((item) => item.id === role)?.label ?? role;
+function roleLabel(role: AuthenticatedUser['role']) {
+  return role === 'mentor' ? 'Mentor' : roles.find((item) => item.id === role)?.label ?? role;
 }
 
 export function RoleChangePage() {
@@ -585,6 +587,8 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
   const navigate = useNavigate();
   const [name, setName] = useState(displayName(user.name, user.email));
   const [photo, setPhoto] = useState(user.photo);
+  const [profileFrame, setProfileFrame] = useState<ProfileFrameId | undefined>(user.profileFrame);
+  const [framesOpen, setFramesOpen] = useState(false);
   const [biography, setBiography] = useState(() => biographyForEditor(user.biography));
   const [selectedInterests, setSelectedInterests] = useState(user.interests);
   const [interestsOpen, setInterestsOpen] = useState(false);
@@ -749,10 +753,18 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
         </div>
         <form onSubmit={(event) => void save(event)} className="mt-6 space-y-4">
           <div className="flex items-center gap-4">
-            <Avatar src={photo || undefined} name={name} size={72} rounded="rounded-full" />
+            <Avatar src={photo || undefined} name={name} size={72} rounded="rounded-full" profileFrame={canUseProfileFrames(user) ? profileFrame : undefined} />
             <div className="flex flex-wrap gap-2">
               <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void choosePhoto(event)} className="sr-only" aria-label="Choose profile picture" />
               <button type="button" onClick={() => photoInput.current?.click()} className="btn-outline !h-9 !px-3 text-sm">{photo ? 'Change photo' : 'Add photo'}</button>
+              <button
+                type="button"
+                onClick={() => canUseProfileFrames(user) ? setFramesOpen(true) : navigate('/subscription?source=profile')}
+                className="relative inline-flex h-9 items-center gap-1.5 rounded-lg border border-gold/40 bg-gold-container/40 px-3 text-sm font-semibold text-primary transition hover:bg-gold-container/70"
+              >
+                <Icon name="auto_awesome" className="text-gold" /> Frames
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-gold-container px-1.5 py-0.5 text-[9px] font-bold text-gold"><Icon name="workspace_premium" className="!text-[12px]" />Premium</span>
+              </button>
               {photo && <button type="button" onClick={() => setPhoto('')} className="btn-ghost !h-9 !px-3 text-sm">Remove</button>}
             </div>
           </div>
@@ -924,6 +936,14 @@ function ProfileEditor({ user, onClose }: { user: AuthenticatedUser; onClose: ()
           </div>
         </form>
       </section>
+      {framesOpen && <ProfileFramesPicker
+        user={user}
+        photo={photo}
+        name={name}
+        selectedFrame={profileFrame}
+        onClose={() => setFramesOpen(false)}
+        onSaved={setProfileFrame}
+      />}
     </div>
   );
 }
@@ -1240,7 +1260,7 @@ export default function OwnProfilePage() {
             )}
             <div className="px-5 pb-5 sm:px-8 sm:pb-7">
               <div className="-mt-12 flex flex-wrap items-end justify-between gap-4 sm:-mt-14">
-                <Avatar src={user.photo || undefined} name={userDisplayName} size={112} rounded="rounded-2xl ring-4 ring-white shadow-float" />
+                <Avatar src={user.photo || undefined} name={userDisplayName} size={112} rounded="rounded-2xl ring-4 ring-white shadow-float" profileFrame={canUseProfileFrames(user) ? user.profileFrame : undefined} />
                 <div className="flex w-full gap-2 sm:w-auto">
                   <button type="button" onClick={() => setEditing(true)} className="btn-primary flex-1 sm:flex-none"><Icon name="edit" /> Edit profile</button>
                   <Link to="/inbox" className="btn-outline flex-1 sm:flex-none"><Icon name="mail" /> Message</Link>
@@ -1321,7 +1341,7 @@ export default function OwnProfilePage() {
                   <div key={person.id} className="py-4 first:pt-0 last:pb-0">
                     <div className="flex items-start gap-3">
                       <Link to={`/people/${person.id}`} aria-label={`View ${person.name}'s profile`}>
-                        <Avatar src={person.avatar} name={person.name} size={44} rounded="rounded-full" />
+                        <Avatar src={person.avatar} name={person.name} size={44} rounded="rounded-full" profileFrame={person.profileFrame} />
                       </Link>
                       <div className="min-w-0 flex-1">
                         <Link to={`/people/${person.id}`} className="font-semibold text-primary hover:text-secondary hover:underline">{person.name}</Link>

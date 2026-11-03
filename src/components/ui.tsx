@@ -2,6 +2,7 @@ import { useEffect, type CSSProperties, type ReactNode, type Ref } from 'react';
 import { createPortal } from 'react-dom';
 
 import { BRAND } from '../data/mock';
+import { profileFrames } from '../data/profileFrames';
 import { verificationLabel, type Person, type Verification } from '../data/types';
 
 export function cx(...classes: (string | false | null | undefined)[]) {
@@ -53,25 +54,34 @@ export function Avatar({
   size = 44,
   verified,
   rounded = 'rounded-xl',
+  profileFrame,
+  fallback,
+  onImageError,
 }: {
   src?: string;
   name: string;
   size?: number;
   verified?: boolean;
   rounded?: string;
+  profileFrame?: string;
+  fallback?: ReactNode;
+  onImageError?: () => void;
 }) {
+  const frame = profileFrames.some((item) => item.id === profileFrame) ? profileFrame : undefined;
+  const frameShape = rounded.includes('rounded-full') ? 'circle' : rounded.includes('rounded-2xl') ? 'rounded' : 'square';
   return (
     <span className="relative inline-flex shrink-0" style={{ width: size, height: size }}>
       {src ? (
-        <img src={src} alt={name} className={cx('h-full w-full object-cover', rounded)} />
+        <img src={src} alt={name} onError={onImageError} className={cx('h-full w-full object-cover', rounded)} />
       ) : (
-        <span
-          className={cx('flex h-full w-full items-center justify-center bg-surface-container-high font-bold text-secondary', rounded)}
-          style={{ fontSize: size * 0.34 }}
-        >
-          {initialsOf(name)}
-        </span>
+        fallback ?? <span
+            className={cx('flex h-full w-full items-center justify-center bg-surface-container-high font-bold text-secondary', rounded)}
+            style={{ fontSize: size * 0.34 }}
+          >
+            {initialsOf(name)}
+          </span>
       )}
+      {frame && <span aria-hidden="true" className="profile-avatar-frame" data-profile-frame={frame} data-profile-frame-shape={frameShape} />}
       {verified && (
         <span className="absolute -bottom-1 -right-1 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-on-tertiary-container ring-2 ring-white">
           <Icon name="check" className="!text-[12px] text-white" />
@@ -87,6 +97,7 @@ export function PersonAvatar({ person, size, showVerified }: { person: Person; s
       src={person.avatar}
       name={person.name}
       size={size}
+      profileFrame={person.profileFrame}
       verified={showVerified && (person.verification === 'edu' || person.verification === 'gold')}
     />
   );

@@ -6,6 +6,7 @@ import { sanitizeRichText } from '../components/RichText';
 import { colleges, composerForums } from '../data/mock';
 import { displayName } from '../data/userIdentity';
 import { useApp } from '../store';
+import { canUseProfileFrames } from '../data/profileFrames';
 
 const MAX = 4000;
 const MIN_BODY = 40;
@@ -319,7 +320,7 @@ export default function ComposePage() {
       <div className="grid gap-6">
         <section className="card space-y-5 p-6">
           <div className="flex flex-wrap items-center gap-3">
-            <Avatar src={anonymous ? undefined : user?.photo || undefined} name={anonymous ? '?' : authorName} size={44} />
+            <Avatar src={anonymous ? undefined : user?.photo || undefined} name={anonymous ? '?' : authorName} size={44} profileFrame={anonymous || !canUseProfileFrames(user) ? undefined : user?.profileFrame} />
             <div className="min-w-0 flex-1">
               <div className="font-semibold">{authorName}</div>
               <div className="flex items-center gap-1 text-xs text-on-surface-variant">

@@ -117,16 +117,11 @@ export default function AuthPage() {
     setErrors(next);
     if (Object.keys(next).length) return;
 
-    if (registration && role === 'mentor') {
-      showToast(diplomaConfirmation ? 'Mentor registration request submitted' : 'Mentor registration is ready for backend connection');
-      return;
-    }
-
     setBusy(true);
     try {
       const encoded = registration && requestGold && method === 'identity_document' && document ? await readIdentityDocument(document) : undefined;
       const result = await authenticate(registration ? 'register' : 'login', { email: email.trim().toLowerCase(), password, ...(registration ? {
-          name: name.trim(), role, university, ...(role === 'prospective' ? { dreamUniversityId: university ? universityOptionId(university) : null } : {}), major, graduationYear: graduationYear || undefined, confirmPassword: confirm,
+          name: name.trim(), role, university, ...(role === 'prospective' ? { dreamUniversityId: university ? universityOptionId(university) : null } : {}), major: role === 'mentor' ? mentorField : major, graduationYear: graduationYear || undefined, confirmPassword: confirm,
           requestGoldVerification: requestGold, ...(requestGold ? { verificationMethod: method, ...(method === 'edu_email' ? { eduEmail: eduEmail.trim().toLowerCase() } : {}) } : {}),
           ...(encoded && document ? { identityDocument: { type: role === 'faculty' ? 'work_card' : 'student_card', mimeType: document.type, base64: encoded } } : {}),
         } : {}) });
@@ -183,7 +178,7 @@ export default function AuthPage() {
             <label className="block text-sm font-semibold">Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" className="input mt-2 !bg-surface-container-low/40 !py-[9px]" aria-invalid={Boolean(errors.email)}/>{errors.email && <span className="mt-1 block text-xs text-error">{errors.email}</span>}</label>
             {passwordInput('password')}
             {passwordInput('confirm')}
-            {role === 'mentor' ? <SearchableSelect label="What field do you teach in?" value={mentorField} onChange={setMentorField} options={[]} placeholder="Select your field" error={errors.mentorField} /> : role === 'prospective' ? <div className="grid gap-5 sm:grid-cols-2"><SearchableSelect label="Dream University" value={university} onChange={setUniversity} options={universities} optional/><SearchableSelect label="Dream Major" value={major} onChange={setMajor} options={majors} optional/></div> : <div className={cx('grid gap-5', role === 'scholar' ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
+            {role === 'mentor' ? <SearchableSelect label="What field do you teach in?" value={mentorField} onChange={setMentorField} options={majors} placeholder="Select your field" error={errors.mentorField} /> : role === 'prospective' ? <div className="grid gap-5 sm:grid-cols-2"><SearchableSelect label="Dream University" value={university} onChange={setUniversity} options={universities} optional/><SearchableSelect label="Dream Major" value={major} onChange={setMajor} options={majors} optional/></div> : <div className={cx('grid gap-5', role === 'scholar' ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
               <SearchableSelect label="University" value={university} onChange={setUniversity} options={universities} error={errors.university}/>
               <SearchableSelect label={role === 'faculty' ? 'Major / Subject taught' : 'Major'} value={major} onChange={setMajor} options={majors} error={errors.major}/>
               {role === 'scholar' && <label className="block text-sm font-semibold">Graduation year<select value={graduationYear} onChange={(e) => setGraduationYear(e.target.value)} className="input mt-2 !bg-surface-container-low/40 !py-[9px]" aria-invalid={Boolean(errors.graduationYear)}><option value="">Select graduation year</option>{Array.from({ length: 32 }, (_, index) => String(2000 + index)).map((year) => <option key={year}>{year}</option>)}</select>{errors.graduationYear && <span className="mt-1 block text-xs text-error">{errors.graduationYear}</span>}</label>}

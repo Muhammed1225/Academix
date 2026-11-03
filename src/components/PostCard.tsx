@@ -8,6 +8,7 @@ import { useApp } from '../store';
 import RichText from './RichText';
 import { Avatar, Icon, VerificationBadge, cx } from './ui';
 import UserAvatar from './UserAvatar';
+import { canUseProfileFrames } from '../data/profileFrames';
 
 export default function PostCard({ post, interactive = true }: { post: Post; interactive?: boolean }) {
   const vote = useApp((s) => s.vote);
@@ -44,6 +45,7 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
         profileSubtitle={post.author.subtitle}
         verification={post.author.verification}
         badge={post.author.badge}
+        profileFrame={post.author.profileFrame}
         messagePerson={post.author.id === user?.id ? undefined : {
           id: post.author.id,
           name: post.author.name,
@@ -175,6 +177,7 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
                     subtitle={c.author.subtitle}
                     verification={c.author.verification}
                     badge={c.author.badge}
+                    profileFrame={c.author.profileFrame}
                     messagePerson={c.author.id === user?.id ? undefined : {
                       id: c.author.id,
                       name: c.author.name,
@@ -200,7 +203,7 @@ export default function PostCard({ post, interactive = true }: { post: Post; int
           )}
           {threadOpen && (
             <form onSubmit={submitComment} className="flex items-center gap-2">
-              <Avatar src={user?.photo || undefined} name={displayName(user?.name, user?.email)} size={32} rounded="rounded-lg" />
+              <Avatar src={user?.photo || undefined} name={displayName(user?.name, user?.email)} size={32} rounded="rounded-lg" profileFrame={canUseProfileFrames(user) ? user?.profileFrame : undefined} />
               <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add a verified response..." className="input !bg-white" />
               <button type="submit" className="btn-primary !h-9">
                 Post

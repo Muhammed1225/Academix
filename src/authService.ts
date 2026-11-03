@@ -1,6 +1,7 @@
 import type { AuthenticatedUser } from './store';
 import type { SocialNetworks } from './components/SocialNetworks';
 import { universityNameForId, universityOptionId } from './data/educationOptions';
+import { canUseProfileFrames, profileFrames } from './data/profileFrames';
 
 type AuthMode = 'login' | 'register';
 type ProfileChanges = Omit<Partial<Pick<AuthenticatedUser, 'name' | 'photo' | 'biography' | 'interests' | 'purpose' | 'location' | 'university' | 'major' | 'role' | 'bannerBackground' | 'degreeLevel' | 'programmeDurationYears' | 'discoverable' | 'showUniversityInSearch' | 'showYearInSearch' | 'languages' | 'openToMessages' | 'openToMentoring' | 'title' | 'department' | 'onboardingStep'>>, 'programmeDurationYears'> & {
@@ -13,6 +14,7 @@ type ProfileChanges = Omit<Partial<Pick<AuthenticatedUser, 'name' | 'photo' | 'b
   bannerImage?: string | null;
   bannerImagePosition?: string | null;
   bannerImageZoom?: number | null;
+  profileFrame?: string | null;
   graduationYear?: number | null;
   requestGoldVerification?: boolean;
   verificationMethod?: 'identity_document' | 'edu_email';
@@ -73,7 +75,7 @@ function testAuthenticate(mode: AuthMode, input: Record<string, unknown>): AuthR
 
   const accounts = readAccounts();
   const savedUser = accounts[email];
-  const role = input.role === 'scholar' || input.role === 'faculty' ? input.role : 'prospective';
+  const role = input.role === 'scholar' || input.role === 'faculty' || input.role === 'mentor' ? input.role : 'prospective';
   const graduationYear = Number(input.graduationYear);
   const existingUser = savedUser ? migrateTestUser(savedUser) : undefined;
   const registeredDreamUniversityId = typeof input.dreamUniversityId === 'string' && universityNameForId(input.dreamUniversityId)
@@ -152,6 +154,12 @@ export async function saveProfile(changes: ProfileChanges): Promise<AuthResult> 
     const email = localStorage.getItem(sessionKey);
     const user = email ? readAccounts()[email] : undefined;
     if (!user) return { ok: false, error: 'Sign in to update your profile.' };
+    if (changes.profileFrame !== undefined && !canUseProfileFrames(user)) {
+      return { ok: false, error: 'Profile frames are available with an active premium plan. Choose a plan to unlock them.' };
+    }
+    if (changes.profileFrame && !profileFrames.some((frame) => frame.id === changes.profileFrame)) {
+      return { ok: false, error: 'Choose a valid profile frame.' };
+    }
     if (changes.role !== undefined) {
       if (!['scholar', 'prospective', 'faculty'].includes(changes.role) || changes.role === user.role) {
         return { ok: false, error: 'Choose a different valid account role.' };
@@ -226,6 +234,7 @@ export async function saveProfile(changes: ProfileChanges): Promise<AuthResult> 
     const profile: Partial<AuthenticatedUser> = {
       ...(changes.name !== undefined ? { name: changes.name } : {}),
       ...(changes.photo !== undefined ? { photo: changes.photo } : {}),
+      ...(changes.profileFrame !== undefined ? { profileFrame: changes.profileFrame ?? undefined } : {}),
       ...(changes.biography !== undefined ? { biography: changes.biography } : {}),
       ...(changes.interests !== undefined ? { interests: changes.interests } : {}),
       ...(changes.purpose !== undefined ? { purpose: changes.purpose } : {}),

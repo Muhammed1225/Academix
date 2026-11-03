@@ -1,0 +1,10 @@
+[
+  { "id": "gold", "label": "Rotating gold", "icon": "workspace_premium" },
+  { "id": "neon", "label": "Neon pulse", "icon": "bolt" },
+  { "id": "rainbow", "label": "Rainbow flow", "icon": "palette" },
+  { "id": "sparkle", "label": "Starlight", "icon": "auto_awesome" },
+  { "id": "fire", "label": "Ember", "icon": "local_fire_department" },
+  { "id": "ice", "label": "Frost", "icon": "ac_unit" },
+  { "id": "petals", "label": "Petals", "icon": "favorite" },
+  { "id": "laurel", "label": "Laurel", "icon": "school" }
+]

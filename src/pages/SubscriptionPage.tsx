@@ -260,7 +260,7 @@ export default function SubscriptionPage({ onboarding = false, onBack }: { onboa
                 : `Choose ${plan.name}`;
           const features = [
             ...(plan.id !== 'starter' ? ['Everything in the previous plan'] : []),
-            'Profile and page customization',
+            'Profile and page customization, including animated profile frames',
             studentLimit(plan),
             ...(plan.features.newsBoard ? ['Create and manage a News Board'] : []),
           ];

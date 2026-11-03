@@ -11,6 +11,8 @@ const dataFile = resolve(process.env.AUTH_DATA_FILE || resolve(dirname(fileURLTo
 const notificationsFile = resolve(dirname(dataFile), 'notifications.json');
 const verificationDirectory = resolve(dirname(dataFile), 'verification-documents');
 const catalogDirectory = resolve(dirname(dirname(fileURLToPath(import.meta.url))), 'data');
+const profileFrameIds = new Set(JSON.parse(await readFile(resolve(catalogDirectory, '..', 'shared', 'profile-frames.json'), 'utf8'))
+  .map((frame) => frame.id));
 const [universityNames, majorNames] = await Promise.all([
   readFile(resolve(catalogDirectory, 'universities.txt'), 'utf8'),
   readFile(resolve(catalogDirectory, 'majors.txt'), 'utf8'),
@@ -240,6 +242,7 @@ function publicUser(user) {
     ...(bannerImageValid && Number.isFinite(user.bannerImageZoom) && user.bannerImageZoom >= 1 && user.bannerImageZoom <= 2.5 ? { bannerImageZoom: user.bannerImageZoom } : {}),
     verificationStatus: user.verificationStatus,
     photo: user.photo || '',
+    ...(typeof user.profileFrame === 'string' ? { profileFrame: user.profileFrame } : {}),
     biography: user.biography || '',
     interests: Array.isArray(user.interests) ? user.interests : [],
     purpose: user.purpose || '',
@@ -300,6 +303,9 @@ function serializePeoplePerson(candidate, viewerInterests) {
     id: candidate.id,
     name: candidate.name.trim(),
     avatar: candidate.photo || '',
+    ...(candidate.profileFrame && hasSubscriptionFeature(candidate, 'customization')
+      ? { profileFrame: candidate.profileFrame }
+      : {}),
     role: peopleRole(candidate),
     ...(universityVisible ? {
       universityId: profileUniversityId,
@@ -826,6 +832,10 @@ const server = createServer(async (req, res) => {
         sendJson(res, 403, { error: 'Profile banner customization is available with a paid plan. Choose a plan to unlock it.' });
         return;
       }
+      if (input.profileFrame !== undefined && !hasSubscriptionFeature(user, 'customization')) {
+        sendJson(res, 403, { error: 'Profile frames are available with an active premium plan. Choose a plan to unlock them.' });
+        return;
+      }
       const updated = { ...user };
       if (input.onboardingStep !== undefined) {
         if (!Number.isInteger(input.onboardingStep) || input.onboardingStep < 1 || input.onboardingStep > 4) {
@@ -915,6 +925,16 @@ const server = createServer(async (req, res) => {
             return;
           }
           updated.photo = input.photo;
+        }
+      }
+      if (input.profileFrame !== undefined) {
+        if (input.profileFrame === null || input.profileFrame === '') {
+          delete updated.profileFrame;
+        } else if (typeof input.profileFrame !== 'string' || !profileFrameIds.has(input.profileFrame)) {
+          sendJson(res, 400, { error: 'Choose a valid profile frame.' });
+          return;
+        } else {
+          updated.profileFrame = input.profileFrame;
         }
       }
       if (input.university !== undefined) {
@@ -1320,12 +1340,16 @@ const server = createServer(async (req, res) => {
         });
         return;
       }
-      if (!['scholar', 'prospective', 'faculty'].includes(input.role)) {
+      if (!['scholar', 'prospective', 'faculty', 'mentor'].includes(input.role)) {
         sendJson(res, 400, { error: 'Choose a valid account role.' });
         return;
       }
-      if (input.role !== 'prospective' && (!input.university || !input.major)) {
+      if (input.role !== 'prospective' && input.role !== 'mentor' && (!input.university || !input.major)) {
         sendJson(res, 400, { error: 'Choose your university and major or subject.' });
+        return;
+      }
+      if (input.role === 'mentor' && (typeof input.major !== 'string' || !majorById.has(optionId(input.major)))) {
+        sendJson(res, 400, { error: 'Choose a valid field you teach in.' });
         return;
       }
       if (input.role === 'scholar' && (!Number.isInteger(Number(input.graduationYear)) || Number(input.graduationYear) < 2000 || Number(input.graduationYear) > 2100)) {

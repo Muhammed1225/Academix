@@ -58,7 +58,7 @@ export default function PersonProfilePage() {
       return (
         <section className="card mx-auto max-w-2xl p-6 sm:p-8">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-            <UserAvatar src={directoryPerson.avatar || undefined} name={directoryPerson.name} size={88} />
+            <UserAvatar src={directoryPerson.avatar || undefined} name={directoryPerson.name} size={88} profileFrame={directoryPerson.profileFrame} />
             <div className="min-w-0 flex-1">
               <h1 className="font-headline text-2xl font-semibold text-primary">{directoryPerson.name}</h1>
               <Tag tone="green" className="mt-2">{roleLabel}</Tag>
@@ -81,6 +81,7 @@ export default function PersonProfilePage() {
                   name: directoryPerson.name,
                   subtitle: [directoryPerson.major, directoryPerson.universityShortName].filter(Boolean).join(' · '),
                   avatar: directoryPerson.avatar,
+                  profileFrame: directoryPerson.profileFrame,
                 })} className="btn-outline"><Icon name="mail" />Message</button>
               </div>
             </div>
@@ -125,6 +126,7 @@ export default function PersonProfilePage() {
                 src={person.avatar}
                 name={person.name}
                 size={112}
+                profileFrame={person.profileFrame}
                 rounded="rounded-2xl ring-4 ring-white shadow-float"
               />
               <div className="flex w-full gap-2 sm:w-auto">
@@ -213,7 +215,7 @@ export default function PersonProfilePage() {
                 <div key={recommended.id} className="py-4 first:pt-0 last:pb-0">
                   <div className="flex items-start gap-3">
                     <Link to={`/people/${recommended.id}`} aria-label={`View ${recommended.name}'s profile`}>
-                      <Avatar src={recommended.avatar} name={recommended.name} size={44} rounded="rounded-full" />
+                      <Avatar src={recommended.avatar} name={recommended.name} size={44} rounded="rounded-full" profileFrame={recommended.profileFrame} />
                     </Link>
                     <div className="min-w-0 flex-1">
                       <Link to={`/people/${recommended.id}`} className="font-semibold text-primary hover:text-secondary hover:underline">

@@ -14,6 +14,7 @@ export interface Person {
   subtitle: string;
   verification: Verification;
   avatar?: string;
+  profileFrame?: string;
   /** Rozet üzerindeki özel metin (ör. "Gold Verified Dean"). */
   badge?: string;
   interests?: string[];
@@ -227,6 +228,7 @@ export interface GroupMember {
   id: string;
   name: string;
   avatar?: string;
+  profileFrame?: string;
   universityOrRole: string;
   isAdmin: boolean;
   isCurrentUser: boolean;
@@ -267,6 +269,7 @@ export interface Conversation {
   groupSharedDocuments?: GroupSharedDocument[];
   contactId?: string;
   contactAvatar?: string;
+  contactProfileFrame?: string;
   contactRole?: string;
   contactProfileSubtitle?: string;
   category: string;

@@ -1,9 +1,10 @@
 import { majors, universities, universityOptionId } from './data/educationOptions';
+import { canUseProfileFrames } from './data/profileFrames';
 import demoUsersJson from '../data/demo_users.json?raw';
 import type { AuthenticatedUser } from './store';
 import type { SocialNetworks } from './components/SocialNetworks';
 
-export type PeopleRole = 'student' | 'prospective' | 'faculty';
+export type PeopleRole = 'student' | 'prospective' | 'faculty' | 'mentor';
 export type PeopleYear = '1' | '2' | '3' | '4' | '5+' | 'graduate';
 export type PeopleDegreeLevel = 'bachelors' | 'masters' | 'phd' | 'other';
 export type PeopleSort = 'best-match' | 'same-university' | 'same-major' | 'year-ascending' | 'recently-active' | 'name-ascending';
@@ -30,6 +31,7 @@ export interface PeoplePerson {
   id: string;
   name: string;
   avatar: string;
+  profileFrame?: string;
   role: PeopleRole;
   universityId?: string;
   university?: string;
@@ -202,6 +204,9 @@ function localPeopleSearch(filters: PeopleFilters, currentUserId: string, cursor
       id: user.id,
       name: user.name,
       avatar: user.photo || '',
+      ...(user.profileFrame && canUseProfileFrames(user)
+        ? { profileFrame: user.profileFrame }
+        : {}),
       role: user.role === 'scholar' ? 'student' : user.role,
       ...(user.showUniversityInSearch !== false && universityLabels.has(universityId) ? {
         universityId,

@@ -5,6 +5,7 @@ import PostCard from '../components/PostCard';
 import { Avatar, Icon, Tag, cx } from '../components/ui';
 import { amas, channels, colleges } from '../data/mock';
 import { majors as majorOptions, universities } from '../data/educationOptions';
+import { canUseProfileFrames } from '../data/profileFrames';
 import { mentorProfilesById } from '../data/mentors';
 import type { Ama, Post, Verification } from '../data/types';
 import { displayName } from '../data/userIdentity';
@@ -93,7 +94,7 @@ function ProfileSummary() {
           aria-label="View your profile"
           className="-mt-8 flex w-fit rounded-full ring-4 ring-white transition hover:opacity-90"
         >
-          <Avatar src={user.photo || undefined} name={displayName(user.name, user.email)} size={64} rounded="rounded-full" />
+          <Avatar src={user.photo || undefined} name={displayName(user.name, user.email)} size={64} rounded="rounded-full" profileFrame={canUseProfileFrames(user) ? user.profileFrame : undefined} />
         </Link>
         <Link to="/profile" className="mt-2 block font-semibold text-primary hover:text-secondary hover:underline">
           {displayName(user.name, user.email)}

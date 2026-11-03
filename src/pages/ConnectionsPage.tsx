@@ -726,7 +726,7 @@ export default function ConnectionsPage() {
                         aria-label={`View ${person.name}'s profile`}
                         className="shrink-0 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-secondary"
                       >
-                        <Avatar src={person.avatar || undefined} name={person.name} size={56} />
+                        <Avatar src={person.avatar || undefined} name={person.name} size={56} profileFrame={person.profileFrame} />
                       </Link>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -735,7 +735,7 @@ export default function ConnectionsPage() {
                               {person.name}
                             </Link>
                           </h3>
-                          <Tag tone={person.verified ? 'green' : 'neutral'}>{connectionRoles[role].label}</Tag>
+                          <Tag tone={person.verified ? 'green' : 'neutral'}>{role === 'mentor' ? 'Mentor' : connectionRoles[role].label}</Tag>
                         </div>
                         {person.university && (
                           <p className="mt-1 text-sm text-on-surface-variant" title={person.university}>

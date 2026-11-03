@@ -3,15 +3,17 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { displayName } from '../data/userIdentity';
+import { canUseProfileFrames } from '../data/profileFrames';
 import type { Verification } from '../data/types';
 import { useApp } from '../store';
-import { cx, Icon, VerificationBadge } from './ui';
+import { Avatar, cx, Icon, VerificationBadge } from './ui';
 
 interface MessagePerson {
   id: string;
   name: string;
   subtitle: string;
   avatar?: string;
+  profileFrame?: string;
   verification?: Verification;
   badge?: string;
 }
@@ -29,6 +31,7 @@ interface UserAvatarProps {
   role?: string;
   verification?: Verification;
   badge?: string;
+  profileFrame?: string;
   showAvatar?: boolean;
   showName?: boolean;
   nameClassName?: string;
@@ -62,6 +65,7 @@ export default function UserAvatar({
   disableProfilePreview = false,
   verification,
   badge,
+  profileFrame,
 }: UserAvatarProps) {
   const safeName = displayName(name, email);
   const [imageFailed, setImageFailed] = useState(false);
@@ -75,6 +79,9 @@ export default function UserAvatar({
   const currentUser = useApp((state) => state.user);
   const navigate = useNavigate();
   const isCurrentUser = profileHref === '/profile' || Boolean(currentUser && messagePerson?.id === currentUser.id);
+  const avatarFrame = isCurrentUser
+    ? canUseProfileFrames(currentUser) ? currentUser?.profileFrame : undefined
+    : profileFrame;
 
   useEffect(() => {
     setImageFailed(false);
@@ -176,21 +183,15 @@ export default function UserAvatar({
   const avatar = (
     <span className="relative inline-flex shrink-0" style={{ width: size, height: size }}>
       {src && !imageFailed ? (
-        <img
-          src={src}
-          alt={safeName}
-          loading="lazy"
-          onError={() => setImageFailed(true)}
-          className="h-full w-full rounded-full object-cover"
-        />
+        <Avatar src={src} name={safeName} size={size} rounded="rounded-full" profileFrame={avatarFrame} onImageError={() => setImageFailed(true)} />
       ) : (
-        <span
-          role="img"
-          aria-label={safeName}
-          className="flex h-full w-full items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant"
-        >
-          <Icon name="person" size={size * 0.62} />
-        </span>
+        <Avatar
+          name={safeName}
+          size={size}
+          rounded="rounded-full"
+          profileFrame={avatarFrame}
+          fallback={<span role="img" aria-label={safeName} className="flex h-full w-full items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant"><Icon name="person" size={size * 0.62} /></span>}
+        />
       )}
       {showStatus && (
         <span

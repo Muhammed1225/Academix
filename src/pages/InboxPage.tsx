@@ -411,7 +411,7 @@ function GroupInfoPanel({ conversation, onClose }: { conversation: Conversation;
             <div className="space-y-1">
               {members.map((member) => (
                 <div key={member.id} className="flex items-center gap-3 rounded-xl px-2 py-2.5">
-                  <Avatar src={member.avatar} name={member.name || 'Group member'} size={42} rounded="rounded-full" />
+                  <Avatar src={member.avatar} name={member.name || 'Group member'} size={42} rounded="rounded-full" profileFrame={member.profileFrame} />
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-1.5">
                       <span className="truncate text-sm font-semibold text-primary">
@@ -450,6 +450,7 @@ function ConversationThread({ conversation, onShowGroupInfo }: { conversation: C
     name: contactName,
     subtitle: conversation.contactProfileSubtitle ?? conversation.fromMeta,
     ...(conversation.contactAvatar ? { avatar: conversation.contactAvatar } : {}),
+    ...(conversation.contactProfileFrame ? { profileFrame: conversation.contactProfileFrame } : {}),
   } : undefined;
 
   useEffect(() => {
